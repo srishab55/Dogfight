@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dogfight</title>
+    <!-- Empty favicon: avoids a pointless 404 request on every load. -->
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <!-- Babylon.js renders the 3D world into this canvas. -->
+    <canvas id="render-canvas" aria-label="Dogfight 3D view"></canvas>
+    <!-- All HTML/CSS interface (HUD, menus, overlays) is layered on top of the canvas here. -->
+    <div id="ui-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

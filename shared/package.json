@@ -1,0 +1,18 @@
+{
+  "name": "@dogfight/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Engine-agnostic game code shared by client and server: configuration, types and (from Phase 1) the flight model. Must never import Babylon.js or browser APIs.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.12"
+  }
+}

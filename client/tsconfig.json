@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // Provides types for import.meta.env and `?raw` asset imports.
+    "types": ["vite/client"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

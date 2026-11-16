@@ -1,0 +1,25 @@
+{
+  // Compiler settings shared by every workspace package.
+  // Each package extends this and adds its own `lib`/`types`/`include`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    // Type-checking only: Vite (client) and tsx (future server) do the transpiling.
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "useDefineForClassFields": true,
+    "skipLibCheck": true,
+
+    // Strictness. These catch real bugs in physics/networking code (e.g. reading
+    // an array index that might be undefined), so they stay on.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}

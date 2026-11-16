@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // No "DOM" lib on purpose: shared code also runs on the Node.js server,
+    // so any accidental use of `window`, `document`, etc. fails type-checking here.
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src", "test"]
+}

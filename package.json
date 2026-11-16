@@ -1,0 +1,23 @@
+{
+  "name": "dogfight",
+  "private": true,
+  "description": "Browser-based 3D multiplayer aerial combat game (Babylon.js + TypeScript).",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "client"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "npm run dev -w client",
+    "build": "npm run typecheck && npm run build -w client",
+    "preview": "npm run preview -w client",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
