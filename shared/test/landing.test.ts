@@ -3,7 +3,7 @@ import {
   AIRCRAFT_CLASSES,
   AIRCRAFT_CLASS_IDS,
   HOME_RUNWAY,
-  PRIMITIVE_GROUND_CLEARANCE,
+  groundClearance,
   computePerformance,
   createAirborneState,
   createApproachState,
@@ -13,7 +13,7 @@ import {
   type AircraftState,
 } from '../src/index';
 import { groundEffectInducedDragFactor, groundEffectLiftFactor, liftCoefficient, applyFlaps, maxLiftCoefficient } from '../src/flight/aerodynamics';
-import { fly, heightAboveGround, holdPitchAttitude, holdVerticalSpeed, rollToBank } from './testPilot';
+import { fly, heightAboveGround, holdPitchAttitude, holdVerticalSpeed, rollToBank, type PilotView } from './testPilot';
 
 /*
  * Phase 2: take-off and landing. Flaps, ground effect, touchdown grading
@@ -29,9 +29,14 @@ function approach(spec: AircraftClassSpec, speed: number, flaps: number, distanc
   return createApproachState(spec, HOME_RUNWAY, { distanceFromThreshold: distance, glideSlopeDeg: 3, aimPointPastThreshold: AIM_POINT, speed, throttle: 0.25, flaps });
 }
 
+/** After touchdown: stick forward until the aircraft sits level on all three wheels, limited to a moderate push. */
+function lowerNoseWheel(v: PilotView): number {
+  return Math.max(-0.6, Math.min(0.3, -v.attitude.pitchDeg / 4 - v.pitchRateDeg / 12));
+}
+
 /** Glide-slope tracking to a 4 m flare, then a gentle hold-off, then brakes. */
 function land(spec: AircraftClassSpec, state: AircraftState, speed: number, flaps: number) {
-  const clearance = PRIMITIVE_GROUND_CLEARANCE * spec.airframeScale;
+  const clearance = groundClearance(spec);
   const glide = 3 / RAD_TO_DEG;
   let touchdownZ = Number.NaN;
   let flaring = false;
@@ -50,7 +55,8 @@ function land(spec: AircraftClassSpec, state: AircraftState, speed: number, flap
         return { throttle, flaps, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, targetVs) };
       }
       if (Number.isNaN(touchdownZ)) touchdownZ = s.position.z;
-      return { throttle: 0, brake: 1, flaps, roll: rollToBank(v, 0) };
+      // After touchdown: put the nose wheel down firmly and hold it there (so ground effect can't float it back up), and brake.
+      return { throttle: 0, brake: 1, flaps, roll: rollToBank(v, 0), pitch: lowerNoseWheel(v) };
     },
     (v) => !Number.isNaN(touchdownZ) && v.state.telemetry.airspeed < 0.5,
   );
@@ -146,7 +152,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
         throttle: perf.approachThrottle,
         flaps: 1,
       });
-      const clearance = PRIMITIVE_GROUND_CLEARANCE * spec.airframeScale;
+      const clearance = groundClearance(spec);
       let worstGlideSlopeError = 0;
       fly(state, spec, 120, () => ({ throttle: perf.approachThrottle, flaps: 1 }), (v) => {
         const distanceToAim = THRESHOLD_Z + AIM_POINT - v.state.position.z;
@@ -178,7 +184,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
     /** Level, wheels 0.3 m above the runway, moving at approach speed, sinking at `sinkRate`. */
     const arriving = (sinkRate: number) => {
       const state = approach(spec, perf.approachSpeed, 1, 0);
-      state.position.y = PRIMITIVE_GROUND_CLEARANCE * spec.airframeScale + 0.3;
+      state.position.y = groundClearance(spec) + 0.3;
       state.position.z = THRESHOLD_Z + 200;
       state.velocity.x = 0;
       state.velocity.y = -sinkRate;
@@ -198,7 +204,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
     it('a firm touchdown between the damage and crash thresholds survives with hull damage', () => {
       const { damageSinkRate, maxSinkRate } = spec.landingGear;
       const state = arriving((damageSinkRate + maxSinkRate) / 2);
-      fly(state, spec, 3, () => ({ throttle: 0, flaps: 1 }));
+      fly(state, spec, 3, (v) => ({ throttle: 0, flaps: 1, pitch: v.state.onGround ? lowerNoseWheel(v) : 0 }));
       expect(state.crashed).toBe(false);
       expect(state.lastTouchdownDamage).toBeGreaterThan(spec.combat.maxHullHealth * 0.1);
       expect(state.hullHealth).toBeLessThan(spec.combat.maxHullHealth * 0.9);

@@ -1,8 +1,10 @@
 import type { Scene } from '@babylonjs/core/scene';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import {
   AIRCRAFT_CLASSES,
-  HOME_RUNWAY,
+  AIRFRAMES,
+  baseSpawnPoint,
   cloneAircraftState,
   computePerformance,
   copyAircraftState,
@@ -10,18 +12,26 @@ import {
   createApproachState,
   createParkedState,
   stepAircraft,
+  teamBase,
   type AircraftClassId,
   type AircraftClassSpec,
   type AircraftPerformance,
   type AircraftState,
+  type AirframeId,
+  type BaseDefinition,
   type FlightControls,
   type GroundQuery,
-  type SpawnPoint,
+  type Team,
 } from '@dogfight/shared';
 import { FLAP_STYLE_BY_CLASS, PROPELLER_VISUAL_CONFIG } from '../config/aircraftVisuals';
 import { LANDING_PRACTICE } from '../config/landing';
 import type { AircraftVisual } from './AircraftVisual';
-import { createPrimitiveAircraft } from './primitiveAircraftModel';
+import { createAircraftModel } from './aircraftModel';
+
+/** Landing flaps' position at which the arrestor hook is lowered (the landing notch). */
+const HOOK_DOWN_FLAPS = 0.75;
+/** Flaps for a catapult launch: the take-off notch. */
+const CATAPULT_FLAPS = 0.5;
 
 /**
  * The locally flown aircraft: simulation state (from the shared flight model)
@@ -32,13 +42,16 @@ import { createPrimitiveAircraft } from './primitiveAircraftModel';
  * any refresh rate. (Drawing only the latest state judders whenever a frame
  * gets 0 or 2 physics steps.) The blend means the picture lags physics by up
  * to one step (16.7 ms). Every engine with a fixed timestep makes this trade.
+ *
+ * One model is built per airframe type up front (four), and only the one
+ * being flown is enabled, so switching aircraft is instant.
  */
 export class PlayerAircraft {
-  readonly visual: AircraftVisual;
   spec: AircraftClassSpec;
   performance: AircraftPerformance;
   state: AircraftState;
   private readonly previous: AircraftState;
+  private readonly models: Readonly<Record<AirframeId, AircraftVisual>>;
 
   /** Interpolated pose for this frame, read by the cameras and shadows. */
   readonly renderPosition = new Vector3();
@@ -51,44 +64,65 @@ export class PlayerAircraft {
   constructor(
     scene: Scene,
     private readonly ground: GroundQuery,
-    private readonly spawn: SpawnPoint,
+    readonly team: Team,
     classId: AircraftClassId,
   ) {
-    this.visual = createPrimitiveAircraft(scene, 'blue', 'player-aircraft');
+    const build = (id: AirframeId) => createAircraftModel(scene, AIRFRAMES[id], team, `player-${id}`);
+    this.models = { fighter: build('fighter'), navalFighter: build('navalFighter'), diveBomber: build('diveBomber'), fourEngineBomber: build('fourEngineBomber') };
     this.spec = AIRCRAFT_CLASSES[classId];
     this.performance = computePerformance(this.spec);
-    this.state = createParkedState(this.spec, spawn);
+    this.state = createParkedState(this.spec, baseSpawnPoint(this.homeBase));
     this.previous = cloneAircraftState(this.state);
     this.applyClass(classId);
+    this.resetTo(this.parkedAtHome());
   }
 
-  /** Back on the runway, engine idle, optionally as a different class. */
-  respawnOnRunway(classId: AircraftClassId = this.spec.id): void {
+  /** The model of the aircraft being flown. */
+  get visual(): AircraftVisual {
+    return this.models[this.spec.airframe.id];
+  }
+
+  /** Every model's shadow-casting meshes (all four types), for the shadow generator. */
+  get allMeshes(): readonly Mesh[] {
+    return Object.values(this.models).flatMap((model) => model.meshes);
+  }
+
+  /** This class's home: the team's island airfield, or its carrier for carrier aircraft. */
+  get homeBase(): BaseDefinition {
+    return teamBase(this.team, this.spec.homeBase);
+  }
+
+  /** Back at the home base, engine idle (on the catapult, for carrier aircraft), optionally as a different class. */
+  respawnAtBase(classId: AircraftClassId = this.spec.id): void {
     this.applyClass(classId);
-    this.resetTo(createParkedState(this.spec, this.spawn));
+    this.resetTo(this.parkedAtHome());
   }
 
   /**
-   * Level flight `height` metres above the runway at 1.8x stall speed, with the
-   * engine at 70%. Skips the take-off when testing stalls and manoeuvres.
+   * Level flight `height` metres above the home base at 1.8x stall speed, with
+   * the engine at 70%. Skips the take-off when testing stalls and manoeuvres.
    */
   airStart(height: number): void {
-    const p = this.spawn.position;
-    const state = createAirborneState(this.spec, { x: p.x, y: p.y + height, z: p.z }, this.spawn.headingDegrees, this.performance.stallSpeed * 1.8, 0.7);
+    const spawn = baseSpawnPoint(this.homeBase);
+    const p = spawn.position;
+    const state = createAirborneState(this.spec, { x: p.x, y: p.y + height, z: p.z }, spawn.headingDegrees, this.performance.stallSpeed * 1.8, 0.7);
     this.resetTo(state);
   }
 
   /**
-   * Landing practice: established on a 3-degree final approach, 2.5 km out,
-   * lined up with the runway, landing flaps down, at the hands-off approach
-   * speed and the throttle that holds the glide slope. The glide slope meets
-   * the runway at the PAPI lights.
+   * Landing practice: established on a 3-degree final approach to the home
+   * base, lined up, landing flaps down, at the hands-off approach speed and
+   * the throttle that holds the glide slope. For the island runway the slope
+   * meets the runway at the PAPI lights; for a carrier it meets the deck
+   * just past the first arrestor wire, beside the carrier's approach lights.
    */
   approachStart(): void {
-    const state = createApproachState(this.spec, HOME_RUNWAY, {
-      distanceFromThreshold: LANDING_PRACTICE.distanceFromThreshold,
+    const base = this.homeBase;
+    const practice = base.kind === 'carrier' ? LANDING_PRACTICE.carrier : LANDING_PRACTICE.airfield;
+    const state = createApproachState(this.spec, base.runway, {
+      distanceFromThreshold: practice.distanceFromThreshold,
       glideSlopeDeg: LANDING_PRACTICE.glideSlopeDeg,
-      aimPointPastThreshold: LANDING_PRACTICE.aimPointPastThreshold,
+      aimPointPastThreshold: practice.aimPointPastThreshold,
       speed: this.performance.handsOffApproachSpeed,
       throttle: this.performance.approachThrottle,
       flaps: 1,
@@ -115,14 +149,19 @@ export class PlayerAircraft {
     this.currentOrientation.set(b.orientation.x, b.orientation.y, b.orientation.z, b.orientation.w);
     Quaternion.SlerpToRef(this.previousOrientation, this.currentOrientation, alpha, this.renderOrientation);
 
-    this.visual.setPose(this.renderPosition, this.renderOrientation);
-    this.visual.setFlapDeflection(a.flapPosition + (b.flapPosition - a.flapPosition) * alpha);
-    if (controls && !b.crashed) this.visual.updateControlSurfaces(frameSeconds, controls.pitch, controls.roll, controls.yaw);
-    this.visual.updatePropeller(frameSeconds, this.engineFraction(b));
+    const visual = this.visual;
+    visual.setPose(this.renderPosition, this.renderOrientation);
+    const flaps = a.flapPosition + (b.flapPosition - a.flapPosition) * alpha;
+    visual.setFlapDeflection(flaps);
+    visual.setAirbrake(a.airbrakePosition + (b.airbrakePosition - a.airbrakePosition) * alpha);
+    // The hook comes down with landing flaps, and stays down while it holds a wire.
+    visual.setTailhook(b.hookEngaged || flaps >= HOOK_DOWN_FLAPS ? 1 : 0);
+    if (controls && !b.crashed) visual.updateControlSurfaces(frameSeconds, controls.pitch, controls.roll, controls.yaw);
+    visual.updatePropeller(frameSeconds, this.engineFraction(b));
   }
 
   /**
-   * How fast the propeller should turn, 0-1: driven by the engine (the
+   * How fast the propellers should turn, 0-1: driven by the engine (the
    * throttle, already lagged by spool-up), or windmilling in the airflow
    * when gliding at idle. Stopped when parked with the engine at idle.
    */
@@ -132,9 +171,23 @@ export class PlayerAircraft {
     return Math.max(state.throttle, windmill);
   }
 
+  /**
+   * Parked at the home base. On a carrier: on the catapult, with take-off
+   * flaps already set, as for a real catapult launch. With them the aircraft
+   * leaves the bow able to hold its height hands-off.
+   */
+  private parkedAtHome(): AircraftState {
+    const base = this.homeBase;
+    const onCatapult = base.kind === 'carrier';
+    const state = createParkedState(this.spec, baseSpawnPoint(base), onCatapult);
+    if (onCatapult) state.flapPosition = CATAPULT_FLAPS;
+    return state;
+  }
+
   private applyClass(classId: AircraftClassId): void {
     this.spec = AIRCRAFT_CLASSES[classId];
     this.performance = computePerformance(this.spec);
+    for (const [id, model] of Object.entries(this.models)) model.setEnabled(id === this.spec.airframe.id);
     this.visual.setScale(this.spec.airframeScale);
     this.visual.setFlapStyle(FLAP_STYLE_BY_CLASS[classId]);
   }

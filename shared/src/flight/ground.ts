@@ -1,9 +1,10 @@
 import { RUNWAYS, WORLD_CONFIG, isOnRunway, type RunwayDefinition, type SurfaceType } from '../config/world';
 
 /**
- * What the flight model needs to know about the ground beneath a point. This
- * interface is the seam for Phase 3: a heightmap terrain implements the same
- * two methods, and the flight model doesn't change.
+ * What the flight model needs to know about the ground beneath a point: its
+ * height and what it is made of. Flat test ground, the heightmap terrain and
+ * the full world (terrain + sea + carriers) all implement it, and the flight
+ * model doesn't care which it gets.
  */
 export interface GroundQuery {
   heightAt(x: number, z: number): number;

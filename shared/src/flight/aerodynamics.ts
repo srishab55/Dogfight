@@ -1,5 +1,4 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
-import { PRIMITIVE_AIRFRAME } from '../config/airframe';
 
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -17,7 +16,7 @@ type MutableAero = EffectiveAero;
 const GROUND_EFFECT_LIFT_GAIN = 0.3;
 
 export function wingSpan(spec: AircraftClassSpec): number {
-  return PRIMITIVE_AIRFRAME.wingSpan * spec.airframeScale;
+  return spec.airframe.wingSpan * spec.airframeScale;
 }
 
 export function aspectRatio(spec: AircraftClassSpec): number {
@@ -30,11 +29,12 @@ export function aspectRatio(spec: AircraftClassSpec): number {
  * Flaps add camber, which shifts the whole lift line up (more lift at every
  * angle of attack), adds drag, and makes the wing stall at a slightly lower
  * angle. CLmax still rises overall, so stall speed drops.
+ * Dive brakes (`airbrakePosition`, 0-1) add drag only.
  */
-export function applyFlaps(out: MutableAero, spec: AircraftClassSpec, flapPosition: number): MutableAero {
+export function applyFlaps(out: MutableAero, spec: AircraftClassSpec, flapPosition: number, airbrakePosition = 0): MutableAero {
   Object.assign(out, spec.aero);
   out.zeroAngleLiftCoefficient += spec.flaps.liftIncrement * flapPosition;
-  out.zeroLiftDragCoefficient += spec.flaps.dragIncrement * flapPosition;
+  out.zeroLiftDragCoefficient += spec.flaps.dragIncrement * flapPosition + (spec.airbrake?.dragIncrement ?? 0) * airbrakePosition;
   out.criticalAngleOfAttackDeg -= spec.flaps.criticalAngleReductionDeg * flapPosition;
   return out;
 }

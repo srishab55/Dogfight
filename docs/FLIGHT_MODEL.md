@@ -150,11 +150,51 @@ contradict each other. `npm test` prints this table:
 |---|---|---|---|---|---|---|---|
 | Interceptor | 159 | 598 | 32.4 | 35.6 | 451 | 0.60 | 1626 |
 | Fighter-Bomber | 171 | 566 | 26.0 | 31.0 | 453 | 0.47 | 1875 |
-| Heavy Bomber | 179 | 471 | 13.7 | 20.2 | 336 | 0.33 | 2060 |
+| Heavy Bomber | 175 | 457 | 15.7 | 20.7 | 328 | 0.33 | 1962 |
+| Naval Fighter | 156 | 496 | 22.0 | 35.2 | 427 | 0.53 | 1556 |
+| Dive Bomber | 158 | 414 | 12.3 | 32.3 | 402 | 0.40 | 1592 |
+
+The Naval Fighter trades top speed for the lowest stall speed (a big wing for
+its weight): short take-offs and slow carrier approaches. The Dive Bomber is
+the slowest climber but turns well; its dive brakes are what make it a dive
+bomber (below).
 
 To change a class, edit `shared/src/config/aircraftClasses.ts` and run `npm test`.
 The tests check the class still matches its brief (e.g. the Interceptor stays the
 fastest and best-turning).
+
+## Carrier operations
+
+**The deck** is ordinary ground to the flight model (see `worldGround.ts`):
+the carrier is a solid block up to its deck height, with the island higher
+still. Touching the sea is ditching.
+
+**Catapult.** A carrier aircraft spawns held on the bow catapult by a
+holdback bar, which cancels its thrust while the engine runs up. With the
+throttle lever and the engine both at 95%, the catapult fires: an extra
+3 g along the deck for 45 m. The aircraft leaves the bow at about 200 km/h
+with take-off flaps set, fast enough to hold its height hands-off.
+
+**Arrestor hook.** The hook arms after a second in the air, so a take-off
+roll across the wires can't catch one. When a main wheel rolls across the
+wire zone (22 to 92 m from the stern), it catches: a constant pull of
+about 1.6 g back along the deck, plus whatever the engine is pushing,
+stops a 160 km/h arrival in roughly 50 m. Pilots hold power on touchdown
+in case they miss the wires (a "bolter"), and the wire holds a stopped
+aircraft until the throttle comes back to idle.
+
+**Landing practice to the carrier** uses the same derived hands-off speed
+and throttle as the runway. It aims just past the first wire, because a
+hands-off approach floats about 40 m in ground effect over the deck.
+
+## Dive brakes
+
+Only the Dive Bomber has them (**X**). They are drag with no lift: zero-lift
+drag rises by 0.16 when fully open (1.5 s travel), so the stall speed
+doesn't change. In a vertical dive, drag balances weight near 450 km/h with
+them out; without them the aircraft keeps accelerating far past that. A
+steady, slow dive is what makes aiming a bomb possible (bombs arrive later
+in Phase 4).
 
 ## Mapping to the brief's force list
 
@@ -169,7 +209,8 @@ fastest and best-turning).
 
 ## Deliberate simplifications
 
-No wind or turbulence. No propeller torque or P-factor, so it doesn't swing on
+No wind or turbulence (so no wind over a carrier's deck; the catapult makes
+up for it). No propeller torque or P-factor, so it doesn't swing on
 take-off. No gyroscopic coupling between axes, no spins (a stall doesn't
 auto-rotate), and no fuel burn. Each is listed in KNOWN_ISSUES.md and can be
 added if gameplay wants it.

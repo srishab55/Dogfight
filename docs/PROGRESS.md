@@ -2,10 +2,11 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Phase 3 (graphics) in progress: terrain, clouds, tone
-mapping and camera effects are in and render at 60 FPS. The glTF aircraft
-model and visual tuning remain. Phase 4 (combat) has started with guns.
-The client is set up for Vercel deployment (`vercel.json`).
+**Current status:** Islands-and-carriers milestone done (your request): the
+title, an island map with two carriers, five aircraft types, limited
+ammunition and rearming at bases. Phase 3 (graphics) and Phase 4 (combat)
+continue. Waiting for your flight test ([FLIGHT_TEST.md](FLIGHT_TEST.md),
+cards 19–24) and confirmation before continuing.
 
 ## Extras added along the way
 
@@ -16,6 +17,18 @@ The client is set up for Vercel deployment (`vercel.json`).
 - ✅ Guns moved from X to Space
 - ✅ Mouse sensitivity raised (0.2°/pixel) and adjustable in game with **[** / **]**; remembered between sessions
 - ✅ Deployment config for Vercel: production build verified in headless Chrome (no errors; dev-only debug handle absent)
+
+## Milestone: islands, carriers and new aircraft ✅ (your request, 2026-11-16)
+
+- ✅ "Dogfight Squadron" title along the top of the screen (and the page title)
+- ✅ Island map: three islands (Blue, Red, mountainous central) in the sea, ragged coastlines, beaches, woods on the hillsides, fields on the plains; runways on flattened pads with clear approaches. 9 tests
+- ✅ Sea: one-pass custom shader. Turquoise shallows, deep blue offshore, surf, sky reflection, sun glint, waves that fade before they alias
+- ✅ Two anchored carriers (Blue and Red): hull, deck markings, island with team band, arrestor wires, catapult, approach lights. Their decks are real ground; the island is solid; the sea is ditching
+- ✅ Bow catapult (holdback, full throttle launches, 3 g over 45 m) and arrestor hook (arms in the air, catches a wire, holds until idle). 10 carrier tests, including "lands itself from carrier landing practice"
+- ✅ Five aircraft types, each with its own shape built from shared airframe data: Naval Fighter (new), Dive Bomber (new, with dive brakes), Heavy Bomber (now four-engined, 24 m wing); Interceptor and Fighter-Bomber keep the fighter airframe. All pass the full flight test; both new types loop
+- ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
+- ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
+- Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
 
 ## Phase 0: Project foundation ✅
 
@@ -88,10 +101,11 @@ console errors, zero failed or external requests, and screenshots of each state.
 
 ## Phase 3: Graphics 🔄
 
-- ⬜ Blender aircraft model (glTF), same origin and axes as the primitive model (Blender is not installed yet)
+- ✅ A distinct procedural model per aircraft type, built from shared airframe data (fighter, naval fighter, dive bomber, four-engine bomber)
+- ⬜ Blender aircraft models (glTF), same origin and axes (Blender is not installed yet)
 - ⬜ Environment map (IBL) for metallic paint
 - 🔄 Post-process tone mapping (ACES), bloom, MSAA, vignette; sky shader outputs linear colour so it matches the fog. Renders correctly; tuning pending
-- 🔄 Procedural terrain shared with the server (hills, mountain ring, flattened airfield corridors); rock, snow and forest blended by slope and height. 6 tests; renders correctly
+- ✅ Procedural island terrain shared with the server; rock, sand and forest blended by slope and height; the sea (see the milestone above)
 - 🔄 Clouds (sprite puffs, one draw call, fade when you fly into them)
 - 🔄 Camera effects: field of view widens with speed (60° to 65° measured in a dive); shake from stall buffet, gunfire and high g
 - Verified so far: typecheck, 158 tests, production build, and headless Chrome on the runway, an air start, over the mountains, into a cloud and in a firing dive. 60 FPS, 38–50 draw calls, no console errors
@@ -103,6 +117,7 @@ console errors, zero failed or external requests, and screenshots of each state.
 - ✅ Swept hit detection (segment vs sphere), ground impacts with dust
 - ✅ Practice balloons: hit sparks, bursts, respawn; HUD gunsight with hit flash, gun heat bar, OVERHEATED warning, TGT counter
 - ✅ 14 combat tests (`shared/test/combat.test.ts`)
+- ✅ Limited ammunition, rearming and repair at friendly bases (early, at your request); splashes where rounds hit the sea
 - ⬜ Bombs: release, inherited velocity, ballistic fall, ground impact, area damage
 - ⬜ Aircraft-vs-aircraft hits and hull damage (needs other aircraft: AI or a second player); Rapier for complex hit shapes
 - ⬜ Damage effects: white smoke < 60%, dark smoke and fire < 30%, explosion and debris at 0
@@ -119,9 +134,11 @@ console errors, zero failed or external requests, and screenshots of each state.
 
 ## Phase 6: Team battle ⬜
 
-- ⬜ Red and Blue teams; Red base; neutral central airfield
+- ✅ Map with a Red base (airfield and carrier) opposite Blue's (early, with the island map)
+- ⬜ Red and Blue teams; neutral central objective
 - ⬜ Base health, destruction to neutral, capture by landing
-- ⬜ Forward spawning, repair, rearming at captured bases
+- ✅ Rearming and repair at your team's bases (early)
+- ⬜ Forward spawning; rearming at captured bases
 - ⬜ AA turrets; team scoring; victory (all bases, or 25 kills)
 
 ## Phase 7: AI ⬜

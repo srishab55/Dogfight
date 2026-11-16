@@ -29,6 +29,12 @@ export class FlightInputController {
     this.current.flaps = notches[this.flapNotch] ?? 0;
   }
 
+  /** Dive brakes: one key press opens them, the next closes them. Returns whether they are now open. */
+  toggleAirbrake(): boolean {
+    this.current.airbrake = this.current.airbrake > 0 ? 0 : 1;
+    return this.current.airbrake > 0;
+  }
+
   /**
    * @param assist stick positions from the mouse-flight pilot, or null. On
    *   each axis a held key wins; otherwise the assist value is used.

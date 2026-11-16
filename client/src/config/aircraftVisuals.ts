@@ -19,15 +19,11 @@ export const AIRCRAFT_MATERIAL_CONFIG = {
   darkMetalRoughness: 0.55,
 } as const;
 
-/** Team roundels painted on the upper and lower wing surfaces. */
+/**
+ * Team roundels painted on the upper and lower wing surfaces. Their size and
+ * position are part of each airframe's design (shared airframe.ts).
+ */
 export const ROUNDEL_CONFIG = {
-  /** Roundel diameter at airframe scale 1 (m). */
-  diameter: 0.92,
-  /** Distance from the fuselage centreline (m). */
-  spanPosition: 3.55,
-  /** Position along the local wing chord, 0 = leading edge, 1 = trailing edge. */
-  chordPosition: 0.38,
-  // Sized and placed to stay ahead of the aileron hinge (74% chord).
   /** Rings from the outside in: dark rim, white ring, team colour centre. */
   rimColor: '#1f2a35',
   ringColor: '#f2f2ec',
@@ -63,6 +59,11 @@ export const CONTROL_SURFACE_VISUAL_CONFIG = {
   aileronMaxDeg: 18,
   elevatorMaxDeg: 22,
   rudderMaxDeg: 25,
+  /** Dive-brake plates swing this far open (upper up, lower down). */
+  diveBrakeMaxDeg: 60,
+  /** Arrestor hook angle below the fuselage line: stowed (negative = tucked up) and lowered. */
+  tailhookStowedDeg: -4,
+  tailhookLoweredDeg: 50,
   /** How quickly surfaces follow the stick (1/s). Real surfaces lag slightly. */
   actuatorSharpness: 14,
 } as const;
@@ -80,4 +81,6 @@ export const FLAP_STYLE_BY_CLASS: Readonly<Record<AircraftClassId, keyof typeof 
   interceptor: 'slotted',
   fighterBomber: 'slotted',
   heavyBomber: 'fowler',
+  navalFighter: 'slotted',
+  diveBomber: 'slotted',
 };

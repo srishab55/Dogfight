@@ -8,6 +8,7 @@ import {
   createAirborneState,
   createParkedState,
   getRunwaySpawnPoint,
+  groundClearance,
   stallAngles,
   type AircraftClassId,
   type AircraftClassSpec,
@@ -29,7 +30,7 @@ const RAD_TO_DEG = 180 / Math.PI;
 const SPAWN = getRunwaySpawnPoint(HOME_RUNWAY, 60);
 const THRESHOLD_Z = HOME_RUNWAY.center.z - HOME_RUNWAY.length / 2;
 const RUNWAY_END_Z = HOME_RUNWAY.center.z + HOME_RUNWAY.length / 2;
-const LOOP_CAPABLE: readonly AircraftClassId[] = ['interceptor', 'fighterBomber'];
+const LOOP_CAPABLE: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'navalFighter', 'diveBomber'];
 
 const setup = (id: AircraftClassId) => ({ spec: AIRCRAFT_CLASSES[id], perf: computePerformance(AIRCRAFT_CLASSES[id]) });
 
@@ -213,15 +214,22 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
       const state = airborne(spec, 1000, perf.stallSpeed * 2.4, 0, 180, 1);
       let minAltitude = Infinity;
       let alwaysInverted = true;
+      let aoaSum = 0;
+      let samples = 0;
       fly(state, spec, 10, (v) => ({ throttle: 1, roll: rollToBank(v, 180), pitch: -holdVerticalSpeed(v, 0) }), (v) => {
         minAltitude = Math.min(minAltitude, v.state.position.y);
         alwaysInverted &&= Math.abs(v.attitude.bankDeg) > 150;
+        if (v.time > 2) {
+          aoaSum += v.state.telemetry.angleOfAttack;
+          samples++;
+        }
         return false;
       });
       expect(state.crashed).toBe(false);
       expect(alwaysInverted).toBe(true);
       expect(minAltitude).toBeGreaterThan(850);
-      expect(state.telemetry.angleOfAttack).toBeLessThan(0); // negative AoA is what holds it up
+      // Negative AoA is what holds it up. Averaged, because the scripted pilot hunts a little in pitch.
+      expect(aoaSum / samples).toBeLessThan(0);
     });
 
     it('reaches close to its derived top speed in level flight at full power', () => {
@@ -422,7 +430,7 @@ describe('crashes and collisions (Fighter-Bomber)', () => {
     const state = airborne(spec, 0, speed, 0, bankDeg, 0);
     state.position.x = runwayPoint.x;
     state.position.z = runwayPoint.z;
-    state.position.y = 1.78 * spec.airframeScale + wheelHeight;
+    state.position.y = groundClearance(spec) + wheelHeight;
     state.velocity.y = -sinkRate;
     return state;
   };
@@ -497,7 +505,7 @@ function flyStraightInLanding(spec: AircraftClassSpec, stallSpeed: number) {
   const state = airborne(spec, (aimPointZ - (THRESHOLD_Z - startDistance)) * Math.tan(glide), approachSpeed, 0, 0, 0.3);
   state.position.z = THRESHOLD_Z - startDistance;
   state.velocity.y = -approachSpeed * Math.sin(glide);
-  const flareHeight = 1.78 * spec.airframeScale + 6;
+  const flareHeight = groundClearance(spec) + 6;
 
   let touchdownZ = Number.NaN;
   let touchdownSinkRate = 0;
@@ -512,7 +520,7 @@ function flyStraightInLanding(spec: AircraftClassSpec, stallSpeed: number) {
         if (s.position.y < flareHeight) flaring = true;
         if (flaring) return { throttle: 0, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, -1) };
         // Track the glide path: target vertical speed plus a correction for being high or low.
-        const glidePathHeight = (aimPointZ - s.position.z) * Math.tan(glide) + 1.78 * spec.airframeScale;
+        const glidePathHeight = (aimPointZ - s.position.z) * Math.tan(glide) + groundClearance(spec);
         const targetVs = -approachSpeed * Math.sin(glide) + (glidePathHeight - s.position.y) * 0.15;
         const throttle = Math.max(0, Math.min(1, 0.35 + (approachSpeed - s.telemetry.airspeed) * 0.08));
         return { throttle, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, targetVs) };

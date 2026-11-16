@@ -1,5 +1,4 @@
-import type { AircraftClassId, AircraftClassSpec } from '../config/aircraftClasses';
-import { PRIMITIVE_GROUND_CLEARANCE } from '../config/airframe';
+import { groundClearance, type AircraftClassId, type AircraftClassSpec } from '../config/aircraftClasses';
 import type { RunwayDefinition, SpawnPoint } from '../config/world';
 import { copyQuat, multiplyQuat, quatFromAxisAngle, quatFromHeading, quatIdentity, type Quat } from '../math/quat';
 import { copyVec3, vec3 } from '../math/vec3';
@@ -55,6 +54,22 @@ export interface AircraftState {
   flowSeparation: number;
   /** Actual flap deflection, 0 (up) to 1 (fully down). Follows the lever at the flaps' travel speed. */
   flapPosition: number;
+  /** Actual dive-brake opening, 0-1 (always 0 without dive brakes). */
+  airbrakePosition: number;
+  /**
+   * Arrestor hook. `hookArmed`: ready to catch a wire, which needs a second
+   * in the air first, so a take-off roll across the wires doesn't catch one.
+   * `hookEngaged`: a wire has been caught and is pulling the aircraft to a stop.
+   */
+  hookArmed: boolean;
+  hookEngaged: boolean;
+  /**
+   * Carrier catapult: 'held' on the holdback bar waiting for full throttle,
+   * 'launching' while it accelerates the aircraft, otherwise 'none'.
+   */
+  catapult: 'none' | 'held' | 'launching';
+  /** Distance travelled along the catapult track so far (m). */
+  catapultTravel: number;
   hullHealth: number;
   /** Increments on every touchdown (wheels meeting the ground after being airborne). */
   touchdownCount: number;
@@ -101,6 +116,11 @@ function baseState(spec: AircraftClassSpec): AircraftState {
     throttle: 0,
     flowSeparation: 0,
     flapPosition: 0,
+    airbrakePosition: 0,
+    hookArmed: false,
+    hookEngaged: false,
+    catapult: 'none',
+    catapultTravel: 0,
     hullHealth: spec.combat.maxHullHealth,
     touchdownCount: 0,
     lastTouchdownSinkRate: 0,
@@ -114,10 +134,14 @@ function baseState(spec: AircraftClassSpec): AircraftState {
   };
 }
 
-/** An aircraft at rest with its wheels on the ground at a spawn point, engine stopped. */
-export function createParkedState(spec: AircraftClassSpec, spawn: SpawnPoint): AircraftState {
+/**
+ * An aircraft at rest with its wheels on the ground at a spawn point, engine
+ * stopped. `onCatapult`: hooked to a carrier's catapult, ready to launch.
+ */
+export function createParkedState(spec: AircraftClassSpec, spawn: SpawnPoint, onCatapult = false): AircraftState {
   const state = baseState(spec);
-  const clearance = PRIMITIVE_GROUND_CLEARANCE * spec.airframeScale;
+  if (onCatapult) state.catapult = 'held';
+  const clearance = groundClearance(spec);
   // Start with the springs already compressed to their resting deflection, so
   // the aircraft doesn't drop and bounce on spawn.
   const restingSink = spec.landingGear.staticDeflection * spec.airframeScale;
@@ -166,7 +190,7 @@ export function createApproachState(spec: AircraftClassSpec, runway: RunwayDefin
   const heightOnSlope = (setup.distanceFromThreshold + setup.aimPointPastThreshold) * Math.tan(glide);
   state.position = vec3(
     runway.center.x + forwardX * alongFromCenter,
-    runway.center.y + heightOnSlope + PRIMITIVE_GROUND_CLEARANCE * spec.airframeScale,
+    runway.center.y + heightOnSlope + groundClearance(spec),
     runway.center.z + forwardZ * alongFromCenter,
   );
   state.velocity = vec3(forwardX * setup.speed * Math.cos(glide), -setup.speed * Math.sin(glide), forwardZ * setup.speed * Math.cos(glide));
@@ -190,6 +214,11 @@ export function copyAircraftState(target: AircraftState, source: Readonly<Aircra
   target.throttle = source.throttle;
   target.flowSeparation = source.flowSeparation;
   target.flapPosition = source.flapPosition;
+  target.airbrakePosition = source.airbrakePosition;
+  target.hookArmed = source.hookArmed;
+  target.hookEngaged = source.hookEngaged;
+  target.catapult = source.catapult;
+  target.catapultTravel = source.catapultTravel;
   target.hullHealth = source.hullHealth;
   target.touchdownCount = source.touchdownCount;
   target.lastTouchdownSinkRate = source.lastTouchdownSinkRate;

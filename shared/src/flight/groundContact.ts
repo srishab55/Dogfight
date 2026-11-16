@@ -1,5 +1,4 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
-import { PRIMITIVE_CRASH_POINTS, PRIMITIVE_WHEELS } from '../config/airframe';
 import { PHYSICS_CONSTANTS } from '../config/simulation';
 import { SURFACE_FRICTION } from '../config/world';
 import { rotateVec3 } from '../math/quat';
@@ -17,12 +16,14 @@ export interface GroundContactResult {
   onGround: boolean;
   /** Fastest downward speed of any wheel touching the ground this step (m/s, positive = sinking). */
   impactSinkRate: number;
+  /** A main wheel is rolling across a carrier's arrestor wires (a hooked aircraft can catch one). */
+  onArrestorWires: boolean;
   /** Set if this contact destroys the aircraft. */
   crashReason: string | null;
 }
 
 export function createGroundContactResult(): GroundContactResult {
-  return { force: vec3(), torque: vec3(), onGround: false, impactSinkRate: 0, crashReason: null };
+  return { force: vec3(), torque: vec3(), onGround: false, impactSinkRate: 0, onArrestorWires: false, crashReason: null };
 }
 
 /** Fraction of critical damping in each gear leg while compressing. */
@@ -33,23 +34,6 @@ const GEAR_DAMPING_RATIO = 0.6;
  */
 const REBOUND_DAMPING_FACTOR = 2.5;
 
-/**
- * Fraction of the aircraft's weight each wheel carries at rest, from the
- * moment balance about the centre of mass (z = 0):
- *   noseShare * noseZ + mainShare * mainZ = 0,   noseShare + mainShare = 1
- *   => noseShare = mainZ / (mainZ - noseZ)
- * With the mains just behind the centre of mass, the nose wheel carries ~11%.
- * Each leg's spring is sized to its share, so all legs compress equally and
- * the aircraft sits level.
- */
-const STATIC_LOAD_SHARE: readonly number[] = (() => {
-  const mains = PRIMITIVE_WHEELS.filter((wheel) => wheel.kind === 'main');
-  const nose = PRIMITIVE_WHEELS.find((wheel) => wheel.kind === 'nose');
-  if (!nose || mains.length === 0) throw new Error('Airframe needs a nose wheel and main wheels');
-  const mainZ = mains.reduce((sum, wheel) => sum + wheel.contactPoint.z, 0) / mains.length;
-  const noseShare = mainZ / (mainZ - nose.contactPoint.z);
-  return PRIMITIVE_WHEELS.map((wheel) => (wheel.kind === 'nose' ? noseShare : (1 - noseShare) / mains.length));
-})();
 /** Speeds (m/s) over which tyre friction builds to full strength. Smooths the force through zero to avoid jitter at rest. */
 const ROLLING_FRICTION_SMOOTHING = 0.3;
 const LATERAL_SLIP_SMOOTHING = 0.4;
@@ -91,18 +75,20 @@ export function computeGroundContact(
   setVec3(out.torque, 0, 0, 0);
   out.onGround = false;
   out.impactSinkRate = 0;
+  out.onArrestorWires = false;
   out.crashReason = null;
 
   const scale = spec.airframeScale;
   const gear = spec.landingGear;
+  const { wheels, staticLoadShare, crashPoints } = spec.airframe;
 
   rotateVec3(worldAngularVelocity, state.orientation, state.angularVelocity);
   rotateVec3(noseAxis, state.orientation, bodyForward);
   const horizontalSpeed = Math.hypot(state.velocity.x, state.velocity.z);
 
-  for (let i = 0; i < PRIMITIVE_WHEELS.length; i++) {
-    const wheel = PRIMITIVE_WHEELS[i];
-    const share = STATIC_LOAD_SHARE[i];
+  for (let i = 0; i < wheels.length; i++) {
+    const wheel = wheels[i];
+    const share = staticLoadShare[i];
     if (!wheel || share === undefined) continue;
     // Spring stiffness: this leg's share of the weight compresses it by the static deflection.
     const legMass = spec.mass * share;
@@ -117,6 +103,9 @@ export function computeGroundContact(
     const compression = ground.heightAt(contactPoint.x, contactPoint.z) - contactPoint.y;
     if (compression <= 0) continue;
     out.onGround = true;
+    const surfaceType = ground.surfaceAt(contactPoint.x, contactPoint.z);
+    if (surfaceType === 'water') out.crashReason ??= 'ditched in the sea';
+    if (surfaceType === 'wires' && wheel.kind === 'main') out.onArrestorWires = true;
 
     // Velocity of the contact point = body velocity + (angular velocity x lever arm).
     crossVec3(pointVelocity, worldAngularVelocity, offset);
@@ -134,7 +123,7 @@ export function computeGroundContact(
     // Positive point velocity = the leg is extending (rebounding): damp that harder.
     const legDamping = pointVelocity.y > 0 ? damping * REBOUND_DAMPING_FACTOR : damping;
     const normal = Math.max(0, springForce - legDamping * pointVelocity.y);
-    const surface = SURFACE_FRICTION[ground.surfaceAt(contactPoint.x, contactPoint.z)];
+    const surface = SURFACE_FRICTION[surfaceType];
 
     // The direction this tyre rolls: the nose's heading flattened onto the ground,
     // turned by the steering angle for the nose wheel.
@@ -168,12 +157,12 @@ export function computeGroundContact(
   }
 
   // Any non-wheel part touching the ground is a crash.
-  for (const crash of PRIMITIVE_CRASH_POINTS) {
+  for (const crash of crashPoints) {
     scaleVec3(scaledPoint, crash.point, scale);
     rotateVec3(offset, state.orientation, scaledPoint);
     addVec3(contactPoint, state.position, offset);
     if (contactPoint.y < ground.heightAt(contactPoint.x, contactPoint.z)) {
-      out.crashReason ??= crash.description;
+      out.crashReason ??= ground.surfaceAt(contactPoint.x, contactPoint.z) === 'water' ? 'crashed into the sea' : crash.description;
       break;
     }
   }

@@ -1,7 +1,7 @@
 import type { Scene } from '@babylonjs/core/scene';
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
 import { Vector3, type Quaternion } from '@babylonjs/core/Maths/math.vector';
-import type { GroundQuery } from '@dogfight/shared';
+import { REFERENCE_WING_SPAN, wingSpan, type AircraftClassSpec, type GroundQuery } from '@dogfight/shared';
 import type { Camera } from '@babylonjs/core/Cameras/camera';
 import { CHASE_CAMERA_CONFIG, COCKPIT_CAMERA_CONFIG, ORBIT_CAMERA_CONFIG } from '../config/camera';
 import { CameraEffects, type CameraEffectInputs } from './CameraEffects';
@@ -10,6 +10,9 @@ import { degreesToRadians } from '../math/orientation';
 import { ChaseCamera } from './ChaseCamera';
 import { CockpitCamera } from './CockpitCamera';
 import { MouseAimCamera } from './MouseAimCamera';
+
+/** Chase distance grows as size^this: a 2.3x wingspan bomber gets a 2x camera distance. */
+const CAMERA_SIZE_EXPONENT = 0.85;
 
 /** Camera modes, in the order the "change camera" key cycles through them. */
 export const CAMERA_MODES = ['chase', 'cockpit', 'orbit'] as const;
@@ -74,11 +77,17 @@ export class CameraManager {
     this.selectActiveCamera(null);
   }
 
-  /** Match camera distances to the aircraft's size (its class's airframe scale). */
-  setTargetScale(scale: number): void {
-    this.chase.setTargetScale(scale);
-    this.mouseAim.setTargetScale(scale);
-    this.cockpit.setTargetScale(scale);
+  /**
+   * Match the cameras to the aircraft being flown: the chase distances grow
+   * with its size (wingspan relative to the fighter's, slightly less than in
+   * proportion so big bombers don't shrink to a dot), and the cockpit eye
+   * moves to its pilot's seat.
+   */
+  setAircraft(spec: AircraftClassSpec): void {
+    const size = (wingSpan(spec) / REFERENCE_WING_SPAN) ** CAMERA_SIZE_EXPONENT;
+    this.chase.setTargetScale(size);
+    this.mouseAim.setTargetScale(size);
+    this.cockpit.setEye(spec.airframe.cockpitEye, spec.airframeScale);
   }
 
   /** Jump the cameras to the target without smoothing (spawn, teleport). */

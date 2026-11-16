@@ -251,10 +251,11 @@ wing, opening a slot. The Heavy Bomber's Fowler flaps also slide back.
 
 **Do:** Repeat cards 3, 7 and 16 with **1** (Interceptor) and **3** (Heavy Bomber).
 **Expect:** The Interceptor leaps off the runway, rolls fast and turns tight.
-The Heavy Bomber is visibly bigger and needs most of the runway. It rolls
-slowly, turns wide, and its nose takes time to respond. It has 2 slower,
-harder-hitting nose guns that overheat sooner.
-**Pass:** The three are clearly different and each fits its role.
+The Heavy Bomber is a four-engined aircraft with a 24 m wing and needs most
+of the runway. It rolls slowly, turns wide, and its nose takes time to
+respond. It has 2 slower, harder-hitting nose guns that overheat sooner.
+After touchdown, lower its nose gently or it floats.
+**Pass:** They are clearly different and each fits its role.
 
 ## Card 18: Cameras and performance
 
@@ -264,6 +265,68 @@ harder-hitting nose guns that overheat sooner.
 change throttle in every view and never move the orbit camera. The orbit
 camera can't go below the ground.
 **Pass:** Debug overlay shows ~60 FPS (your display rate), *Physics* 60 steps/s, 0 dropped, including while firing.
+
+## Card 19: The islands and the sea
+
+**Do:** Press **T** (air start), climb to 1,500 m and look around; then fly
+low along a coast.
+**Expect:** "DOGFIGHT SQUADRON" along the top. Three islands: yours (runway),
+the central one with a mountain (rock near the top, woods on its slopes,
+fields on the plains) and Red's to the north. Sandy beaches, turquoise
+shallows and surf; deep blue sea offshore with a sun glint; waves up close,
+no rippling rings far away. Two carriers: Blue's west of your island, Red's
+to the north-east.
+**Pass:** No flicker along the coastlines, no water over land, about 60 FPS.
+
+## Card 20: Catapult launch
+
+**Do:** Press **4** (Naval Fighter). Push the throttle to full (**↑**, hold) and wait.
+**Expect:** Status "ON CATAPULT"; flaps at TAKE-OFF. The aircraft doesn't
+move until the throttle reaches full, then the catapult throws it off the
+bow at about 200 km/h. Hands-off, it holds its height or climbs slowly;
+pull gently to climb away. The hook stays up.
+**Pass:** Airborne without touching the sea, every time. Try **5** (Dive Bomber) too.
+
+## Card 21: Carrier landing
+
+**Do:** As the Naval Fighter, press **L** and let go. Then fly one yourself:
+take off, circle, and come back to the stern on a shallow approach with
+landing flaps (**F** twice).
+**Expect:** Landing flaps lower the hook. On touchdown among the wires the
+status reads "HOOK CAUGHT A WIRE" and the aircraft stops in about 50 m;
+"ON THE WIRE" until you idle (**↓**). Touching down past the wires is a
+bolter: keep the power on and go around. Too low at the stern hits the hull.
+**Pass:** The hands-off approach stops on the deck. Flown, you catch a wire most times.
+
+## Card 22: Ammunition and rearming
+
+**Do:** Hold **Space** until the guns run dry (watch AMMO, and let them cool
+between bursts). Then fly to the base shown by BASE, land, stop and idle.
+**Expect:** AMMO counts down; at 0 the guns go silent and "OUT OF AMMO · LAND
+AT A BASE TO REARM" shows. Stopped at idle on your runway, its aprons or your
+carrier's deck, "REARMING & REPAIRING" fills in 6 s, then AMMO is full and
+the hull is 100%. Opening the throttle or rolling interrupts it. Red's bases
+give nothing.
+**Pass:** All of the above. Rounds fired into the sea throw up white splashes.
+
+## Card 23: Dive brakes
+
+**Do:** As the Dive Bomber, climb to 2,500 m, press **X**, then roll inverted
+and pull into a steep dive at idle. Press **X** again in a second dive.
+**Expect:** The brake plates open above and below the wings (visible in the
+orbit view). With them out, the dive settles near 400–450 km/h; with them
+in, the speed keeps climbing.
+**Pass:** A clear, steady difference. **X** in other aircraft says they have no dive brakes.
+
+## Card 24: The new aircraft side by side
+
+**Do:** Press **1** to **5** in turn, with the orbit camera (**C** twice).
+**Expect:** Five types: a slim inline-engined fighter (1, and 2 slightly
+bigger), a four-engined bomber with turrets and a glazed nose (3), a
+stubby radial-engined naval fighter with a tailhook (4), a two-seat dive
+bomber with a long canopy and a rear gun (5). Carrier aircraft start on
+the Blue carrier; the others on the island runway.
+**Pass:** Each looks like its role.
 
 ---
 

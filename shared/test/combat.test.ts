@@ -28,7 +28,7 @@ const ignoreImpacts = { onGroundImpact: () => {}, onTargetHit: () => {} };
 const flyingNorth = (speed = 100): AircraftState => createAirborneState(spec, { x: 0, y: 1000, z: 0 }, 0, speed, 0.7);
 
 /** Holds the trigger for `seconds`, returning rounds fired. */
-function fire(guns = createGunState(), seconds: number, pool = new ProjectilePool(4096), aircraft = flyingNorth(), gunSpec = gun, trigger = true): number {
+function fire(guns = createGunState(spec), seconds: number, pool = new ProjectilePool(4096), aircraft = flyingNorth(), gunSpec = gun, trigger = true): number {
   let fired = 0;
   for (let t = 0; t < seconds - 1e-9; t += STEP) fired += stepGuns(guns, aircraft, spec, gunSpec, trigger, pool, 1, STEP);
   return fired;
@@ -37,16 +37,16 @@ function fire(guns = createGunState(), seconds: number, pool = new ProjectilePoo
 describe('guns: rate of fire, heat and overheating', () => {
   it('fire at the configured rate across all guns', () => {
     const expected = gun.roundsPerSecondPerGun * gunMounts(spec).length;
-    expect(fire(createGunState(), 1)).toBeGreaterThanOrEqual(expected - 1);
-    expect(fire(createGunState(), 1)).toBeLessThanOrEqual(expected + 1);
+    expect(fire(createGunState(spec), 1)).toBeGreaterThanOrEqual(expected - 1);
+    expect(fire(createGunState(spec), 1)).toBeLessThanOrEqual(expected + 1);
   });
 
   it('the first round leaves the instant the trigger is pulled', () => {
-    expect(fire(createGunState(), STEP)).toBe(1);
+    expect(fire(createGunState(spec), STEP)).toBe(1);
   });
 
   it('overheat after sustained fire, lock out, and recover once cooled', () => {
-    const guns = createGunState();
+    const guns = createGunState(spec);
     fire(guns, gun.secondsToOverheat + 0.1);
     expect(guns.overheated).toBe(true);
     expect(fire(guns, 0.5)).toBe(0); // locked: trigger does nothing
@@ -58,7 +58,7 @@ describe('guns: rate of fire, heat and overheating', () => {
   });
 
   it('short bursts stay cool: heat falls between bursts', () => {
-    const guns = createGunState();
+    const guns = createGunState(spec);
     for (let i = 0; i < 10; i++) {
       fire(guns, 1);
       fire(guns, 1, undefined, undefined, gun, false);
@@ -69,14 +69,14 @@ describe('guns: rate of fire, heat and overheating', () => {
   it('a crashed aircraft cannot fire', () => {
     const aircraft = flyingNorth();
     aircraft.crashed = true;
-    expect(fire(createGunState(), 1, undefined, aircraft)).toBe(0);
+    expect(fire(createGunState(spec), 1, undefined, aircraft)).toBe(0);
   });
 });
 
 describe('ballistics', () => {
   it('rounds inherit the aircraft velocity on top of muzzle velocity', () => {
     const pool = new ProjectilePool(64);
-    stepGuns(createGunState(), flyingNorth(150), spec, noScatter, true, pool, 1, STEP);
+    stepGuns(createGunState(spec), flyingNorth(150), spec, noScatter, true, pool, 1, STEP);
     const i = pool.active.indexOf(1);
     const speed = Math.hypot(pool.vx[i] ?? 0, pool.vy[i] ?? 0, pool.vz[i] ?? 0);
     expect(speed).toBeGreaterThan(gun.muzzleVelocity + 145);
@@ -92,7 +92,7 @@ describe('ballistics', () => {
 
   it('guns converge: left and right streams cross at the convergence distance', () => {
     const pool = new ProjectilePool(64);
-    const guns = createGunState();
+    const guns = createGunState(spec);
     // Fire one round from each of the first two guns (outer left and outer right).
     stepGuns(guns, flyingNorth(0), spec, noScatter, true, pool, 1, STEP);
     stepGuns(guns, flyingNorth(0), spec, noScatter, true, pool, 1, (1 / (gun.roundsPerSecondPerGun * 4)) * 1.01);
@@ -126,7 +126,7 @@ describe('hit detection', () => {
     const target: PracticeTarget = { id: 0, position: { x: 0, y: 1000, z: 400 }, radius: PRACTICE_TARGET_CONFIG.radius, health: PRACTICE_TARGET_CONFIG.maxHealth, respawnTimer: 0 };
     const world = new CombatWorld(ground, [target]);
     const aircraft = flyingNorth();
-    const guns = createGunState();
+    const guns = createGunState(spec);
     const events: string[] = [];
     for (let t = 0; t < 3; t += STEP) {
       world.step(STEP, [{ id: 1, state: aircraft, spec, guns, trigger: t < 1.5 }]);
@@ -142,7 +142,7 @@ describe('hit detection', () => {
     const aircraft = flyingNorth();
     aircraft.position.y = 200;
     quatFromAxisAngle(aircraft.orientation, { x: 1, y: 0, z: 0 }, Math.PI / 4); // nose 45 degrees down
-    const guns = createGunState();
+    const guns = createGunState(spec);
     let groundImpacts = 0;
     for (let t = 0; t < 2; t += STEP) {
       world.step(STEP, [{ id: 1, state: aircraft, spec, guns, trigger: t < 0.5 }]);
@@ -166,7 +166,7 @@ describe('determinism', () => {
       const pool = new ProjectilePool(512);
       const aircraft = flyingNorth();
       aircraft.orientation = quatIdentity();
-      fire(createGunState(), 2, pool, aircraft);
+      fire(createGunState(spec), 2, pool, aircraft);
       return Array.from(pool.px).concat(Array.from(pool.py));
     };
     expect(run()).toEqual(run());

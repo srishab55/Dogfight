@@ -1,15 +1,19 @@
-import { TERRAIN_CONFIG } from '../config/terrain';
-import { RUNWAYS, WORLD_CONFIG, isOnRunway, type RunwayDefinition } from '../config/world';
+import { TERRAIN_CONFIG, type IslandDefinition } from '../config/terrain';
+import { RUNWAYS, WORLD_CONFIG, isOnRunway, runwayLocal, type RunwayDefinition } from '../config/world';
 import type { GroundQuery } from '../flight/ground';
 
 /**
- * Heightmap terrain: hills, a mountain ring and flattened airfields, sampled
+ * Heightmap terrain: islands in the sea, with flattened airfields, sampled
  * once onto a grid.
  *
  * The client renders exactly this grid, with the same two triangles per
  * cell, and `heightAt` interpolates on those same triangles. The ground the
  * physics collides with is therefore exactly the ground you see, with no
  * invisible bumps and no wheels sinking into a slope.
+ *
+ * `heightAt` is the solid ground, which lies below the sea surface offshore.
+ * The flight model collides with the *world* ground (see worldGround.ts),
+ * which adds the sea surface and the carriers.
  */
 export interface Terrain extends GroundQuery {
   /** Heights at grid vertices, row-major by z then x: index = j * (resolution + 1) + i. */
@@ -20,6 +24,9 @@ export interface Terrain extends GroundQuery {
   readonly origin: number;
   readonly cellSize: number;
 }
+
+/** World height of the open sea floor: the terrain's height beyond the grid. */
+export const SEA_FLOOR_HEIGHT = WORLD_CONFIG.seaLevel - TERRAIN_CONFIG.seaFloorDepth;
 
 export function createTerrain(runways: readonly RunwayDefinition[] = RUNWAYS): Terrain {
   const { size, resolution } = TERRAIN_CONFIG;
@@ -36,7 +43,7 @@ export function createTerrain(runways: readonly RunwayDefinition[] = RUNWAYS): T
   const heightAt = (x: number, z: number): number => {
     const gx = (x - origin) / cellSize;
     const gz = (z - origin) / cellSize;
-    if (gx < 0 || gz < 0 || gx >= resolution || gz >= resolution) return WORLD_CONFIG.groundHeight;
+    if (gx < 0 || gz < 0 || gx >= resolution || gz >= resolution) return SEA_FLOOR_HEIGHT;
     const i = Math.floor(gx);
     const j = Math.floor(gz);
     const fx = gx - i;
@@ -59,53 +66,76 @@ export function createTerrain(runways: readonly RunwayDefinition[] = RUNWAYS): T
     origin,
     cellSize,
     heightAt,
-    surfaceAt: (x, z) => (runways.some((runway) => isOnRunway(runway, x, z)) ? 'runway' : 'grass'),
+    surfaceAt: (x, z) => (runways.some((runway) => isOnRunway(runway, x, z)) ? 'runway' : heightAt(x, z) < WORLD_CONFIG.seaLevel ? 'water' : 'grass'),
   };
 }
 
 /**
- * The continuous terrain shape, before gridding:
- *   hills (fBm noise) + mountain ring (ridged noise, masked by distance)
- *   then blended to runway height inside the airfield zones,
- *   and faded to flat ground at the terrain's edge.
+ * The continuous terrain shape, before gridding: the islands, then the
+ * airfield pads and approach clearances.
  */
 export function proceduralHeight(x: number, z: number, runways: readonly RunwayDefinition[] = RUNWAYS): number {
-  const { hills, mountains, seed } = TERRAIN_CONFIG;
-
-  const hillHeight = fbm(x / hills.wavelength, z / hills.wavelength, hills.octaves, seed) * hills.amplitude;
-
-  // Rounded-square distance from the centre (a superellipse, p = 6), so the ring follows the square map.
-  const distance = Math.pow(Math.abs(x) ** 6 + Math.abs(z) ** 6, 1 / 6);
-  const ring = smoothstep(mountains.riseStart, mountains.riseEnd, distance) * (1 - smoothstep(mountains.fallStart, mountains.fallEnd, distance));
-  const ridges = ridgedNoise(x / mountains.wavelength, z / mountains.wavelength, mountains.octaves, seed + 101);
-  const mountainHeight = ring * (mountains.baseHeight + ridges * mountains.peakHeight);
-
-  let height = hillHeight * (1 - 0.6 * ring) + mountainHeight;
-
-  // Airfields: blend to the runway's own elevation.
+  let height = naturalHeight(x, z);
+  const field = TERRAIN_CONFIG.airfield;
   for (const runway of runways) {
-    const weight = airfieldWeight(runway, x, z);
-    height += (runway.center.y - height) * weight;
-  }
+    const { along, across } = runwayLocal(runway, x, z);
+    // Flat pad: blend to the runway's elevation.
+    const beyondEnd = Math.max(0, Math.abs(along) - (runway.length / 2 + field.padOverrun));
+    const beyondSide = Math.max(0, Math.abs(across) - field.padHalfWidth);
+    const pad = 1 - smoothstep(0, field.blendDistance, Math.hypot(beyondEnd, beyondSide));
+    height += (runway.center.y - height) * pad;
 
-  // Fade to the flat ground beyond the terrain's edge.
-  const edge = Math.max(Math.abs(x), Math.abs(z));
-  const half = TERRAIN_CONFIG.size / 2;
-  const edgeFade = 1 - smoothstep(half - 600, half - 50, edge);
-  return WORLD_CONFIG.groundHeight + (height - WORLD_CONFIG.groundHeight) * edgeFade;
+    // Approach clearance: below a 2-degree surface rising from each runway end.
+    const pastEnd = Math.abs(along) - runway.length / 2;
+    if (pastEnd > 0 && pastEnd < field.approachLength) {
+      const inCorridor = 1 - smoothstep(field.approachHalfWidth, field.approachHalfWidth + field.blendDistance, Math.abs(across));
+      const ceiling = runway.center.y + pastEnd * field.clearanceGradient;
+      if (height > ceiling) height += (ceiling - height) * inCorridor;
+    }
+  }
+  return height;
 }
 
-/** 1 inside a runway's flat zone (the runway plus its approach corridors), fading to 0 over the blend distance. */
-function airfieldWeight(runway: RunwayDefinition, x: number, z: number): number {
-  const { approachLength, halfWidth, blendDistance } = TERRAIN_CONFIG.airfield;
-  const heading = (runway.headingDegrees * Math.PI) / 180;
-  const dx = x - runway.center.x;
-  const dz = z - runway.center.z;
-  const along = dx * Math.sin(heading) + dz * Math.cos(heading);
-  const across = dx * Math.cos(heading) - dz * Math.sin(heading);
-  const outsideAlong = Math.max(0, Math.abs(along) - (runway.length / 2 + approachLength));
-  const outsideAcross = Math.max(0, Math.abs(across) - halfWidth);
-  return 1 - smoothstep(0, blendDistance, Math.hypot(outsideAlong, outsideAcross));
+/** The islands and sea bed alone, without airfields (world height, m). The highest island wins where they overlap. */
+export function naturalHeight(x: number, z: number): number {
+  let aboveSea = -TERRAIN_CONFIG.seaFloorDepth;
+  TERRAIN_CONFIG.islands.forEach((island, index) => {
+    aboveSea = Math.max(aboveSea, islandHeight(island, index, x, z));
+  });
+  return WORLD_CONFIG.seaLevel + aboveSea;
+}
+
+/**
+ * One island's height above sea level at (x, z).
+ *
+ * u is the normalised distance from the island's centre (1 on the coast),
+ * stretched by noise so coastlines get bays and headlands. Inland (u < 1),
+ * a beach rises to the coastal plain, hills grow further in, and a ridged
+ * mountain stands on top. Offshore (u > 1), the sea bed shelves down to the
+ * open-sea depth. Both sides give 0 at u = 1, so the coast is continuous.
+ */
+function islandHeight(island: IslandDefinition, index: number, x: number, z: number): number {
+  const { seed, coastline, shelfWidth, seaFloorDepth, coastalPlainHeight, beachWidth } = TERRAIN_CONFIG;
+  const rotation = (island.rotationDeg * Math.PI) / 180;
+  const dx = x - island.center.x;
+  const dz = z - island.center.z;
+  // Into the island's own axes (radiusX across, radiusZ along its rotated length).
+  const localX = dx * Math.cos(rotation) - dz * Math.sin(rotation);
+  const localZ = dx * Math.sin(rotation) + dz * Math.cos(rotation);
+  let u = Math.hypot(localX / island.radiusX, localZ / island.radiusZ);
+  u *= 1 + coastline.amplitude * fbm(x / coastline.wavelength, z / coastline.wavelength, coastline.octaves, seed + 7 * index);
+
+  if (u >= 1) return -seaFloorDepth * smoothstep(1, 1 + shelfWidth, u);
+
+  const inland = 1 - u; // 0 on the coast, 1 at the centre
+  const plain = coastalPlainHeight * smoothstep(0, beachWidth, inland);
+  const hills = island.hills.amplitude * smoothstep(beachWidth, 0.45, inland) * (0.5 + 0.5 * fbm(x / island.hills.wavelength, z / island.hills.wavelength, 4, seed + 31 * index));
+  const peak = island.peak;
+  const fromSummit = Math.min(1, Math.hypot(x - peak.x, z - peak.z) / peak.radius);
+  const ridges = ridgedNoise(x / 700, z / 700, 5, seed + 101 + index);
+  // A cone with concave flanks, roughened by ridges; it fades out near the coast, so no sea cliffs.
+  const mountain = peak.height * (1 - fromSummit) ** 1.6 * (0.7 + 0.3 * ridges) * smoothstep(0.02, 0.3, inland);
+  return plain + hills + mountain;
 }
 
 // ── Noise ──────────────────────────────────────────────────────────────────

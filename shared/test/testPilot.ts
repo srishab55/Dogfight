@@ -9,6 +9,7 @@ import {
   type AircraftState,
   type Attitude,
   type FlightControls,
+  type GroundQuery,
 } from '../src/index';
 
 /*
@@ -36,9 +37,16 @@ export type Pilot = (view: PilotView) => Partial<FlightControls>;
 /**
  * Flies for up to `seconds`, asking `pilot` for controls every physics step.
  * Stops early when `until` returns true or the aircraft crashes.
- * Returns the elapsed time.
+ * Returns the elapsed time. Flies over flat ground unless given another.
  */
-export function fly(state: AircraftState, spec: AircraftClassSpec, seconds: number, pilot: Pilot, until?: (view: PilotView) => boolean): number {
+export function fly(
+  state: AircraftState,
+  spec: AircraftClassSpec,
+  seconds: number,
+  pilot: Pilot,
+  until?: (view: PilotView) => boolean,
+  ground: GroundQuery = GROUND,
+): number {
   const attitude = getAttitude(state.orientation);
   const controls: FlightControls = neutralControls();
   let time = 0;
@@ -53,7 +61,7 @@ export function fly(state: AircraftState, spec: AircraftClassSpec, seconds: numb
     };
     if (until?.(view)) break;
     Object.assign(controls, neutralControls(), { throttle: state.throttle }, pilot(view));
-    stepAircraft(state, sanitizeControls(controls), spec, GROUND, STEP);
+    stepAircraft(state, sanitizeControls(controls), spec, ground, STEP);
     time += STEP;
   }
   return time;

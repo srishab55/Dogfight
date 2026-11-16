@@ -1,7 +1,7 @@
 import type { Scene } from '@babylonjs/core/scene';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { TargetCamera } from '@babylonjs/core/Cameras/targetCamera';
-import { PRIMITIVE_AIRFRAME } from '@dogfight/shared';
+import type { Vec3 } from '@dogfight/shared';
 import { COCKPIT_CAMERA_CONFIG } from '../config/camera';
 import { RENDER_CONFIG } from '../config/graphics';
 import { degreesToRadians } from '../math/orientation';
@@ -11,8 +11,8 @@ import { degreesToRadians } from '../math/orientation';
  * no smoothing: it sees exactly what the aircraft does, which is the most
  * precise view for judging attitude and aim.
  *
- * There is no cockpit model yet (Phase 3), so the game hides the player's
- * airframe in this view and the HUD shows a boresight cross where the nose points.
+ * There is no cockpit model yet, so the game hides the player's airframe in
+ * this view and the HUD shows a boresight cross where the nose points.
  */
 export class CockpitCamera {
   readonly camera: TargetCamera;
@@ -26,12 +26,11 @@ export class CockpitCamera {
     this.camera.maxZ = RENDER_CONFIG.cameraFarPlane;
     this.camera.rotationQuaternion = Quaternion.Identity();
     this.camera.updateUpVectorFromRotation = true;
-    this.setTargetScale(1);
   }
 
-  setTargetScale(scale: number): void {
-    const { x, y, z } = PRIMITIVE_AIRFRAME.cockpitEye;
-    this.eye.set(x, y, z).scaleInPlace(scale);
+  /** Moves the eye to the pilot's seat of the aircraft being flown (its airframe's eye point, times its scale). */
+  setEye(eye: Readonly<Vec3>, scale: number): void {
+    this.eye.set(eye.x, eye.y, eye.z).scaleInPlace(scale);
   }
 
   update(position: Vector3, orientation: Quaternion): void {

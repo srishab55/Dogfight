@@ -87,6 +87,39 @@ export function createPanelMesh(
 }
 
 /**
+ * A closed, flat-shaded mesh from quads (each four corners in order around
+ * its edge, either way round). Each quad is turned to face away from
+ * `inside`, a point inside the shape, so the shape must be convex about it.
+ */
+export function createQuadMesh(name: string, scene: Scene, quads: ReadonlyArray<readonly Vector3[]>, inside: Vector3): Mesh {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const uvs: number[] = [];
+  for (const face of quads) {
+    const quad = face.map((corner) => corner.clone());
+    const [a, b, c] = quad as [Vector3, Vector3, Vector3, Vector3];
+    // Babylon's ComputeNormals treats (p1 - p2) x (p3 - p2) as a triangle's outward normal.
+    const normal = Vector3.Cross(a.subtract(b), c.subtract(b));
+    const faceCenter = quad.reduce((sum, corner) => sum.addInPlace(corner), Vector3.Zero()).scaleInPlace(1 / quad.length);
+    if (Vector3.Dot(normal, faceCenter.subtract(inside)) < 0) quad.reverse();
+    const base = positions.length / 3;
+    for (const corner of quad) positions.push(corner.x, corner.y, corner.z);
+    uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const normals: number[] = [];
+  VertexData.ComputeNormals(positions, indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.uvs = uvs;
+  const mesh = new Mesh(name, scene);
+  vertexData.applyToMesh(mesh);
+  return mesh;
+}
+
+/**
  * Makes sure a closed mesh's triangles face outwards. Builders such as
  * CreateLathe set their winding from the order of the profile points, which
  * is easy to get backwards; inside-out meshes are invisible from outside.

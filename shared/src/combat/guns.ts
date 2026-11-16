@@ -1,6 +1,5 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
-import { PRIMITIVE_GUN_MOUNTS } from '../config/airframe';
-import type { GunSpec } from '../config/weapons';
+import { GUN_SPECS, type GunSpec } from '../config/weapons';
 import type { AircraftState } from '../flight/AircraftState';
 import { rotateVec3 } from '../math/quat';
 import { addVec3, normalizeVec3, setVec3, vec3 } from '../math/vec3';
@@ -17,16 +16,24 @@ export interface GunState {
   nextGun: number;
   /** Rounds fired so far. Also seeds each round's dispersion, so it's deterministic. */
   roundsFired: number;
+  /** Rounds left, across all guns. At 0 the guns are empty until rearmed at a base. */
+  ammo: number;
   /** True if any round left the barrels in the last step. */
   firing: boolean;
 }
 
-export function createGunState(): GunState {
-  return { heat: 0, overheated: false, fireTimer: Infinity, nextGun: 0, roundsFired: 0, firing: false };
+/** Cold guns with a full load of ammunition for this class. */
+export function createGunState(spec: AircraftClassSpec): GunState {
+  return { heat: 0, overheated: false, fireTimer: Infinity, nextGun: 0, roundsFired: 0, firing: false, ammo: fullAmmo(spec) };
+}
+
+/** Total rounds a full load carries: rounds per gun times the number of guns. */
+export function fullAmmo(spec: AircraftClassSpec): number {
+  return GUN_SPECS[spec.id].roundsPerGun * gunMounts(spec).length;
 }
 
 export function gunMounts(spec: AircraftClassSpec): readonly { x: number; y: number; z: number }[] {
-  return PRIMITIVE_GUN_MOUNTS[spec.combat.gunCount <= 2 ? 2 : 4];
+  return spec.airframe.gunMounts;
 }
 
 // Scratch vectors.
@@ -56,13 +63,14 @@ export function stepGuns(
   const interval = 1 / (gun.roundsPerSecondPerGun * mounts.length);
   let fired = 0;
 
-  if (trigger && !guns.overheated && !aircraft.crashed) {
+  if (trigger && !guns.overheated && !aircraft.crashed && guns.ammo > 0) {
     // Bank time and fire every whole interval. On a fresh trigger pull the
     // timer is "full", so the first round leaves at once.
     guns.fireTimer = Math.min(guns.fireTimer, interval) + dt;
-    while (guns.fireTimer >= interval) {
+    while (guns.fireTimer >= interval && guns.ammo > 0) {
       guns.fireTimer -= interval;
       fireRound(guns, aircraft, spec, gun, mounts, pool, owner);
+      guns.ammo--;
       fired++;
     }
     guns.heat = Math.min(1, guns.heat + dt / gun.secondsToOverheat);

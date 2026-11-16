@@ -20,6 +20,8 @@ export const IMPACT_EFFECT_CONFIG = {
   capacity: 192,
   /** A round hitting the ground. */
   dust: { color: '#8c7b5a', size: 3.2, duration: 0.9, rise: 2 },
+  /** Spray thrown up where a round hits the sea. */
+  splash: { color: '#e6eef2', size: 3.6, duration: 0.8, rise: 3 },
   /** A round hitting a balloon. */
   spark: { color: '#ffe7a3', size: 1.6, duration: 0.16, rise: 0 },
   /** A balloon bursting. */

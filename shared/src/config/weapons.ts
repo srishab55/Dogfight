@@ -21,6 +21,8 @@ export interface GunSpec {
   readonly recoverBelowHeat: number;
   /** The guns are angled so their streams cross this far ahead of the nose (m). */
   readonly convergenceDistance: number;
+  /** Ammunition carried per gun. At 13 rounds/s, 300 rounds is 23 s of firing: land at a base to rearm. */
+  readonly roundsPerGun: number;
 }
 
 const STANDARD_GUNS: GunSpec = {
@@ -33,14 +35,33 @@ const STANDARD_GUNS: GunSpec = {
   secondsToCool: 6,
   recoverBelowHeat: 0.4,
   convergenceDistance: 300,
+  roundsPerGun: 300,
 };
 
 export const GUN_SPECS: Readonly<Record<AircraftClassId, GunSpec>> = {
-  interceptor: STANDARD_GUNS,
+  // Light and fast: a smaller ammunition load.
+  interceptor: { ...STANDARD_GUNS, roundsPerGun: 250 },
   fighterBomber: STANDARD_GUNS,
-  // Heavier nose guns: slower-firing but harder-hitting, and they run hot sooner.
-  heavyBomber: { ...STANDARD_GUNS, roundsPerSecondPerGun: 10, damagePerRound: 1.5, secondsToOverheat: 6 },
+  // Heavier nose guns: slower-firing but harder-hitting, and they run hot sooner. Big magazines.
+  heavyBomber: { ...STANDARD_GUNS, roundsPerSecondPerGun: 10, damagePerRound: 1.5, secondsToOverheat: 6, roundsPerGun: 500 },
+  // Long patrols over the sea: the deepest magazines of the fighters.
+  navalFighter: { ...STANDARD_GUNS, roundsPerGun: 400 },
+  // Two cowling guns, synchronised to fire through the propeller (a slower rate).
+  diveBomber: { ...STANDARD_GUNS, roundsPerSecondPerGun: 11, damagePerRound: 1.2, roundsPerGun: 360 },
 };
+
+/**
+ * Rearming and repair at a friendly base: land, stop on the runway (or its
+ * aprons) or the carrier deck, and idle. Interrupted if you move off.
+ */
+export const SERVICE_CONFIG = {
+  /** Seconds stopped at a base to rearm fully and repair the hull. */
+  durationSeconds: 6,
+  /** Counts as stopped below this ground speed (m/s). */
+  maxGroundSpeed: 1.5,
+  /** The engine must be at or below this throttle (crews don't work beside a propeller at power). */
+  maxThrottle: 0.2,
+} as const;
 
 /** Floating practice balloons: something to shoot at until AI aircraft arrive (Phase 7). */
 export const PRACTICE_TARGET_CONFIG = {

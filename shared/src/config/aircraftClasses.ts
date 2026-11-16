@@ -10,7 +10,9 @@
  * speed and climb.
  */
 
-export type AircraftClassId = 'interceptor' | 'fighterBomber' | 'heavyBomber';
+import { AIRFRAMES, REFERENCE_WING_SPAN, type Airframe } from './airframe';
+
+export type AircraftClassId = 'interceptor' | 'fighterBomber' | 'heavyBomber' | 'navalFighter' | 'diveBomber';
 
 export interface AircraftClassSpec {
   readonly id: AircraftClassId;
@@ -18,8 +20,12 @@ export interface AircraftClassSpec {
 
   /** Total mass including fuel and pilot (kg). */
   readonly mass: number;
-  /** Multiplies the primitive airframe geometry (wheels, crash points, visual model). */
+  /** Shape: wheels, crash points, guns and the visual model all come from it. */
+  readonly airframe: Airframe;
+  /** Multiplies the airframe geometry (wheels, crash points, visual model). */
   readonly airframeScale: number;
+  /** Where it spawns: the island airfield, or the deck of the team's carrier (needs an arrestor hook to land back on it). */
+  readonly homeBase: 'airfield' | 'carrier';
   /** Wing reference area S (m^2). */
   readonly wingArea: number;
   /**
@@ -83,6 +89,17 @@ export interface AircraftClassSpec {
     /** Above this airspeed the airflow blows the flaps back up, as on a real aircraft (m/s). */
     readonly maxExtensionSpeed: number;
     /** Seconds for the flaps to travel from fully up to fully down. */
+    readonly travelTime: number;
+  };
+
+  /**
+   * Dive brakes (dive bomber only): plates that open into the airflow, adding
+   * drag but no lift. They hold a steep dive to a steady, aimable speed.
+   */
+  readonly airbrake?: {
+    /** Zero-lift drag coefficient added when fully open. */
+    readonly dragIncrement: number;
+    /** Seconds to open fully. */
     readonly travelTime: number;
   };
 
@@ -151,14 +168,15 @@ export interface AircraftClassSpec {
 
 /**
  * Rough moments of inertia from mass and size: I = m * k^2, where k is the
- * radius of gyration. A fighter-sized airframe at scale 1 has k of about 2.6 m
- * (pitch), 3.2 m (yaw) and 2.4 m (roll).
+ * radius of gyration. A fighter-sized airframe (10.6 m span) has k of about
+ * 2.6 m (pitch), 3.2 m (yaw) and 2.4 m (roll); k grows in proportion to span.
  */
-function estimateInertia(mass: number, scale: number): AircraftClassSpec['momentOfInertia'] {
+function estimateInertia(mass: number, airframe: Airframe, scale: number): AircraftClassSpec['momentOfInertia'] {
+  const size = (airframe.wingSpan * scale) / REFERENCE_WING_SPAN;
   return {
-    pitch: mass * (2.6 * scale) ** 2,
-    yaw: mass * (3.2 * scale) ** 2,
-    roll: mass * (2.4 * scale) ** 2,
+    pitch: mass * (2.6 * size) ** 2,
+    yaw: mass * (3.2 * size) ** 2,
+    roll: mass * (2.4 * size) ** 2,
   };
 }
 
@@ -199,9 +217,11 @@ const INTERCEPTOR: AircraftClassSpec = {
   id: 'interceptor',
   displayName: 'Interceptor',
   mass: 2_900,
+  airframe: AIRFRAMES.fighter,
   airframeScale: 0.92,
+  homeBase: 'airfield',
   wingArea: 17.5,
-  momentOfInertia: estimateInertia(2_900, 0.92),
+  momentOfInertia: estimateInertia(2_900, AIRFRAMES.fighter, 0.92),
   engine: { staticThrust: 17_000, maxPower: 1_300_000, propellerEfficiency: 0.82, spoolTime: 0.7 },
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.021 },
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.55, travelTime: 2.5 },
@@ -224,9 +244,11 @@ const FIGHTER_BOMBER: AircraftClassSpec = {
   id: 'fighterBomber',
   displayName: 'Fighter-Bomber',
   mass: 4_300,
+  airframe: AIRFRAMES.fighter,
   airframeScale: 1,
+  homeBase: 'airfield',
   wingArea: 22.5,
-  momentOfInertia: estimateInertia(4_300, 1),
+  momentOfInertia: estimateInertia(4_300, AIRFRAMES.fighter, 1),
   engine: { staticThrust: 20_000, maxPower: 1_650_000, propellerEfficiency: 0.82, spoolTime: 0.9 },
   // Bomb racks and a bigger radiator add drag.
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.024 },
@@ -245,37 +267,123 @@ const FIGHTER_BOMBER: AircraftClassSpec = {
   combat: { maxHullHealth: 180, gunCount: 4, bombCapacity: 3 },
 };
 
-/** Slow to accelerate, sluggish, heavily armoured; dual guns and eight bombs. */
+/**
+ * Four engines, a 24 m wing: slow to accelerate, sluggish, heavily armoured;
+ * a twin-gun chin turret and eight bombs.
+ */
 const HEAVY_BOMBER: AircraftClassSpec = {
   id: 'heavyBomber',
   displayName: 'Heavy Bomber',
-  mass: 10_500,
-  airframeScale: 1.45,
-  wingArea: 50,
-  momentOfInertia: estimateInertia(10_500, 1.45),
-  engine: { staticThrust: 34_000, maxPower: 2_600_000, propellerEfficiency: 0.8, spoolTime: 1.4 },
-  aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.027 },
+  mass: 14_000,
+  airframe: AIRFRAMES.fourEngineBomber,
+  airframeScale: 1,
+  homeBase: 'airfield',
+  wingArea: 70,
+  momentOfInertia: estimateInertia(14_000, AIRFRAMES.fourEngineBomber, 1),
+  // Four radial engines of about 880 kW each.
+  engine: { staticThrust: 46_000, maxPower: 3_500_000, propellerEfficiency: 0.8, spoolTime: 1.6 },
+  // Turrets, nacelles and a deep fuselage add drag.
+  aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.03 },
   // Big Fowler-style flaps: more lift, slower to move, blown up at a lower speed.
-  flaps: { ...COMMON_FLAPS, liftIncrement: 0.7, maxExtensionSpeed: 70, travelTime: 4 },
+  flaps: { ...COMMON_FLAPS, liftIncrement: 0.75, maxExtensionSpeed: 70, travelTime: 4 },
   handling: {
     referenceSpeed: 95,
     pitch: { frequency: 1.8, dampingRatio: 0.7, fullStickAngleOfAttackDeg: 17, trimAngleOfAttackDeg: 3 },
-    roll: { maxRateDeg: 55, responseTime: 0.5 },
+    roll: { maxRateDeg: 50, responseTime: 0.55 },
     yaw: { frequency: 1.4, dampingRatio: 0.6, fullRudderSideslipDeg: 6 },
     dihedralEffect: 4,
     stallPitchDown: 1.5,
     gLimit: 3.5,
     negativeGLimit: 1.5,
   },
-  // Sturdier undercarriage.
+  // Sturdier undercarriage, but a big aircraft must arrive gently.
   landingGear: { ...COMMON_GEAR, maxSinkRate: 6.5, damageSinkRate: 2.5, maxSteeringDeg: 30 },
-  combat: { maxHullHealth: 450, gunCount: 2, bombCapacity: 8 },
+  combat: { maxHullHealth: 600, gunCount: 2, bombCapacity: 8 },
+};
+
+/**
+ * Carrier fighter: lifts off within a carrier deck, lands slowly on strong
+ * gear and catches the arrestor wires with its hook. Agile, four guns, no bombs.
+ */
+const NAVAL_FIGHTER: AircraftClassSpec = {
+  id: 'navalFighter',
+  displayName: 'Naval Fighter',
+  mass: 4_600,
+  airframe: AIRFRAMES.navalFighter,
+  airframeScale: 1,
+  homeBase: 'carrier',
+  // A big wing for its weight: low stall speed for short take-offs and slow approaches.
+  wingArea: 29,
+  momentOfInertia: estimateInertia(4_600, AIRFRAMES.navalFighter, 1),
+  engine: { staticThrust: 24_000, maxPower: 1_500_000, propellerEfficiency: 0.82, spoolTime: 0.8 },
+  // The big radial engine's frontal area adds drag.
+  aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.025 },
+  flaps: { ...COMMON_FLAPS, liftIncrement: 0.7, dragIncrement: 0.04, travelTime: 2.5 },
+  handling: {
+    referenceSpeed: 100,
+    pitch: { frequency: 3.4, dampingRatio: 0.68, fullStickAngleOfAttackDeg: 19, trimAngleOfAttackDeg: 2.5 },
+    roll: { maxRateDeg: 135, responseTime: 0.22 },
+    yaw: { frequency: 2.5, dampingRatio: 0.52, fullRudderSideslipDeg: 9 },
+    dihedralEffect: 5,
+    stallPitchDown: 2.5,
+    gLimit: 7.5,
+    negativeGLimit: 3.5,
+  },
+  // Carrier gear: built for firm arrivals on a deck.
+  landingGear: { ...COMMON_GEAR, maxSinkRate: 9.5, damageSinkRate: 4.5 },
+  combat: { maxHullHealth: 160, gunCount: 4, bombCapacity: 0 },
+};
+
+/**
+ * Carrier dive bomber: dive brakes hold a near-vertical dive to a steady
+ * speed for aiming its one heavy bomb. Sturdy, two forward guns.
+ */
+const DIVE_BOMBER: AircraftClassSpec = {
+  id: 'diveBomber',
+  displayName: 'Dive Bomber',
+  mass: 4_900,
+  airframe: AIRFRAMES.diveBomber,
+  airframeScale: 1,
+  homeBase: 'carrier',
+  wingArea: 30.2,
+  momentOfInertia: estimateInertia(4_900, AIRFRAMES.diveBomber, 1),
+  engine: { staticThrust: 19_000, maxPower: 1_050_000, propellerEfficiency: 0.8, spoolTime: 1 },
+  aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.027 },
+  flaps: { ...COMMON_FLAPS, liftIncrement: 0.62, travelTime: 3 },
+  // Fully open, the brakes hold a vertical dive to about 450 km/h at low altitude.
+  airbrake: { dragIncrement: 0.16, travelTime: 1.5 },
+  handling: {
+    referenceSpeed: 95,
+    // Full back stick commands a high angle of attack: a dive bomber must pull hard out of its dive at modest speeds.
+    pitch: { frequency: 3.0, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 2.5 },
+    roll: { maxRateDeg: 90, responseTime: 0.3 },
+    yaw: { frequency: 2.1, dampingRatio: 0.56, fullRudderSideslipDeg: 8 },
+    dihedralEffect: 5,
+    stallPitchDown: 2.2,
+    gLimit: 6.5,
+    negativeGLimit: 3,
+  },
+  landingGear: { ...COMMON_GEAR, maxSinkRate: 9, damageSinkRate: 4 },
+  combat: { maxHullHealth: 230, gunCount: 2, bombCapacity: 1 },
 };
 
 export const AIRCRAFT_CLASSES: Readonly<Record<AircraftClassId, AircraftClassSpec>> = {
   interceptor: INTERCEPTOR,
   fighterBomber: FIGHTER_BOMBER,
   heavyBomber: HEAVY_BOMBER,
+  navalFighter: NAVAL_FIGHTER,
+  diveBomber: DIVE_BOMBER,
 };
 
-export const AIRCRAFT_CLASS_IDS: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'heavyBomber'];
+/** In selection order (keys 1-5). */
+export const AIRCRAFT_CLASS_IDS: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'heavyBomber', 'navalFighter', 'diveBomber'];
+
+/** True if the class has an arrestor hook, so it can land on a carrier. */
+export function hasTailhook(spec: AircraftClassSpec): boolean {
+  return spec.airframe.tailhook !== undefined;
+}
+
+/** Centre of mass to the bottom of the wheels, for this class's airframe and scale (m). */
+export function groundClearance(spec: AircraftClassSpec): number {
+  return spec.airframe.groundClearance * spec.airframeScale;
+}

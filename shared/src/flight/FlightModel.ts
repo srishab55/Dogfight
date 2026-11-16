@@ -1,5 +1,6 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
 import { PHYSICS_CONSTANTS } from '../config/simulation';
+import { CATAPULT_CONFIG } from '../config/world';
 import { integrateBodyAngularVelocity, inverseRotateVec3, rotateVec3 } from '../math/quat';
 import { addScaledVec3, dotVec3, lengthVec3, scaleVec3, setVec3, vec3 } from '../math/vec3';
 import type { Vec3 } from '../types/vector';
@@ -60,12 +61,19 @@ const MIN_ANGULAR_DAMPING = 0.4;
 const STALL_WARNING_MARGIN = 2.5 * DEG_TO_RAD;
 /** On the ground below this fraction of the reference speed, don't model a stall. */
 const GROUND_STALL_SPEED_FRACTION = 0.3;
-/** Height of the wing below the centre of mass, at airframe scale 1 (m). Used for ground effect. */
-const WING_HEIGHT_BELOW_CENTRE = 0.38;
 /** A touchdown only counts (and is graded) after at least this long airborne, so wheel skips on the take-off roll don't (s). */
 const MIN_AIRBORNE_TIME_FOR_TOUCHDOWN = 1;
 /** Hull damage from the hardest survivable landing, as a fraction of maximum hull. */
 const MAX_HARD_LANDING_DAMAGE = 0.7;
+/**
+ * Deceleration of a caught arrestor wire (m/s^2, about 1.6 g): a 38 m/s
+ * arrival stops in about 45 m. Real wires pay out against hydraulic brakes,
+ * giving a roughly constant pull.
+ */
+const ARRESTOR_DECELERATION = 16;
+/** Once stopped (below this speed, m/s) with the throttle below this, the deck crew frees the hook. */
+const ARRESTOR_RELEASE_SPEED = 0.5;
+const ARRESTOR_RELEASE_THROTTLE = 0.15;
 
 // Scratch state, reused every step (the step allocates nothing).
 const bodyVelocity = vec3();
@@ -75,7 +83,9 @@ const bodyGroundTorque = vec3();
 const worldUp = vec3();
 const groundContact = createGroundContactResult();
 const effectiveAero = {} as EffectiveAero;
+const noseDirection = vec3();
 const BODY_UP: Vec3 = { x: 0, y: 1, z: 0 };
+const BODY_FORWARD: Vec3 = { x: 0, y: 0, z: 1 };
 
 /**
  * Advances `state` by `dt` seconds under `controls`. Mutates `state` in place.
@@ -110,12 +120,17 @@ export function stepAircraft(state: AircraftState, controls: Readonly<FlightCont
   const flapTarget = airspeed > spec.flaps.maxExtensionSpeed ? 0 : controls.flaps;
   const flapTravel = dt / spec.flaps.travelTime;
   state.flapPosition += Math.max(-flapTravel, Math.min(flapTravel, flapTarget - state.flapPosition));
+  // Dive brakes travel the same way, if fitted.
+  if (spec.airbrake) {
+    const brakeTravel = dt / spec.airbrake.travelTime;
+    state.airbrakePosition += Math.max(-brakeTravel, Math.min(brakeTravel, controls.airbrake - state.airbrakePosition));
+  }
   // The wing as the flaps currently shape it: more camber, more drag, earlier stall.
-  const aero = applyFlaps(effectiveAero, spec, state.flapPosition);
+  const aero = applyFlaps(effectiveAero, spec, state.flapPosition, state.airbrakePosition);
 
   // ── Ground effect: the cushion of air under a wing close to the ground ──
   const groundHeight = ground.heightAt(state.position.x, state.position.z);
-  const wingHeight = state.position.y - groundHeight - WING_HEIGHT_BELOW_CENTRE * spec.airframeScale;
+  const wingHeight = state.position.y - groundHeight + spec.airframe.wing.y * spec.airframeScale;
   const inducedDragFactor = groundEffectInducedDragFactor(wingHeight, wingSpan(spec));
 
   // ── Stall state ──
@@ -161,6 +176,8 @@ export function stepAircraft(state: AircraftState, controls: Readonly<FlightCont
     registerTouchdown(state, spec, groundContact.impactSinkRate);
     if (state.crashed) return;
   }
+  applyArrestorHook(state, spec, groundContact.onArrestorWires, worldForce);
+  applyCatapult(state, spec, controls, worldForce, dt);
 
   // ── Translation (semi-implicit Euler) ──
   scaleVec3(state.acceleration, worldForce, 1 / spec.mass);
@@ -265,6 +282,72 @@ function registerTouchdown(state: AircraftState, spec: AircraftClassSpec, sinkRa
   state.lastTouchdownDamage = damage;
   state.hullHealth = Math.max(0, state.hullHealth - damage);
   if (state.hullHealth <= 0) crash(state, 'destroyed by a hard landing');
+}
+
+/**
+ * The arrestor hook. It arms after a second in the air (so a take-off roll
+ * over the wires doesn't catch one), catches a wire as soon as a main wheel
+ * rolls across the wire zone, then pulls back along the deck until the
+ * aircraft stops. It also cancels the engine's pull, so pilots can safely
+ * hold power on touchdown in case they miss the wires, and it keeps holding
+ * a stopped aircraft until the throttle comes back to idle, when the deck
+ * crew frees the hook.
+ */
+function applyArrestorHook(state: AircraftState, spec: AircraftClassSpec, onWires: boolean, worldForce: Vec3): void {
+  if (!spec.airframe.tailhook) return;
+  if (!state.onGround && state.airborneTime >= MIN_AIRBORNE_TIME_FOR_TOUCHDOWN) state.hookArmed = true;
+  if (state.hookArmed && onWires) {
+    state.hookEngaged = true;
+    state.hookArmed = false;
+  }
+  if (!state.hookEngaged) return;
+
+  // The wire runs out behind the aircraft: it pulls back along the nose's heading.
+  rotateVec3(noseDirection, state.orientation, BODY_FORWARD);
+  const flat = Math.hypot(noseDirection.x, noseDirection.z) || 1;
+  const backX = -noseDirection.x / flat;
+  const backZ = -noseDirection.z / flat;
+  const forwardSpeed = -(state.velocity.x * backX + state.velocity.z * backZ);
+  if (forwardSpeed < ARRESTOR_RELEASE_SPEED && state.throttle < ARRESTOR_RELEASE_THROTTLE) {
+    state.hookEngaged = false;
+    return;
+  }
+  // Braking fades smoothly to zero at a standstill (tanh), so it never drags the aircraft backwards.
+  const braking = spec.mass * ARRESTOR_DECELERATION * Math.tanh(Math.max(0, forwardSpeed) / 1.5);
+  const pull = braking + state.telemetry.thrust * flat;
+  worldForce.x += backX * pull;
+  worldForce.z += backZ * pull;
+}
+
+/**
+ * The carrier catapult. While held, the holdback bar cancels the engine's
+ * pull, so the pilot can run up to full power without moving. At full
+ * throttle (lever and engine) it fires, adding a constant push along the
+ * nose's heading until the aircraft has run the length of the track.
+ */
+function applyCatapult(state: AircraftState, spec: AircraftClassSpec, controls: Readonly<FlightControls>, worldForce: Vec3, dt: number): void {
+  if (state.catapult === 'none') return;
+  rotateVec3(noseDirection, state.orientation, BODY_FORWARD);
+  const flat = Math.hypot(noseDirection.x, noseDirection.z) || 1;
+  const forwardX = noseDirection.x / flat;
+  const forwardZ = noseDirection.z / flat;
+
+  if (state.catapult === 'held') {
+    const thrust = state.telemetry.thrust * flat;
+    worldForce.x -= forwardX * thrust;
+    worldForce.z -= forwardZ * thrust;
+    if (controls.throttle >= CATAPULT_CONFIG.launchThrottle && state.throttle >= CATAPULT_CONFIG.launchThrottle - 0.05) {
+      state.catapult = 'launching';
+      state.catapultTravel = 0;
+    }
+    return;
+  }
+
+  const push = spec.mass * CATAPULT_CONFIG.acceleration;
+  worldForce.x += forwardX * push;
+  worldForce.z += forwardZ * push;
+  state.catapultTravel += Math.hypot(state.velocity.x, state.velocity.z) * dt;
+  if (state.catapultTravel >= CATAPULT_CONFIG.stroke) state.catapult = 'none';
 }
 
 function crash(state: AircraftState, reason: string): void {

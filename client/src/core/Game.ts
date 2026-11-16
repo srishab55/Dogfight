@@ -3,19 +3,25 @@ import type { Engine } from '@babylonjs/core/Engines/engine';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Axis } from '@babylonjs/core/Maths/math.axis';
 import {
+  BASES,
   CombatWorld,
+  friendlyBaseAt,
   GUN_SPECS,
-  HOME_RUNWAY,
-  PRIMITIVE_GROUND_CLEARANCE,
   SIMULATION_CONFIG,
-  createTerrain,
   createGunState,
-  getRunwaySpawnPoint,
+  createServiceStatus,
+  createTerrain,
+  createWorldGround,
+  fullAmmo,
+  groundClearance,
+  stepService,
   steerTowards,
   type AircraftClassId,
-  type Terrain,
+  type GroundQuery,
   type GunState,
+  type ServiceEvent,
   type StickInputs,
+  type Team,
 } from '@dogfight/shared';
 import { PlayerAircraft } from '../aircraft/PlayerAircraft';
 import { CameraManager } from '../camera/CameraManager';
@@ -32,14 +38,23 @@ import { applyPixelRatio, createEngine } from '../rendering/createEngine';
 import { createPostProcessing } from '../rendering/postProcessing';
 import { createControlsHint } from '../ui/ControlsHint';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
-import { FlightHud, type ScreenPoint } from '../ui/FlightHud';
+import { FlightHud, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
+import { createGameTitle } from '../ui/GameTitle';
 import { Environment } from '../world/Environment';
 import { FixedTimestepLoop } from './FixedTimestepLoop';
 
-/** Distance from the start of the runway to the spawn point (m). */
-const SPAWN_DISTANCE_FROM_THRESHOLD = 60;
 const DEFAULT_AIRCRAFT: AircraftClassId = 'fighterBomber';
-/** Height of the air start above the runway (m). */
+/** The local player's team until team selection arrives (Phase 6). */
+const PLAYER_TEAM: Team = 'blue';
+/** Aircraft selection keys, in order. */
+const CLASS_KEYS = [
+  ['selectInterceptor', 'interceptor'],
+  ['selectFighterBomber', 'fighterBomber'],
+  ['selectHeavyBomber', 'heavyBomber'],
+  ['selectNavalFighter', 'navalFighter'],
+  ['selectDiveBomber', 'diveBomber'],
+] as const;
+/** Height of the air start above the home base (m). */
 const AIR_START_HEIGHT = 800;
 const RAD_TO_DEG = 180 / Math.PI;
 /** Identifies the local player's rounds in combat events. Phase 5 uses the server's player ids. */
@@ -61,7 +76,8 @@ const PLAYER_ID = 1;
 export class Game {
   private readonly engine: Engine;
   private readonly scene: Scene;
-  private readonly ground: Terrain;
+  /** Everything the aircraft can touch: terrain, sea and carriers. */
+  private readonly ground: GroundQuery;
   private readonly environment: Environment;
   private readonly aircraft: PlayerAircraft;
   private readonly cameras: CameraManager;
@@ -72,7 +88,12 @@ export class Game {
   private readonly debugOverlay: DebugOverlay;
   private readonly controlsHint: HTMLElement;
   private readonly combat: CombatWorld;
-  private readonly playerGuns: GunState = createGunState();
+  private readonly playerGuns: GunState;
+  private readonly service = createServiceStatus();
+  /** The most recent service event in this frame's physics steps, for the HUD. */
+  private serviceEvent: ServiceEvent = null;
+  /** The "on the catapult" briefing is showing; it clears once the aircraft launches. */
+  private catapultBriefing = false;
   private readonly tracers: TracerRenderer;
   private readonly effects: ImpactEffects;
   private readonly balloons: TargetBalloons;
@@ -93,13 +114,14 @@ export class Game {
     // Nothing uses mouse picking yet; skip the raycast Babylon would otherwise do on every mouse move.
     this.scene.skipPointerMovePicking = true;
 
-    // The same terrain the flight model collides with; the environment draws it.
-    this.ground = createTerrain();
-    this.environment = new Environment(this.scene, this.ground);
+    // The same terrain, sea and carriers the flight model collides with; the environment draws them.
+    const terrain = createTerrain();
+    this.ground = createWorldGround(terrain);
+    this.environment = new Environment(this.scene, terrain);
 
-    const spawn = getRunwaySpawnPoint(HOME_RUNWAY, SPAWN_DISTANCE_FROM_THRESHOLD);
-    this.aircraft = new PlayerAircraft(this.scene, this.ground, spawn, DEFAULT_AIRCRAFT);
-    this.environment.addShadowCasters(this.aircraft.visual.meshes);
+    this.aircraft = new PlayerAircraft(this.scene, this.ground, PLAYER_TEAM, DEFAULT_AIRCRAFT);
+    this.environment.addShadowCasters(this.aircraft.allMeshes);
+    this.playerGuns = createGunState(this.aircraft.spec);
 
     this.combat = new CombatWorld(this.ground);
     this.tracers = new TracerRenderer(this.scene, this.combat.projectiles);
@@ -117,7 +139,9 @@ export class Game {
     this.hud = new FlightHud(uiRoot);
     this.debugOverlay = new DebugOverlay(uiRoot, this.engine, this.scene, import.meta.env.DEV);
     this.controlsHint = createControlsHint(uiRoot, KEY_BINDINGS);
+    createGameTitle(uiRoot);
     this.afterTeleport(0);
+    this.briefSpawn();
   }
 
   start(): void {
@@ -160,8 +184,14 @@ export class Game {
       this.aircraft.step(controls, dt);
       const { state, spec } = this.aircraft;
       this.combat.step(dt, [{ id: PLAYER_ID, state, spec, guns: this.playerGuns, trigger: controls.fire }]);
+      this.serviceEvent = stepService(this.service, state, spec, this.playerGuns, PLAYER_TEAM, dt) ?? this.serviceEvent;
     });
     this.handleCombatEvents();
+    this.handleServiceEvent();
+    if (this.catapultBriefing && this.aircraft.state.catapult !== 'held') {
+      this.catapultBriefing = false;
+      this.hud.clearMessage();
+    }
     this.aircraft.updateVisual(alpha, deltaSeconds, this.flightInput.controls);
 
     const { renderPosition, renderOrientation } = this.aircraft;
@@ -174,8 +204,8 @@ export class Game {
       loadFactor: t.loadFactor,
     });
     // The glide slope (and so the PAPI) is defined for the wheels, not the centre of mass.
-    this.wheelHeightPoint.copyFrom(renderPosition).y -= PRIMITIVE_GROUND_CLEARANCE * this.aircraft.spec.airframeScale;
-    this.environment.update(renderPosition, this.wheelHeightPoint, this.scene.activeCamera?.globalPosition ?? renderPosition);
+    this.wheelHeightPoint.copyFrom(renderPosition).y -= groundClearance(this.aircraft.spec);
+    this.environment.update(deltaSeconds, renderPosition, this.wheelHeightPoint, this.scene.activeCamera?.globalPosition ?? renderPosition);
     if (this.scene.activeCamera) this.tracers.update(this.scene.activeCamera.globalPosition);
     this.effects.update(deltaSeconds);
     this.balloons.update(deltaSeconds);
@@ -183,7 +213,7 @@ export class Game {
     this.scene.render();
 
     const state = this.aircraft.state;
-    const heightAboveGround = state.position.y - this.ground.heightAt(state.position.x, state.position.z) - PRIMITIVE_GROUND_CLEARANCE * this.aircraft.spec.airframeScale;
+    const heightAboveGround = state.position.y - this.ground.heightAt(state.position.x, state.position.z) - groundClearance(this.aircraft.spec);
     this.hud.update(deltaSeconds, {
       state,
       controls: this.flightInput.controls,
@@ -194,6 +224,9 @@ export class Game {
       gunsight: this.projectGunsight(),
       aimReticle: mouseFlying ? this.projectAim() : null,
       guns: this.playerGuns,
+      fullAmmo: fullAmmo(this.aircraft.spec),
+      serviceProgress: this.service.base ? this.service.progress : null,
+      nearestBase: this.nearestBase(),
       targetsDestroyed: this.targetsDestroyed,
     });
     this.debugOverlay.update(deltaSeconds, this.debugLines);
@@ -204,7 +237,7 @@ export class Game {
   private handleCombatEvents(): void {
     for (const event of this.combat.drainEvents()) {
       if (event.type === 'groundImpact') {
-        this.effects.spawn('dust', event.x, event.y, event.z);
+        this.effects.spawn(this.ground.surfaceAt(event.x, event.z) === 'water' ? 'splash' : 'dust', event.x, event.y, event.z);
         continue;
       }
       this.effects.spawn('spark', event.x, event.y, event.z);
@@ -216,6 +249,39 @@ export class Game {
         if (event.owner === PLAYER_ID) this.targetsDestroyed++;
       }
     }
+  }
+
+  /** Tells the player when the ground crew starts, gives up, or finishes. */
+  private handleServiceEvent(): void {
+    const event = this.serviceEvent;
+    this.serviceEvent = null;
+    if (event === 'completed') this.hud.showMessage(`REARMED & REPAIRED · ${fullAmmo(this.aircraft.spec)} rounds`, 'good', 4);
+    else if (event === 'interrupted') this.hud.showMessage('SERVICE INTERRUPTED · stop and idle on a friendly base to rearm', 'ok', 3);
+  }
+
+  /** Distance and compass bearing from the aircraft to the nearest friendly base. */
+  private nearestBase(): HudFrame['nearestBase'] {
+    const p = this.aircraft.state.position;
+    const here = friendlyBaseAt(PLAYER_TEAM, p.x, p.z);
+    if (here) return { kind: here.kind, distance: 0, bearingDeg: 0 };
+    let best: HudFrame['nearestBase'] = null;
+    for (const base of BASES) {
+      if (base.team !== PLAYER_TEAM) continue;
+      const dx = base.runway.center.x - p.x;
+      const dz = base.runway.center.z - p.z;
+      const distance = Math.hypot(dx, dz);
+      if (best && distance >= best.distance) continue;
+      best = { kind: base.kind, distance, bearingDeg: ((Math.atan2(dx, dz) * RAD_TO_DEG) % 360 + 360) % 360 };
+    }
+    return best;
+  }
+
+  /** One line on how to get going from where the aircraft has just spawned. */
+  private briefSpawn(): void {
+    const { state, spec } = this.aircraft;
+    this.catapultBriefing = state.catapult === 'held';
+    if (this.catapultBriefing) this.hud.showMessage(`${spec.displayName.toUpperCase()} ON THE CATAPULT · full throttle (↑) to launch`, 'good', 8);
+    else this.hud.showMessage(`${spec.displayName.toUpperCase()} · ${this.aircraft.homeBase.name.toUpperCase()} · throttle up (↑) to take off`, 'good', 4);
   }
 
   /** Where the aircraft is flying: 1 km along its velocity, on screen. */
@@ -302,16 +368,16 @@ export class Game {
     if (input.wasPressed('flapsDown')) this.flightInput.stepFlaps(1);
     if (input.wasPressed('flapsUp')) this.flightInput.stepFlaps(-1);
 
-    const selected: AircraftClassId | null = input.wasPressed('selectInterceptor')
-      ? 'interceptor'
-      : input.wasPressed('selectFighterBomber')
-        ? 'fighterBomber'
-        : input.wasPressed('selectHeavyBomber')
-          ? 'heavyBomber'
-          : null;
+    if (input.wasPressed('toggleDiveBrakes')) {
+      if (this.aircraft.spec.airbrake) this.hud.showMessage(this.flightInput.toggleAirbrake() ? 'DIVE BRAKES OUT' : 'DIVE BRAKES IN', 'good', 2);
+      else this.hud.showMessage(`The ${this.aircraft.spec.displayName} has no dive brakes (the Dive Bomber does: 5)`, 'ok', 3);
+    }
+
+    const selected = CLASS_KEYS.find(([action]) => input.wasPressed(action))?.[1] ?? null;
     if (selected || input.wasPressed('respawn')) {
-      this.aircraft.respawnOnRunway(selected ?? undefined);
+      this.aircraft.respawnAtBase(selected ?? undefined);
       this.afterTeleport(0);
+      this.briefSpawn();
     } else if (input.wasPressed('airStart')) {
       this.aircraft.airStart(AIR_START_HEIGHT);
       this.afterTeleport(0.7);
@@ -319,8 +385,11 @@ export class Game {
       this.aircraft.approachStart();
       const { approachThrottle, handsOffApproachSpeed } = this.aircraft.performance;
       this.afterTeleport(approachThrottle, 1);
+      const onCarrier = this.aircraft.homeBase.kind === 'carrier';
       this.hud.showMessage(
-        `LANDING PRACTICE · ${(approachThrottle * 100).toFixed(0)}% throttle · ${(handsOffApproachSpeed * 3.6).toFixed(0)} km/h · PAPI: 2 red, 2 white = on slope`,
+        onCarrier
+          ? `CARRIER LANDING · ${(approachThrottle * 100).toFixed(0)}% throttle · ${(handsOffApproachSpeed * 3.6).toFixed(0)} km/h · hook down: touch down early, among the wires`
+          : `LANDING PRACTICE · ${(approachThrottle * 100).toFixed(0)}% throttle · ${(handsOffApproachSpeed * 3.6).toFixed(0)} km/h · PAPI: 2 red, 2 white = on slope`,
         'good',
         LANDING_PRACTICE.briefingSeconds,
       );
@@ -328,12 +397,13 @@ export class Game {
   }
 
   /** After the aircraft jumps somewhere new: reset controls and loop, and snap the cameras instead of sweeping across the map. */
-  private afterTeleport(throttle: number, flaps = 0): void {
+  private afterTeleport(throttle: number, flaps = this.aircraft.state.flapPosition): void {
     this.flightInput.reset(throttle, flaps);
-    // A fresh aircraft has cold guns.
-    Object.assign(this.playerGuns, createGunState());
+    // A fresh aircraft has cold guns and a full load of ammunition.
+    Object.assign(this.playerGuns, createGunState(this.aircraft.spec));
+    Object.assign(this.service, createServiceStatus());
     this.loop.reset();
-    this.cameras.setTargetScale(this.aircraft.spec.airframeScale);
+    this.cameras.setAircraft(this.aircraft.spec);
     this.cameras.snapToTarget(this.aircraft.renderPosition, this.aircraft.renderOrientation);
     if (this.mouseFlight.active) this.aimAlongNose();
   }
@@ -348,7 +418,7 @@ export class Game {
       ['Lift / weight', (t.lift / (this.aircraft.spec.mass * 9.81)).toFixed(2)],
       ['Thrust / drag', `${(t.thrust / 1000).toFixed(1)} / ${(t.drag / 1000).toFixed(1)} kN`],
       ['Separation', this.aircraft.state.flowSeparation.toFixed(2)],
-      ['Rounds', `${this.combat.projectiles.activeCount} in flight, ${this.playerGuns.roundsFired} fired`],
+      ['Rounds', `${this.combat.projectiles.activeCount} in flight, ${this.playerGuns.roundsFired} fired, ${this.playerGuns.ammo} left`],
       ['Stall speed', `${(this.aircraft.performance.stallSpeed * 3.6).toFixed(0)} km/h (1 g, sea level)`],
     ];
   };

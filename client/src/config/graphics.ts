@@ -78,13 +78,8 @@ export const SHADOW_CONFIG = {
   normalBias: 0.02,
 } as const;
 
+/** The procedural farmland texture on the islands' plains. */
 export const GROUND_CONFIG = {
-  /**
-   * Visual ground size (m). Much larger than the 12 km playable area, so from
-   * anywhere a player can fly the ground reaches past the sky box (16.5 km
-   * away) and its edge is never seen.
-   */
-  visualSize: 50_000,
   /** World size covered by one repeat of the procedural ground texture (m). */
   textureTileSize: 400,
   /** Resolution of the procedural ground texture in pixels. */
@@ -92,6 +87,50 @@ export const GROUND_CONFIG = {
   /** Field colours for the procedural farmland texture. */
   fieldColors: ['#5d7a3a', '#6b8640', '#4f6e34', '#7a8a45', '#8a8550', '#6f6a40', '#587436'],
   hedgeColor: '#3c5228',
+} as const;
+
+/**
+ * The sea: a large plane that follows the camera, shaded by a custom shader
+ * (world/shaders/ocean.*.glsl). Colour comes from depth (turquoise shallows,
+ * deep blue offshore, surf on the beaches); the surface reflects the sky
+ * through a Fresnel term and glints with the sun.
+ */
+export const WATER_CONFIG = {
+  /** Side of the sea plane (m): it reaches past the far plane from any camera position. */
+  size: 64_000,
+  deepColor: '#0b2c47',
+  shallowColor: '#2a8c97',
+  foamColor: '#eef5f4',
+  /** Depth (m) over which the colour goes from shallow to deep. */
+  shallowDepth: 16,
+  /** Surf shows where the water is shallower than this (m). */
+  foamDepth: 0.9,
+  /** The depth map stores 0 to this many metres (deeper reads as this). */
+  depthMapRange: 30,
+  depthMapResolution: 512,
+  /**
+   * Swell and chop: directional waves, longest first. Only their slopes are
+   * drawn (the surface itself stays flat); each fades out with distance
+   * before it gets small enough on screen to shimmer.
+   */
+  waves: [
+    { wavelength: 83, amplitude: 0.75, directionDeg: 25 },
+    { wavelength: 51, amplitude: 0.42, directionDeg: -18 },
+    { wavelength: 31, amplitude: 0.22, directionDeg: 67 },
+    { wavelength: 19, amplitude: 0.11, directionDeg: 4 },
+    { wavelength: 11.3, amplitude: 0.055, directionDeg: -52 },
+    { wavelength: 6.9, amplitude: 0.03, directionDeg: 38 },
+    { wavelength: 4.1, amplitude: 0.015, directionDeg: 101 },
+    { wavelength: 2.4, amplitude: 0.008, directionDeg: -11 },
+  ],
+  /** Fraction of light reflected looking straight down (water: about 2%). */
+  fresnelF0: 0.02,
+  /** The sun's mirror glint: sharpness and brightness (HDR, so it blooms). */
+  sunGlintPower: 900,
+  sunGlintIntensity: 7,
+  /** Broad sheen around the glint. */
+  sheenPower: 60,
+  sheenIntensity: 0.12,
 } as const;
 
 /** Cumulus clouds built from soft billboard puffs. Purely visual: they don't block bullets or the server's view. */
@@ -124,7 +163,12 @@ export const CLOUD_CONFIG = {
  */
 export const POST_PROCESS_CONFIG = {
   enabled: true,
-  msaaSamples: 4,
+  /**
+   * Multisample anti-aliasing of the off-screen render. 2x is enough on a
+   * Retina screen (already rendered at twice the resolution) and measured
+   * about 1 ms a frame cheaper than 4x.
+   */
+  msaaSamples: 2,
   exposure: 1.15,
   contrast: 1.08,
   bloomThreshold: 0.85,
@@ -151,25 +195,53 @@ export const CAMERA_EFFECTS_CONFIG = {
 
 /** How the terrain is painted. Its shape comes from shared/src/config/terrain.ts. */
 export const TERRAIN_VISUAL_CONFIG = {
-  /** Resolution of the rock/snow/forest weight map over the whole terrain (texels per side). */
+  /** Resolution of the rock/sand/forest weight map over the whole terrain (texels per side). */
   splatResolution: 512,
-  /** Fine grain on rock, snow and forest: one repeat per this many metres. */
+  /** Fine grain on rock, sand and forest: one repeat per this many metres. */
   grainTileSize: 75,
-  rockColor: '#7d7467',
-  snowColor: '#eef2f6',
-  forestColor: '#2f4527',
+  rockColor: '#7a7062',
+  sandColor: '#d6c69c',
+  forestColor: '#2c4426',
   /** Slope (rise over run) where grass gives way to rock. */
-  rockSlopeStart: 0.35,
-  rockSlopeEnd: 0.7,
-  /** Altitude (m) where rock and then snow take over. */
-  rockAltitudeStart: 650,
-  snowAltitudeStart: 1_000,
-  snowAltitudeEnd: 1_250,
-  /** Forest patch noise: wavelength (m) and the share of hillsides covered (higher threshold = less forest). */
-  forestWavelength: 1_100,
-  forestThreshold: 0.12,
-  /** The flat far ground sits this far below the terrain so the two never flicker against each other (m). */
-  outerGroundDrop: 3,
+  rockSlopeStart: 0.4,
+  rockSlopeEnd: 0.8,
+  /** Height above the sea (m) where bare rock takes over the mountain tops. */
+  rockAltitudeStart: 480,
+  /** Beaches: sand up to this height above the sea (m), on slopes gentler than this. */
+  sandMaxHeight: 3.5,
+  sandMaxSlope: 0.3,
+  /** Forest patch noise: wavelength (m) and the share of the plains covered (higher threshold = less forest). */
+  forestWavelength: 800,
+  forestThreshold: 0.15,
+  /** Hillsides steeper than this are wooded (fields stay on gentler ground). */
+  forestSlopeStart: 0.12,
+  forestSlopeEnd: 0.3,
+  /**
+   * Sea bed deeper than this (m below the surface) is drawn deeper still,
+   * by this factor. It's never seen (the sea is opaque), and keeping it
+   * well below the water surface stops the two flickering in the depth
+   * buffer far away. Physics uses the true heights.
+   */
+  hiddenSeabedDepth: 1.5,
+  hiddenSeabedStretch: 4,
+} as const;
+
+/** Anchored aircraft carriers. Their size and layout come from shared/src/config/world.ts. */
+export const CARRIER_VISUAL_CONFIG = {
+  hullColor: '#58616a',
+  deckColor: '#7b7264',
+  deckPlankColor: '#71685b',
+  deckMarkingColor: '#e8e4d8',
+  islandColor: '#646d77',
+  darkColor: '#2a2e33',
+  /** Hull draft below the sea (m): hidden, but stops the waterline showing a gap. */
+  draft: 9,
+  /** Flight deck thickness (m). */
+  deckThickness: 1.2,
+  /** Deck texture: pixels per metre along the deck. */
+  deckTexturePixelsPerMetre: 4,
+  /** Distance from the stern of the large white hull number painted on the bow end of the deck (m). */
+  deckNumberFromBow: 30,
 } as const;
 
 export const RUNWAY_VISUAL_CONFIG = {

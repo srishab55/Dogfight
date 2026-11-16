@@ -6,7 +6,8 @@
  * Throttle is on the arrow keys (decision D10 in ARCHITECTURE.md): Ctrl+W
  * closes the browser tab on Windows and Linux, and pages can't block it.
  * Guns are on Space. Bombs (B) arrive with the rest of Phase 4. The mouse can
- * fly the aircraft too (MOUSE_FLIGHT_CONFIG below).
+ * fly the aircraft too (MOUSE_FLIGHT_CONFIG below). X opens and closes the
+ * dive brakes (only the Dive Bomber has them).
  * The Settings screen (Phase 8) will let players override these defaults.
  */
 export const KEY_BINDINGS = {
@@ -20,6 +21,7 @@ export const KEY_BINDINGS = {
   throttleDown: ['ArrowDown'],
   flapsDown: ['KeyF'],
   flapsUp: ['KeyV'],
+  toggleDiveBrakes: ['KeyX'],
   fireGuns: ['Space'],
   cycleCamera: ['KeyC'],
   respawn: ['KeyR'],
@@ -28,6 +30,8 @@ export const KEY_BINDINGS = {
   selectInterceptor: ['Digit1'],
   selectFighterBomber: ['Digit2'],
   selectHeavyBomber: ['Digit3'],
+  selectNavalFighter: ['Digit4'],
+  selectDiveBomber: ['Digit5'],
   mouseSensitivityDown: ['BracketLeft'],
   mouseSensitivityUp: ['BracketRight'],
   toggleControlsHelp: ['KeyH'],
@@ -92,12 +96,13 @@ export const CONTROLS_HINT_ROWS: ReadonlyArray<{ readonly actions: readonly Inpu
   { actions: ['yawLeft', 'yawRight'], label: 'Rudder left / right (steers on the ground)' },
   { actions: ['throttleUp', 'throttleDown'], label: 'Throttle up / down (idle = brakes)' },
   { actions: ['flapsDown', 'flapsUp'], label: 'Flaps down / up a notch' },
-  { actions: ['fireGuns'], label: 'Fire guns (hold; watch the heat)' },
+  { actions: ['toggleDiveBrakes'], label: 'Dive brakes out / in (Dive Bomber)' },
+  { actions: ['fireGuns'], label: 'Fire guns (hold; limited ammo, watch the heat)' },
   { actions: ['cycleCamera'], label: 'Camera: chase / cockpit / orbit' },
-  { actions: ['respawn'], label: 'Respawn on the runway' },
+  { actions: ['respawn'], label: 'Respawn at your base (airfield or carrier)' },
   { actions: ['airStart'], label: 'Air start (800 m, for testing)' },
-  { actions: ['landingPractice'], label: 'Landing practice (on final approach)' },
-  { actions: ['selectInterceptor', 'selectFighterBomber', 'selectHeavyBomber'], label: 'Interceptor / Fighter-Bomber / Heavy Bomber' },
+  { actions: ['landingPractice'], label: 'Landing practice (carrier aircraft: the carrier)' },
+  { actions: ['selectInterceptor', 'selectFighterBomber', 'selectHeavyBomber', 'selectNavalFighter', 'selectDiveBomber'], label: 'Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber' },
   { actions: ['mouseSensitivityDown', 'mouseSensitivityUp'], label: 'Mouse sensitivity down / up' },
   { actions: ['toggleControlsHelp'], label: 'Hide this help' },
   { actions: ['toggleDebugOverlay'], label: 'Debug stats' },

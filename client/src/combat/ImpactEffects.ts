@@ -6,7 +6,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
 import { IMPACT_EFFECT_CONFIG } from '../config/combatVisuals';
 
-export type ImpactKind = 'dust' | 'spark' | 'burst' | 'shreds';
+export type ImpactKind = 'dust' | 'splash' | 'spark' | 'burst' | 'shreds';
 
 interface Effect {
   x: number;
@@ -47,7 +47,7 @@ export class ImpactEffects {
       mesh.thinInstanceCount = 0;
       return { mesh, matrices };
     };
-    this.layers = { dust: layer('dust', false), spark: layer('spark', true), burst: layer('burst', true), shreds: layer('shreds', false) };
+    this.layers = { dust: layer('dust', false), splash: layer('splash', false), spark: layer('spark', true), burst: layer('burst', true), shreds: layer('shreds', false) };
   }
 
   spawn(kind: ImpactKind, x: number, y: number, z: number): void {
@@ -57,7 +57,7 @@ export class ImpactEffects {
   }
 
   update(deltaSeconds: number): void {
-    const counts: Record<ImpactKind, number> = { dust: 0, spark: 0, burst: 0, shreds: 0 };
+    const counts: Record<ImpactKind, number> = { dust: 0, splash: 0, spark: 0, burst: 0, shreds: 0 };
     let write = 0;
     for (const effect of this.effects) {
       effect.age += deltaSeconds;

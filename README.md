@@ -1,13 +1,27 @@
-# Dogfight
+# Dogfight Squadron
 
 A browser-based 3D multiplayer aerial combat game: Red vs Blue team base
 assault with dogfighting, bombing and territory capture. Inspired by Dogfight
 Squadron, rebuilt in full 3D.
 
-**Status:** Phases 1–2 complete: take off, fly, stall, recover and land three
-aircraft classes, with flaps and landing aids. Phase 4 has started: guns,
-tracers and practice targets. See [docs/PROGRESS.md](docs/PROGRESS.md), and
-fly the [full flight test](docs/FLIGHT_TEST.md).
+**Status:** Fly five aircraft types over a small stretch of sea with three
+islands and two aircraft carriers. Take off from an island airfield, or get
+catapulted off a carrier and land back on it with the arrestor hook. Guns
+have limited ammunition: land at a friendly base to rearm. Phase 3 (graphics)
+and Phase 4 (combat) are in progress. See [docs/PROGRESS.md](docs/PROGRESS.md),
+and fly the [full flight test](docs/FLIGHT_TEST.md).
+
+**The map:** Blue holds the southern island (airfield) and the carrier to its
+west; Red the northern island and the carrier to its east. The central island,
+with a 760 m mountain, lies between them.
+
+| Aircraft (key) | Home | Notes |
+|---|---|---|
+| Interceptor (1) | Island airfield | Fastest, best climb; light armour |
+| Fighter-Bomber (2) | Island airfield | All-rounder |
+| Heavy Bomber (3) | Island airfield | Four engines, 24 m wing; slow, heavily armoured |
+| Naval Fighter (4) | Carrier | Short take-off, slow approach, strong gear, tailhook |
+| Dive Bomber (5) | Carrier | Dive brakes (X), two-seat, tailhook |
 
 | | |
 |---|---|
@@ -59,13 +73,14 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
 | **↑ / ↓** | Throttle up / down. At idle, the wheel brakes are applied. |
 | **F / V** | Flaps down / up a notch (UP → TAKE-OFF → LANDING) |
-| **Space** | Fire guns (hold; they overheat after ~8 s) |
+| **X** | Dive brakes out / in (Dive Bomber) |
+| **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** releases. |
 | **C** | Camera: chase → cockpit → orbit |
-| **R** | Respawn on the runway |
+| **R** | Respawn at your home base (airfield, or the carrier's catapult) |
 | **T** | Air start at 800 m (for testing manoeuvres) |
-| **L** | Landing practice: on a 3° final approach with flaps down |
-| **1 / 2 / 3** | Interceptor / Fighter-Bomber / Heavy Bomber |
+| **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
+| **1 – 5** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber |
 | **[ / ]** | Mouse sensitivity down / up (remembered) |
 | **H** | Hide / show the controls list |
 | **`** | Debug stats (shown by default in dev) |
@@ -77,6 +92,16 @@ on that axis. Bombs (B) arrive later in Phase 4. Bindings and mouse
 sensitivity live in [client/src/config/controls.ts](client/src/config/controls.ts).
 
 Watch the airframe: ailerons, elevators, rudder and flaps all move with your inputs.
+
+**Carrier tips:** on the catapult, push the throttle to full (**↑**) and the
+catapult throws you off the bow with take-off flaps set. To land back on,
+press **L** (or fly the approach yourself): landing flaps lower the hook;
+touch down early on the deck, among the wires, and the hook stops you in
+about 50 m. Throttle to idle to be released.
+
+**Ammunition:** the AMMO readout counts your rounds. When they run out, fly
+to a friendly base (the BASE readout gives distance and bearing), land, stop
+and idle: the ground crew rearms and repairs you in 6 seconds.
 
 **Landing tip:** press **L**, then let go. With landing flaps and the briefed
 throttle, the aircraft flies the glide slope by itself; idle the throttle just

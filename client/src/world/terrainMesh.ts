@@ -6,7 +6,7 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Constants } from '@babylonjs/core/Engines/constants';
 import { PBRCustomMaterial } from '@babylonjs/materials/custom/pbrCustomMaterial';
-import { fbm, type Terrain } from '@dogfight/shared';
+import { WORLD_CONFIG, fbm, type Terrain } from '@dogfight/shared';
 import { GROUND_CONFIG, TERRAIN_VISUAL_CONFIG } from '../config/graphics';
 import { srgbHexToLinear } from '../rendering/materials';
 import { createFarmlandTexture } from './proceduralTextures';
@@ -17,9 +17,16 @@ import { createFarmlandTexture } from './proceduralTextures';
  * is exactly the ground you collide with.
  *
  * Material: physically based, with fields from the farmland texture, then
- * forest, rock and snow blended in by a "splat map" (a texture whose
+ * forest, rock and sand blended in by a "splat map" (a texture whose
  * channels hold how much of each to use). The splat map is computed from
- * height and slope, so rock appears on steep faces and snow on high peaks.
+ * height and slope, so rock appears on steep faces and the mountain top,
+ * and sand on the beaches.
+ *
+ * Under the sea, the mesh deliberately departs from the physics: deep sea
+ * bed is drawn deeper still (TERRAIN_VISUAL_CONFIG.hiddenSeabedDepth). It
+ * can't be seen through the opaque sea, and keeping it well below the water
+ * surface stops the two flickering in the depth buffer far away. Everything
+ * above the sea, and the shallows, match the physics exactly.
  */
 export function createTerrainMesh(scene: Scene, terrain: Terrain): Mesh {
   const { resolution, origin, cellSize, heights } = terrain;
@@ -30,7 +37,7 @@ export function createTerrainMesh(scene: Scene, terrain: Terrain): Mesh {
     for (let i = 0; i < side; i++) {
       const v = j * side + i;
       positions[v * 3] = origin + i * cellSize;
-      positions[v * 3 + 1] = heights[v] ?? 0;
+      positions[v * 3 + 1] = renderHeight(heights[v] ?? 0);
       positions[v * 3 + 2] = origin + j * cellSize;
       uvs[v * 2] = i / resolution;
       uvs[v * 2 + 1] = j / resolution;
@@ -70,6 +77,13 @@ export function createTerrainMesh(scene: Scene, terrain: Terrain): Mesh {
   return mesh;
 }
 
+/** The height drawn for a terrain vertex: the true height, except deep sea bed, which is pushed further down. */
+function renderHeight(height: number): number {
+  const { hiddenSeabedDepth, hiddenSeabedStretch } = TERRAIN_VISUAL_CONFIG;
+  const hiddenBelow = WORLD_CONFIG.seaLevel - hiddenSeabedDepth;
+  return height >= hiddenBelow ? height : hiddenBelow - (hiddenBelow - height) * hiddenSeabedStretch;
+}
+
 function createTerrainMaterial(scene: Scene, terrain: Terrain): PBRCustomMaterial {
   const material = new PBRCustomMaterial('terrain-material', scene);
   const fields = createFarmlandTexture(scene);
@@ -93,10 +107,10 @@ function createTerrainMaterial(scene: Scene, terrain: Terrain): PBRCustomMateria
     return new Vector3(c.r, c.g, c.b);
   };
   material.AddUniform('rockColor', 'vec3', linear(config.rockColor));
-  material.AddUniform('snowColor', 'vec3', linear(config.snowColor));
+  material.AddUniform('sandColor', 'vec3', linear(config.sandColor));
   material.AddUniform('forestColor', 'vec3', linear(config.forestColor));
   // Injected into Babylon's PBR shader after the albedo texture is sampled:
-  // blend forest, then rock, then snow over the fields, each with fine grain.
+  // blend forest, then rock, then sand over the fields, each with fine grain.
   // The splat coordinates come from the world position (vPositionW), which
   // the PBR shader always declares. The mesh's own UV varying (vMainUV1) is
   // only declared when some texture samples UV1 untransformed; the tiled
@@ -107,12 +121,12 @@ function createTerrainMaterial(scene: Scene, terrain: Terrain): PBRCustomMateria
     float grain = texture2D(terrainGrain, terrainUv * grainRepeats).r;
     surfaceAlbedo = mix(surfaceAlbedo, forestColor * (0.7 + 0.6 * grain), splat.b);
     surfaceAlbedo = mix(surfaceAlbedo, rockColor * (0.65 + 0.7 * grain), splat.r);
-    surfaceAlbedo = mix(surfaceAlbedo, snowColor * (0.9 + 0.2 * grain), splat.g);
+    surfaceAlbedo = mix(surfaceAlbedo, sandColor * (0.85 + 0.3 * grain), splat.g);
   `);
   return material;
 }
 
-/** RGBA weights per texel: R = rock, G = snow, B = forest. Row 0 is the terrain's south edge (v = 0). */
+/** RGBA weights per texel: R = rock, G = sand, B = forest. Row 0 is the terrain's south edge (v = 0). */
 function createSplatMap(scene: Scene, terrain: Terrain): RawTexture {
   const config = TERRAIN_VISUAL_CONFIG;
   const size = config.splatResolution;
@@ -123,20 +137,24 @@ function createSplatMap(scene: Scene, terrain: Terrain): RawTexture {
     for (let col = 0; col < size; col++) {
       const x = terrain.origin + (col + 0.5) * step;
       const z = terrain.origin + (row + 0.5) * step;
-      const h = terrain.heightAt(x, z);
+      const aboveSea = terrain.heightAt(x, z) - WORLD_CONFIG.seaLevel;
       // Slope from central differences over one grid cell.
       const dhdx = (terrain.heightAt(x + probe, z) - terrain.heightAt(x - probe, z)) / (2 * probe);
       const dhdz = (terrain.heightAt(x, z + probe) - terrain.heightAt(x, z - probe)) / (2 * probe);
       const slope = Math.hypot(dhdx, dhdz);
-      const variation = fbm(x / 400, z / 400, 3, 77) * 120; // ragged snow and rock lines
-      const rock = clamp01(smoothstep(config.rockSlopeStart, config.rockSlopeEnd, slope) + 0.7 * smoothstep(config.rockAltitudeStart, config.rockAltitudeStart + 300, h + variation));
-      const snow = smoothstep(config.snowAltitudeStart, config.snowAltitudeEnd, h + variation) * (1 - 0.6 * smoothstep(0.8, 1.2, slope));
-      // Forest patches on natural ground only: not on the dead-flat airfields.
+      const variation = fbm(x / 300, z / 300, 3, 77); // ragged sand and rock lines
+      const rock = clamp01(smoothstep(config.rockSlopeStart, config.rockSlopeEnd, slope) + 0.8 * smoothstep(config.rockAltitudeStart, config.rockAltitudeStart + 120, aboveSea + variation * 80));
+      // Beaches, and the sea bed in the shallows (seen as a line along the waterline).
+      const sand = (1 - smoothstep(config.sandMaxHeight * 0.6, config.sandMaxHeight, aboveSea + variation * 1.5)) * (1 - smoothstep(config.sandMaxSlope * 0.7, config.sandMaxSlope, slope));
+      // Forest on natural ground only: not on the dead-flat airfields, not on beaches or bare rock.
       const natural = smoothstep(0.003, 0.02, slope);
-      const forest = smoothstep(config.forestThreshold, config.forestThreshold + 0.2, fbm(x / config.forestWavelength, z / config.forestWavelength, 4, 313)) * natural * (1 - rock) * (1 - snow);
+      // Woods: patches on the plains, and most hillsides too steep to farm.
+      const patches = smoothstep(config.forestThreshold, config.forestThreshold + 0.2, fbm(x / config.forestWavelength, z / config.forestWavelength, 4, 313));
+      const hillside = smoothstep(config.forestSlopeStart, config.forestSlopeEnd, slope + variation * 0.08);
+      const forest = clamp01(Math.max(patches, 0.9 * hillside)) * natural * (1 - rock) * (1 - sand);
       const o = (row * size + col) * 4;
       data[o] = Math.round(rock * 255);
-      data[o + 1] = Math.round(snow * 255);
+      data[o + 1] = Math.round(sand * 255);
       data[o + 2] = Math.round(forest * 255);
       data[o + 3] = 255;
     }

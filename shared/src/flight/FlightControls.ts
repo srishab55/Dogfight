@@ -18,12 +18,14 @@ export interface FlightControls {
   brake: number;
   /** Flap lever, 0 (up) to 1 (fully down). The flaps travel there at their own speed. */
   flaps: number;
+  /** Dive-brake lever, 0 (in) to 1 (out). Only aircraft with dive brakes respond. */
+  airbrake: number;
   /** Gun trigger held. */
   fire: boolean;
 }
 
 export function neutralControls(): FlightControls {
-  return { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: 0, flaps: 0, fire: false };
+  return { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: 0, flaps: 0, airbrake: 0, fire: false };
 }
 
 /** Clamps every input to its valid range. The server will run this on every client message. */
@@ -35,6 +37,7 @@ export function sanitizeControls(controls: FlightControls): FlightControls {
   controls.throttle = clamp(controls.throttle, 0, 1);
   controls.brake = clamp(controls.brake, 0, 1);
   controls.flaps = clamp(controls.flaps, 0, 1);
+  controls.airbrake = clamp(controls.airbrake, 0, 1);
   controls.fire = controls.fire === true;
   return controls;
 }

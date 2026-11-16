@@ -3,9 +3,15 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { CONTROL_SURFACE_VISUAL_CONFIG, FLAP_STYLES, PROPELLER_VISUAL_CONFIG } from '../config/aircraftVisuals';
 import { degreesToRadians, smoothingFactor } from '../math/orientation';
-import type { HingedSurface } from './primitiveAircraftModel';
+import type { HingedSurface } from './aircraftModel';
 
 type FlapStyle = (typeof FLAP_STYLES)[keyof typeof FLAP_STYLES];
+
+/** One propeller: the solid blades (spun) and the blur disc that replaces them at speed. */
+export interface PropellerVisual {
+  readonly blades: Mesh;
+  readonly disc: Mesh;
+}
 
 const TWO_PI = Math.PI * 2;
 
@@ -26,12 +32,14 @@ export class AircraftVisual {
   constructor(
     /** Parent of every part. Its origin is the aircraft's centre of mass. */
     readonly root: TransformNode,
-    private readonly propeller: { readonly blades: Mesh; readonly disc: Mesh },
+    private readonly propellers: readonly PropellerVisual[],
     private readonly surfaces: readonly HingedSurface[],
     /** Solid meshes that cast shadows. */
     readonly meshes: readonly Mesh[],
     /** Decals and other meshes that are drawn but don't cast shadows. */
     private readonly decals: readonly Mesh[],
+    /** Arrestor hook pivot, if fitted: rotating it about X lowers the hook. */
+    private readonly tailhook: TransformNode | null = null,
   ) {
     root.rotationQuaternion ??= Quaternion.Identity();
   }
@@ -42,7 +50,12 @@ export class AircraftVisual {
     this.root.rotationQuaternion?.copyFrom(orientation);
   }
 
-  /** Hide the airframe, e.g. in cockpit view, where it would block the forward view until Phase 3 adds a cockpit model. */
+  /** Shows or hides this model entirely (one model per airframe type exists; only the flown one is enabled). */
+  setEnabled(enabled: boolean): void {
+    this.root.setEnabled(enabled);
+  }
+
+  /** Hide the airframe, e.g. in cockpit view, where it would block the forward view (there is no cockpit model yet). */
   setVisible(visible: boolean): void {
     this.hidden = !visible;
     for (const mesh of [...this.meshes, ...this.decals]) mesh.isVisible = visible;
@@ -68,6 +81,19 @@ export class AircraftVisual {
       this.rotate(surface, angle);
       surface.aftDirection.scaleToRef(slide, surface.pivot.position).addInPlace(surface.restPosition);
     }
+  }
+
+  /** Dive-brake opening from 0 to 1: the upper plates swing up and the lower ones down. */
+  setAirbrake(fraction: number): void {
+    const angle = degreesToRadians(CONTROL_SURFACE_VISUAL_CONFIG.diveBrakeMaxDeg) * fraction;
+    for (const surface of this.surfaces) if (surface.kind === 'diveBrake') this.rotate(surface, surface.face * angle);
+  }
+
+  /** Arrestor hook from stowed (0) to lowered (1). */
+  setTailhook(fraction: number): void {
+    if (!this.tailhook) return;
+    const { tailhookStowedDeg, tailhookLoweredDeg } = CONTROL_SURFACE_VISUAL_CONFIG;
+    this.tailhook.rotation.x = -degreesToRadians(tailhookStowedDeg + (tailhookLoweredDeg - tailhookStowedDeg) * fraction);
   }
 
   /**
@@ -97,8 +123,8 @@ export class AircraftVisual {
   }
 
   /**
-   * Spins the propeller towards `engineFraction` (0 = stopped, 1 = full
-   * power), with a lag so it visibly winds up from a standstill. Fast enough,
+   * Spins the propellers towards `engineFraction` (0 = stopped, 1 = full
+   * power), with a lag so they visibly wind up from a standstill. Fast enough,
    * the blades fade into a translucent blur disc (see PROPELLER_VISUAL_CONFIG).
    */
   updatePropeller(deltaSeconds: number, engineFraction: number): void {
@@ -109,11 +135,11 @@ export class AircraftVisual {
 
     // Negative: clockwise seen from the cockpit, like most real propellers.
     this.propellerAngle = (this.propellerAngle - this.propellerRevs * TWO_PI * deltaSeconds) % TWO_PI;
-    this.propeller.blades.rotation.z = this.propellerAngle;
+    for (const propeller of this.propellers) propeller.blades.rotation.z = this.propellerAngle;
     this.applyPropellerBlur();
   }
 
-  /** Jump the propeller straight to a speed, e.g. on respawn: stopped on the runway, already turning on an air start. */
+  /** Jump the propellers straight to a speed, e.g. on respawn: stopped on the runway, already turning on an air start. */
   resetPropeller(engineFraction: number): void {
     this.propellerRevs = Math.max(0, Math.min(1, engineFraction)) * PROPELLER_VISUAL_CONFIG.maxRevsPerSecond;
     this.applyPropellerBlur();
@@ -125,15 +151,16 @@ export class AircraftVisual {
     this.root.dispose();
   }
 
-  /** Cross-fades from solid blades to the blur disc as the propeller speeds up. */
+  /** Cross-fades from solid blades to the blur disc as the propellers speed up. */
   private applyPropellerBlur(): void {
     const { blurStartRevsPerSecond, blurEndRevsPerSecond, discOpacity } = PROPELLER_VISUAL_CONFIG;
     const t = Math.max(0, Math.min(1, (this.propellerRevs - blurStartRevsPerSecond) / (blurEndRevsPerSecond - blurStartRevsPerSecond)));
     const blur = t * t * (3 - 2 * t); // smoothstep, so the fade has no visible start or end
-    const { blades, disc } = this.propeller;
-    blades.visibility = 1 - blur;
-    blades.isVisible = !this.hidden && blur < 0.98;
-    disc.visibility = discOpacity * blur;
-    disc.isVisible = !this.hidden && blur > 0.02;
+    for (const { blades, disc } of this.propellers) {
+      blades.visibility = 1 - blur;
+      blades.isVisible = !this.hidden && blur < 0.98;
+      disc.visibility = discOpacity * blur;
+      disc.isVisible = !this.hidden && blur > 0.02;
+    }
   }
 }
