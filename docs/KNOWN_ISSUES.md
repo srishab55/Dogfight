@@ -56,6 +56,7 @@ None known.
 | L54 | Auto-land from high up or close in loops round to lose height or line up, so it can take 2-3 minutes; from a few km out on the approach side it takes about 90 s | Slower than flying it yourself | By design |
 | L56 | The Interceptor and Fighter-Bomber have arrestor hooks (history: only naval versions did) | Any fighter can land on a carrier | By design (gameplay) |
 | L57 | The map is north-up and shows bases, carriers and you only (no other aircraft yet) | No enemy positions | Phase 6/7 (when there are other aircraft) |
+| L58 | Taking off from another base (J) moves you there at once in a fresh, rearmed aircraft, rather than you flying there; it's offered only when stopped or crashed | Quick relocation | By design (your request) |
 | L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
 | L49 | The strafing aim point and the mouse drop correction assume a round at muzzle velocity with no drag; the wing guns converge at 300 m | Small errors beyond about 800 m | Fine at strafing range |

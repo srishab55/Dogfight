@@ -2,10 +2,9 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** A map (N) and base beacons are in, and auto-land is
-offered at the carrier to every type but the Heavy Bomber (your requests).
-Remaining in Phase 4: bombs. Waiting for your test (FLIGHT_TEST.md cards
-33 and 35) and confirmation.
+**Current status:** You can take off from any of your bases, captured
+ones included (J; your request). Remaining in Phase 4: bombs. Waiting for
+your test (FLIGHT_TEST.md card 36) and confirmation.
 
 ## Extras added along the way
 
@@ -28,6 +27,14 @@ Remaining in Phase 4: bombs. Waiting for your test (FLIGHT_TEST.md cards
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Take off from any of your bases ✅ (your request, 2026-11-17)
+
+- ✅ **J** (stopped on the ground, on the catapult, or crashed) opens "TAKE OFF FROM": your bases (your airfield, your carrier, and any airfield you've captured), each in its owner's colour with what it is and how far. ← → choose, Enter: you start there, rearmed, ready to take off (on the catapult for a carrier). J closes it
+- ✅ The base you choose becomes your base: R respawns you there, a new aircraft type (1-5) starts there, and landing practice (L) flies to it. A Heavy Bomber can't use a carrier (too big), so it starts at an airfield; a base you lose stops being your base
+- ✅ HUD: "J · TAKE OFF FROM ANOTHER OF YOUR BASES (n)" when stopped; the crash panel offers J too
+- ✅ Shared rule `startingBases` (the team's bases now, carriers only with a hook and not sinking), for the Phase 5 server: 2 tests. The land fighters pass the full carrier suite (catapult hold and launch, hands-off launch, traps): 8 more carrier tests
+- Verified: 347 tests (1 skipped by design), typecheck, build, and headless Chrome: the prompt at spawn; J listing the airfield and carrier, then Red's airfield too once captured; taking off from Red's airfield; R and a new aircraft type starting there; the Fighter-Bomber choosing the carrier and launching off its catapult; the Heavy Bomber offered only airfields; J after a crash. No console errors
 
 ## Map, base beacons, carrier auto-land for fighters ✅ (your request, 2026-11-17)
 

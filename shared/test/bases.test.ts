@@ -8,12 +8,14 @@ import {
   baseSpawnPoint,
   createGunState,
   createAirborneState,
+  createCarrierStatuses,
   createParkedState,
   createServiceStatus,
   createTargets,
   createTerrain,
   createWorldGround,
   runwayLocal,
+  startingBases,
   stepService,
   teamBase,
   type CombatEvent,
@@ -112,6 +114,27 @@ describe('capturing a base', () => {
     world.applyHit(radar, 10, 1);
     run(world, [], 300);
     expect(radar.health).toBe(radar.maxHealth - 10);
+  });
+
+  describe('where you can start from', () => {
+    it("Blue starts from its airfield and carrier; once it captures Red's airfield, from there too", () => {
+      const world = new CombatWorld(ground, createTargets());
+      const ids = () => startingBases('blue', spec, world.ownerOf).map((b) => b.id);
+      expect(ids()).toEqual(['blue-airfield', 'blue-carrier']);
+      destroyDefences(world);
+      run(world, [landedOnRedRunway()], CAPTURE_CONFIG.seconds + 0.5);
+      expect(ids()).toEqual(['blue-airfield', 'blue-carrier', 'red-airfield']);
+      // Red now has only its carrier.
+      expect(startingBases('red', spec, world.ownerOf).map((b) => b.id)).toEqual(['red-carrier']);
+    });
+
+    it('the Heavy Bomber never starts from a carrier, and nobody starts from a sinking one', () => {
+      const world = new CombatWorld(ground, createTargets());
+      expect(startingBases('blue', AIRCRAFT_CLASSES.heavyBomber, world.ownerOf).map((b) => b.id)).toEqual(['blue-airfield']);
+      const statuses = createCarrierStatuses();
+      statuses.get('blue-carrier')!.sink = 2;
+      expect(startingBases('blue', AIRCRAFT_CLASSES.navalFighter, world.ownerOf, statuses).map((b) => b.id)).toEqual(['blue-airfield']);
+    });
   });
 
   describe('the radar, beside the runway', () => {

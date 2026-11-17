@@ -440,6 +440,19 @@ back in the corner. Destroy Red's defences: its column and map dot blink
 amber; capture it and both turn blue.
 **Pass:** You can always tell where each base is and who holds it.
 
+## Card 36: Take off from any of your bases
+
+**Do:** On the runway, press **J**. Capture Red's airfield (card 32), stop,
+press **J** again, choose it with **→** and press **Enter**. Then press **R**,
+then **4**. Then **J**, choose the Blue carrier, and launch.
+**Expect:** "J · TAKE OFF FROM ANOTHER OF YOUR BASES" when stopped. J lists
+Blue airfield and Blue carrier; after the capture, Red airfield (captured)
+as well. Enter puts you on its runway ready to go ("FIGHTER-BOMBER · RED
+AIRFIELD"); R and a new aircraft type start there too. The Fighter-Bomber on
+the carrier is held on the catapult and launched at full throttle. A Heavy
+Bomber is offered only the airfields.
+**Pass:** You can start from any base you hold.
+
 ## Card 34: Retractable gear
 
 **Do:** Take off from the airfield. Fly around, then come back and land by hand.
@@ -480,4 +493,5 @@ ALT, AoA, G), plus the debug overlay if possible.
 | 33 | `autoLand.test.ts`: base choice · every class from 6 km · U-turn · abeam · over the mountain · teardrop · enemy airfield · carrier traps from three directions |
 | 32 | `bases.test.ts`: capture rules · nothing rebuilds itself · repaired for the new owner · the repaired gun fires at Red only · the radar shot from the runway, then captured |
 | 35 | headless Chrome (client only): labels, map modes, amber when defenceless |
+| 36 | `bases.test.ts`: where you can start from · `carrier.test.ts`: land fighters on the catapult and wires |
 | 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

@@ -42,8 +42,11 @@ export interface HudFrame {
   readonly targetsDestroyed: number;
   /** Bases on screen and far enough away to need finding, with their labels. */
   readonly baseLabels: readonly BaseLabel[];
-  /** Auto-land: flying a landing (`active`), or on offer (press P), with its status line; null when unavailable. */
-  readonly autoLand: { readonly active: boolean; readonly text: string } | null;
+  /**
+   * The assist line: auto-land flying a landing (`active`) or on offer (P)
+   * in the air; on the ground, the choice of base to take off from (J). Null: nothing to say.
+   */
+  readonly prompt: { readonly active: boolean; readonly text: string } | null;
 }
 
 /**
@@ -243,7 +246,8 @@ export class FlightHud {
     this.crashReason = element('div', 'hud-crash-reason');
     const respawnKey = KEY_BINDINGS.respawn.map(formatKeyCode).join(' / ');
     this.crashTitle = element('div', 'hud-crash-title', 'CRASHED');
-    this.crashPanel.append(this.crashTitle, this.crashReason, element('div', 'hud-crash-hint', `Press ${respawnKey} to respawn`));
+    const chooseKey = KEY_BINDINGS.chooseBase.map(formatKeyCode).join(' / ');
+    this.crashPanel.append(this.crashTitle, this.crashReason, element('div', 'hud-crash-hint', `Press ${respawnKey} to respawn · ${chooseKey} to choose a base`));
     this.damageFlash = element('div', 'hud-damage-flash');
     this.damageFlash.hidden = true;
 
@@ -309,10 +313,10 @@ export class FlightHud {
     toggle(this.overheatWarning, frame.guns.overheated && !state.crashed);
     toggle(this.outOfAmmoWarning, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
     toggle(this.service, frame.serviceProgress !== null);
-    toggle(this.autoLand, frame.autoLand !== null && !state.crashed);
-    if (frame.autoLand) {
-      if (this.autoLand.textContent !== frame.autoLand.text) this.autoLand.textContent = frame.autoLand.text;
-      this.autoLand.dataset.state = frame.autoLand.active ? 'active' : 'offer';
+    toggle(this.autoLand, frame.prompt !== null && !state.crashed);
+    if (frame.prompt) {
+      if (this.autoLand.textContent !== frame.prompt.text) this.autoLand.textContent = frame.prompt.text;
+      this.autoLand.dataset.state = frame.prompt.active ? 'active' : 'offer';
     }
     this.updateApproach(frame.approach);
     this.updateBaseStatus(frame.baseStatus);

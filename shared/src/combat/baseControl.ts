@@ -1,5 +1,7 @@
+import { hasTailhook, type AircraftClassSpec } from '../config/aircraftClasses';
 import { CAPTURE_CONFIG } from '../config/targets';
-import { BASES, isOnRunway, type BaseDefinition } from '../config/world';
+import { BASES, isOnRunway, type BaseDefinition, type BaseOwnerLookup } from '../config/world';
+import type { CarrierStatusMap } from '../world/carrierStatus';
 import type { AircraftState } from '../flight/AircraftState';
 import type { Team } from '../types/team';
 import { BASE_DEFENCE_KINDS, isTargetAlive, type CombatTarget } from './targets';
@@ -82,4 +84,14 @@ function isCapturing(state: Readonly<AircraftState>, base: BaseDefinition): bool
   if (state.crashed || !state.onGround) return false;
   if (Math.hypot(state.velocity.x, state.velocity.z) > CAPTURE_CONFIG.maxGroundSpeed) return false;
   return isOnRunway(base.runway, state.position.x, state.position.z, base.serviceMargin);
+}
+
+/**
+ * Where an aircraft of `team` can start, and take off, from: every base the
+ * team holds now (its own, and any it has captured). A carrier only for an
+ * aircraft with an arrestor hook (the Heavy Bomber is too big for the deck),
+ * and not while it is sinking.
+ */
+export function startingBases(team: Team, spec: AircraftClassSpec, ownerOf: BaseOwnerLookup, carrierStatuses: CarrierStatusMap | null = null, bases: readonly BaseDefinition[] = BASES): BaseDefinition[] {
+  return bases.filter((base) => ownerOf(base) === team && (base.kind !== 'carrier' || (hasTailhook(spec) && (carrierStatuses?.get(base.id)?.sink ?? 0) === 0)));
 }

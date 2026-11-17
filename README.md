@@ -80,7 +80,8 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** releases. |
 | **C** | Camera: chase → cockpit → orbit |
-| **R** | Respawn at your home base (airfield, or the carrier's catapult) |
+| **R** | Respawn at your base: the one you chose with **J**, at first your airfield (or the carrier's catapult) |
+| **J** | Stopped on the ground, or crashed: take off from any of your bases, captured ones too (**← →** choose, **Enter** go). Every type but the Heavy Bomber can start on a carrier's catapult |
 | **T** | Air start at 800 m (for testing manoeuvres) |
 | **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
 | **P** | Auto-land at the nearest base within 10 km (any team; every type but the Heavy Bomber can land on a carrier). The HUD offers it within 5 km. **P** or any flight key takes over |

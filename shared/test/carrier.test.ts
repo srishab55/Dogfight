@@ -21,6 +21,8 @@ import { fly, holdPitchAttitude, rollToBank } from './testPilot';
 const world = createWorldGround(createTerrain());
 const deck = carrierDeckRunway(BLUE_CARRIER);
 const CARRIER_CLASSES: readonly AircraftClassId[] = ['navalFighter', 'diveBomber'];
+/** Everything with a hook can use a carrier: the carrier types, and the land fighters (they can start from one too). */
+const HOOKED_CLASSES: readonly AircraftClassId[] = [...CARRIER_CLASSES, 'interceptor', 'fighterBomber'];
 /** Where the carrier glide slope meets the deck: early in the wire zone (the client's landing practice uses the same). */
 const CARRIER_AIM_POINT = BLUE_CARRIER.wires.from + 15;
 
@@ -40,7 +42,7 @@ describe('carrier operations', () => {
     expect(hasTailhook(AIRCRAFT_CLASSES.heavyBomber)).toBe(false);
   });
 
-  describe.each(CARRIER_CLASSES)('%s', (id) => {
+  describe.each(HOOKED_CLASSES)('%s', (id) => {
     const spec = AIRCRAFT_CLASSES[id];
     const perf = computePerformance(spec);
 

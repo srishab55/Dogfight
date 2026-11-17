@@ -90,7 +90,7 @@ export { LANDING_GEAR_CONFIG, gearLocked, stepLandingGear } from './flight/landi
 export { GUN_SPECS, PRACTICE_TARGET_CONFIG, SERVICE_CONFIG, type GunSpec } from './config/weapons';
 export { createGunState, fullAmmo, gunMounts, hashToUnit, stepGuns, type GunState } from './combat/guns';
 export { AA_GUN_CONFIG, AIRCRAFT_HIT_SHAPE_CONFIG, BASE_STRUCTURE_CONFIG, CAPTURE_CONFIG, CARRIER_DAMAGE_CONFIG, ENEMY_LAYOUT, PARKED_AIRCRAFT_CONFIG } from './config/targets';
-export { createBaseControls, stepBaseControls, type BaseControl, type BaseEvent, type Capturer } from './combat/baseControl';
+export { createBaseControls, startingBases, stepBaseControls, type BaseControl, type BaseEvent, type Capturer } from './combat/baseControl';
 export { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './combat/antiAircraft';
 export { airframeHitSpheres, placeHitSpheres, type HitSphere, type PlacedSphere } from './combat/hitShapes';
 export { createCarrierStatuses, type CarrierStatus, type CarrierStatusMap } from './world/carrierStatus';

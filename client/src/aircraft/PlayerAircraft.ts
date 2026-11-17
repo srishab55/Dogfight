@@ -12,6 +12,7 @@ import {
   createAirborneState,
   createApproachState,
   createParkedState,
+  hasTailhook,
   stepAircraft,
   teamBase,
   type AircraftClassId,
@@ -55,6 +56,8 @@ export class PlayerAircraft {
   state: AircraftState;
   private readonly previous: AircraftState;
   private readonly models: Readonly<Record<AirframeId, AircraftVisual>>;
+  /** The base you chose to take off from (J), or null: the class's usual home. */
+  private chosenBase: BaseDefinition | null = null;
 
   /** Interpolated pose for this frame, read by the cameras and shadows. */
   readonly renderPosition = new Vector3();
@@ -90,9 +93,25 @@ export class PlayerAircraft {
     return Object.values(this.models).flatMap((model) => model.meshes);
   }
 
-  /** This class's home: the team's island airfield, or its carrier for carrier aircraft. */
+  /**
+   * Where this aircraft starts, respawns and practises landings: the base you
+   * chose to take off from (J), if this class can use it (a carrier needs a
+   * hook), else the class's usual home: the team's island airfield, or its
+   * carrier for carrier aircraft.
+   */
   get homeBase(): BaseDefinition {
+    const chosen = this.chosenBase;
+    if (chosen && (chosen.kind !== 'carrier' || hasTailhook(this.spec))) return chosen;
     return teamBase(this.team, this.spec.homeBase);
+  }
+
+  /** The base you chose to take off from, or null for the class's usual one. */
+  get startBase(): BaseDefinition | null {
+    return this.chosenBase;
+  }
+
+  setStartBase(base: BaseDefinition | null): void {
+    this.chosenBase = base;
   }
 
   /** Back at the home base, engine idle (on the catapult, for carrier aircraft), optionally as a different class. */

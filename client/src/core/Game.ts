@@ -24,6 +24,7 @@ import {
   groundClearance,
   stepService,
   steerTowards,
+  startingBases,
   autoLandBaseFor,
   neutralControls,
   planAutoLand,
@@ -64,6 +65,7 @@ import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
 import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
 import { createGameTitle } from '../ui/GameTitle';
 import { MiniMap } from '../ui/MiniMap';
+import { BasePicker, type BaseChoice } from '../ui/BasePicker';
 import { describeBases, type BaseView } from '../combat/baseViews';
 import { BASE_COLORS, BEACON_CONFIG } from '../config/map';
 import { BaseBeacons } from '../world/BaseBeacons';
@@ -135,6 +137,8 @@ export class Game {
   private readonly beacons: BaseBeacons;
   /** The map (N). */
   private readonly miniMap: MiniMap;
+  /** "Take off from": choose one of your bases (J), when stopped on the ground or crashed. */
+  private readonly basePicker: BasePicker;
   private targetsDestroyed = 0;
   /** Camera shake from being hit (m), decaying. */
   private impactShake = 0;
@@ -218,6 +222,7 @@ export class Game {
     this.controlsHint = createControlsHint(uiRoot, KEY_BINDINGS);
     createGameTitle(uiRoot);
     this.miniMap = new MiniMap(uiRoot, terrain);
+    this.basePicker = new BasePicker(uiRoot);
     this.beacons = new BaseBeacons(this.scene);
     this.afterTeleport(0);
     this.briefSpawn();
@@ -238,6 +243,7 @@ export class Game {
     this.debugOverlay.dispose();
     this.controlsHint.remove();
     this.miniMap.dispose();
+    this.basePicker.dispose();
     this.beacons.dispose();
     this.cameras.dispose();
     this.tracers.dispose();
@@ -334,7 +340,7 @@ export class Game {
       baseLabels: this.baseLabels(baseViews),
       impactPoint: this.projectImpactPoint(),
       targetsDestroyed: this.targetsDestroyed,
-      autoLand: this.autoLandHud(),
+      prompt: this.promptLine(),
     });
     this.debugOverlay.update(deltaSeconds, this.debugLines);
     this.input.endFrame();
@@ -672,7 +678,7 @@ export class Game {
   }
 
   /** The auto-land line on the HUD: what it's doing, or the offer when near a base. */
-  private autoLandHud(): HudFrame['autoLand'] {
+  private autoLandLine(): HudFrame['prompt'] {
     const { state, spec } = this.aircraft;
     if (state.crashed || state.shotDown) return null;
     const auto = this.autoLand;
@@ -855,6 +861,73 @@ export class Game {
     else this.hud.showMessage(`${spec.displayName.toUpperCase()} · ${this.aircraft.homeBase.name.toUpperCase()} · throttle up (↑) to take off`, 'good', 4);
   }
 
+  /** Your bases this aircraft could take off from now: your own and any you've captured (carriers need a hook). */
+  private myStartingBases() {
+    return startingBases(PLAYER_TEAM, this.aircraft.spec, this.combat.ownerOf, this.carrierStatuses);
+  }
+
+  /** Choosing a base to take off from: stopped on the ground (or on the catapult), or crashed. */
+  private canChooseBase(): boolean {
+    const state = this.aircraft.state;
+    if (state.crashed) return true;
+    return state.onGround && state.catapult !== 'launching' && Math.hypot(state.velocity.x, state.velocity.z) < 3;
+  }
+
+  /** J: open or close the "take off from" list. */
+  private toggleBasePicker(): void {
+    if (this.basePicker.isOpen) {
+      this.basePicker.close();
+      return;
+    }
+    if (!this.canChooseBase()) {
+      this.hud.showMessage('Land and stop first: then J lets you take off from any of your bases', 'ok', 3);
+      return;
+    }
+    const p = this.aircraft.state.position;
+    const current = this.aircraft.homeBase;
+    const choices: BaseChoice[] = this.myStartingBases().map((base) => {
+      const owner = this.combat.ownerOf(base);
+      const distance = Math.hypot(base.runway.center.x - p.x, base.runway.center.z - p.z);
+      const parts = [
+        base.kind === 'carrier' ? 'carrier · catapult launch' : 'airfield',
+        owner !== base.team ? 'captured' : '',
+        base.id === current.id ? 'your base now' : '',
+        distance < 1_500 ? 'here' : `${(distance / 1000).toFixed(1)} km`,
+      ].filter(Boolean);
+      return { base, name: base.name, detail: parts.join(' · '), color: BASE_COLORS[owner] };
+    });
+    this.basePicker.open(choices, current.id);
+  }
+
+  /** Start again, rearmed, ready to take off from `base`; it stays your base for respawns (R) until you choose another. */
+  private takeOffFrom(base: BaseDefinition): void {
+    this.basePicker.close();
+    this.aircraft.setStartBase(base);
+    this.aircraft.respawnAtBase();
+    this.afterTeleport(0);
+    this.briefSpawn();
+  }
+
+  /** A chosen base that is no longer yours (or is sinking) stops being where you start. */
+  private forgetLostStartBase(): void {
+    const chosen = this.aircraft.startBase;
+    if (!chosen) return;
+    const sinking = chosen.kind === 'carrier' && (this.carrierStatuses.get(chosen.id)?.sink ?? 0) > 0;
+    if (this.combat.ownerOf(chosen) !== PLAYER_TEAM || sinking) this.aircraft.setStartBase(null);
+  }
+
+  /** The assist line: auto-land in the air; on the ground, the offer to take off from another of your bases. */
+  private promptLine(): HudFrame['prompt'] {
+    const state = this.aircraft.state;
+    if (state.crashed || state.shotDown) return null;
+    if (!this.autoLand && state.onGround) {
+      if (this.basePicker.isOpen || !this.canChooseBase()) return null;
+      const count = this.myStartingBases().length;
+      return count > 1 ? { active: false, text: `J · TAKE OFF FROM ANOTHER OF YOUR BASES (${count})` } : null;
+    }
+    return this.autoLandLine();
+  }
+
   /** Where the aircraft is flying: 1 km along its velocity, on screen. */
   private projectFlightPath(): ScreenPoint | null {
     const velocity = this.aircraft.state.velocity;
@@ -967,6 +1040,19 @@ export class Game {
     }
     if (input.wasPressed('autoLand')) this.toggleAutoLand();
     if (input.wasPressed('toggleMap')) this.miniMap.cycle();
+    this.forgetLostStartBase();
+    if (input.wasPressed('chooseBase')) this.toggleBasePicker();
+    if (this.basePicker.isOpen) {
+      if (!this.canChooseBase()) this.basePicker.close();
+      else {
+        if (input.wasPressed('pickerPrevious')) this.basePicker.move(-1);
+        if (input.wasPressed('pickerNext')) this.basePicker.move(1);
+        if (input.wasPressed('pickerConfirm')) {
+          const base = this.basePicker.selected;
+          if (base) this.takeOffFrom(base);
+        }
+      }
+    }
     if (input.wasPressed('toggleMute')) this.hud.showMessage(this.audio.toggleMute() ? 'SOUND OFF (M)' : 'SOUND ON (M)', 'good', 1.5);
     if (input.wasPressed('toggleControlsHelp')) this.controlsHint.hidden = !this.controlsHint.hidden;
     for (const [action, factor] of [['mouseSensitivityUp', MOUSE_FLIGHT_CONFIG.sensitivityStep], ['mouseSensitivityDown', 1 / MOUSE_FLIGHT_CONFIG.sensitivityStep]] as const) {
@@ -984,6 +1070,7 @@ export class Game {
 
     const selected = CLASS_KEYS.find(([action]) => input.wasPressed(action))?.[1] ?? null;
     if (selected || input.wasPressed('respawn')) {
+      this.basePicker.close();
       this.aircraft.respawnAtBase(selected ?? undefined);
       this.afterTeleport(0);
       this.briefSpawn();
