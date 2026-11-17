@@ -58,6 +58,7 @@ export function stepGuns(
   pool: ProjectilePool,
   owner: number,
   dt: number,
+  team = -1,
 ): number {
   const mounts = gunMounts(spec);
   const interval = 1 / (gun.roundsPerSecondPerGun * mounts.length);
@@ -69,7 +70,7 @@ export function stepGuns(
     guns.fireTimer = Math.min(guns.fireTimer, interval) + dt;
     while (guns.fireTimer >= interval && guns.ammo > 0) {
       guns.fireTimer -= interval;
-      fireRound(guns, aircraft, spec, gun, mounts, pool, owner);
+      fireRound(guns, aircraft, spec, gun, mounts, pool, owner, team);
       guns.ammo--;
       fired++;
     }
@@ -92,6 +93,7 @@ function fireRound(
   mounts: readonly { x: number; y: number; z: number }[],
   pool: ProjectilePool,
   owner: number,
+  team: number,
 ): void {
   const m = mounts[guns.nextGun % mounts.length];
   guns.nextGun = (guns.nextGun + 1) % mounts.length;
@@ -122,12 +124,12 @@ function fireRound(
     aircraft.velocity.y + direction.y * gun.muzzleVelocity,
     aircraft.velocity.z + direction.z * gun.muzzleVelocity,
   );
-  pool.spawn(muzzle, velocity, gun.projectileLifetime, gun.damagePerRound, owner);
+  pool.spawn(muzzle, velocity, gun.projectileLifetime, gun.damagePerRound, owner, team);
   guns.roundsFired++;
 }
 
-/** Integer hash to [0, 1): the mulberry32 mixing function applied to one value. */
-function hashToUnit(n: number): number {
+/** Integer hash to [0, 1): the mulberry32 mixing function applied to one value. Deterministic scatter for every gun. */
+export function hashToUnit(n: number): number {
   let t = (Math.imul(n | 0, 0x9e3779b1) + 0x6d2b79f5) >>> 0;
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);

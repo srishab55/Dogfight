@@ -9,6 +9,8 @@ import { RUNWAYS, WORLD_CONFIG, isOnRunway, type RunwayDefinition, type SurfaceT
 export interface GroundQuery {
   heightAt(x: number, z: number): number;
   surfaceAt(x: number, z: number): SurfaceType;
+  /** Height of the surface that gives ground effect, if different from `heightAt` (the world ground leaves carrier decks out). */
+  groundEffectHeightAt?(x: number, z: number): number;
 }
 
 /** Flat ground at WORLD_CONFIG.groundHeight; runway rectangles, grass everywhere else. */

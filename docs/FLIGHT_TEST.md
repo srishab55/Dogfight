@@ -292,11 +292,14 @@ pull gently to climb away. The hook stays up.
 **Do:** As the Naval Fighter, press **L** and let go. Then fly one yourself:
 take off, circle, and come back to the stern on a shallow approach with
 landing flaps (**F** twice).
-**Expect:** Landing flaps lower the hook. On touchdown among the wires the
-status reads "HOOK CAUGHT A WIRE" and the aircraft stops in about 50 m;
-"ON THE WIRE" until you idle (**↓**). Touching down past the wires is a
-bolter: keep the power on and go around. Too low at the stern hits the hull.
-**Pass:** The hands-off approach stops on the deck. Flown, you catch a wire most times.
+**Expect:** Landing flaps lower the hook. The **LSO** line under the title
+calls distance, glide slope (ON GLIDE SLOPE / A LITTLE HIGH / LOW · POWER!)
+and line-up (ON CENTRELINE / COME LEFT / COME RIGHT), then "CUT" over the
+stern. Touch down anywhere in the first half of the deck: "HOOK CAUGHT A
+WIRE" and a stop in about 50 m; "ON THE WIRE" until you idle (**↓**). Miss
+every wire and the crash barrier (amber and black stripe, cables) stops you,
+with some damage. Too low at the stern hits the hull.
+**Pass:** The hands-off approach traps early in the wire zone. Flown, you get aboard most times.
 
 ## Card 22: Ammunition and rearming
 
@@ -327,6 +330,45 @@ stubby radial-engined naval fighter with a tailhook (4), a two-seat dive
 bomber with a long canopy and a rear gun (5). Carrier aircraft start on
 the Blue carrier; the others on the island runway.
 **Pass:** Each looks like its role.
+
+## Card 25: Brakes
+
+**Do:** On the runway, throttle up to start rolling, then idle (**↓**) and
+coast; then hold **B**.
+**Expect:** At idle without brakes it keeps rolling; holding B stops it
+("ON GROUND · BRAKES"). After a runway landing the touchdown message reminds
+you to hold B.
+**Pass:** You can roll at idle, and stop when you want.
+
+## Card 26: Red's AA and targets
+
+**Do:** Fly to Red's airfield (north island) at 300 m, then strafe an AA gun
+(sandbagged ring beside the runway) and the parked aircraft.
+**Expect:** The guns open up within about 1.8 km: red-orange tracers. Hits
+flash the screen edge red, kick the camera, clank, and cost hull. A good
+burst knocks a gun out (explosion, then a burning wreck); the parked aircraft
+burn the same way. Destroyed targets come back after 1.5 to 2 minutes.
+**Pass:** The defences are dangerous but survivable for a pass or two; TGT counts what you destroy.
+
+## Card 27: Sink the Red carrier
+
+**Do:** Strafe the Red carrier (east of the Red island) deck and island,
+rearm, come back and finish it.
+**Expect:** "RED CARRIER HULL nn%" while you hit it; smoke below 70%, fires
+below 35%. Destroyed, it explodes, blazes, and goes down by the stern,
+listing, over about a minute, with its guns. Three minutes later a fresh
+carrier is back.
+**Pass:** As described, at about 60 FPS.
+
+## Card 28: Sound
+
+**Do:** Press any key (sound starts on the first input). Run the engine up,
+fly, fire, get shot at, land; press **M**.
+**Expect:** The engine pitch follows the propeller; radials sound rougher,
+and the bomber's four engines beat. Wind rises with speed. Your guns, the AA's
+"pom" and explosions come from where they happen; distant ones arrive late.
+Stall horn and pull-up tone with the warnings. M mutes and unmutes.
+**Pass:** No crackling, nothing missing.
 
 ---
 

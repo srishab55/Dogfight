@@ -23,6 +23,8 @@ export class PapiLights {
   /** Unit vector from the aim point back along the approach (towards arriving aircraft). */
   private readonly approachDirection: Vector3;
   private visible = true;
+  /** Switched off entirely (e.g. on a sinking carrier). */
+  private disabled = false;
   private readonly white: StandardMaterial;
   private readonly red: StandardMaterial;
 
@@ -57,13 +59,17 @@ export class PapiLights {
     });
   }
 
+  setDisabled(disabled: boolean): void {
+    this.disabled = disabled;
+  }
+
   /** Colours the lights for an observer (the pilot) and keeps them visible at range, inside the approach sector only. */
   update(observer: Vector3): void {
     const dx = observer.x - this.aimPoint.x;
     const dz = observer.z - this.aimPoint.z;
     const range = Math.hypot(dx, dz);
     const along = dx * this.approachDirection.x + dz * this.approachDirection.z;
-    const inSector = range < PAPI_CONFIG.maxRange && along > 0 && Math.abs(Math.atan2(dx * this.approachDirection.z - dz * this.approachDirection.x, along)) < degreesToRadians(PAPI_CONFIG.sectorHalfAngleDeg);
+    const inSector = !this.disabled && range < PAPI_CONFIG.maxRange && along > 0 && Math.abs(Math.atan2(dx * this.approachDirection.z - dz * this.approachDirection.x, along)) < degreesToRadians(PAPI_CONFIG.sectorHalfAngleDeg);
     if (inSector !== this.visible) {
       this.visible = inSector;
       for (const light of this.lights) light.mesh.setEnabled(inSector);

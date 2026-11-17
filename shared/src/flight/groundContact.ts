@@ -16,14 +16,16 @@ export interface GroundContactResult {
   onGround: boolean;
   /** Fastest downward speed of any wheel touching the ground this step (m/s, positive = sinking). */
   impactSinkRate: number;
-  /** A main wheel is rolling across a carrier's arrestor wires (a hooked aircraft can catch one). */
+  /** A main wheel is rolling across a carrier's arrestor wires, or the lowered hook is down among them (a hooked aircraft can catch one). */
   onArrestorWires: boolean;
+  /** A main wheel has rolled into a carrier's crash barrier. */
+  onBarrier: boolean;
   /** Set if this contact destroys the aircraft. */
   crashReason: string | null;
 }
 
 export function createGroundContactResult(): GroundContactResult {
-  return { force: vec3(), torque: vec3(), onGround: false, impactSinkRate: 0, onArrestorWires: false, crashReason: null };
+  return { force: vec3(), torque: vec3(), onGround: false, impactSinkRate: 0, onArrestorWires: false, onBarrier: false, crashReason: null };
 }
 
 /** Fraction of critical damping in each gear leg while compressing. */
@@ -37,6 +39,11 @@ const REBOUND_DAMPING_FACTOR = 2.5;
 /** Speeds (m/s) over which tyre friction builds to full strength. Smooths the force through zero to avoid jitter at rest. */
 const ROLLING_FRICTION_SMOOTHING = 0.3;
 const LATERAL_SLIP_SMOOTHING = 0.4;
+/** The lowered hook hangs this far below the fuselage line (deg; matches the visual), and catches a wire within this height of the deck (m). */
+const HOOK_LOWERED_DEG = 65;
+const HOOK_SIN = Math.sin((HOOK_LOWERED_DEG * Math.PI) / 180);
+const HOOK_COS = Math.cos((HOOK_LOWERED_DEG * Math.PI) / 180);
+const HOOK_REACH = 0.35;
 
 // Scratch vectors, reused every call.
 const offset = vec3();
@@ -76,6 +83,7 @@ export function computeGroundContact(
   out.onGround = false;
   out.impactSinkRate = 0;
   out.onArrestorWires = false;
+  out.onBarrier = false;
   out.crashReason = null;
 
   const scale = spec.airframeScale;
@@ -106,6 +114,7 @@ export function computeGroundContact(
     const surfaceType = ground.surfaceAt(contactPoint.x, contactPoint.z);
     if (surfaceType === 'water') out.crashReason ??= 'ditched in the sea';
     if (surfaceType === 'wires' && wheel.kind === 'main') out.onArrestorWires = true;
+    if (surfaceType === 'barrier' && wheel.kind === 'main') out.onBarrier = true;
 
     // Velocity of the contact point = body velocity + (angular velocity x lever arm).
     crossVec3(pointVelocity, worldAngularVelocity, offset);
@@ -154,6 +163,18 @@ export function computeGroundContact(
     // Torque about the centre of mass = lever arm x force.
     crossVec3(wheelTorque, offset, wheelForce);
     addVec3(out.torque, out.torque, wheelTorque);
+  }
+
+  // The lowered hook trails below and behind the main wheels, so it can
+  // catch a wire a moment before they touch: easier traps.
+  const hook = spec.airframe.tailhook;
+  if (hook && state.hookArmed) {
+    const tipDown = hook.length * HOOK_SIN;
+    const tipBack = hook.length * HOOK_COS;
+    setVec3(scaledPoint, hook.pivot.x * scale, (hook.pivot.y - tipDown) * scale, (hook.pivot.z - tipBack) * scale);
+    rotateVec3(offset, state.orientation, scaledPoint);
+    addVec3(contactPoint, state.position, offset);
+    if (contactPoint.y - ground.heightAt(contactPoint.x, contactPoint.z) < HOOK_REACH && ground.surfaceAt(contactPoint.x, contactPoint.z) === 'wires') out.onArrestorWires = true;
   }
 
   // Any non-wheel part touching the ground is a crash.

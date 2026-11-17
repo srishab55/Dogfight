@@ -251,7 +251,7 @@ bombs and particles (Phase 4); keep shadow casters to aircraft only.
 | D10 | Throttle on ↑ / ↓ arrow keys (user's choice, 2026-11-16) | Shift/Ctrl from the original brief | Ctrl+W closes the tab on Windows/Linux and pages can't block it; arrows also sit away from WASD, so they're less prone to key ghosting |
 | D11 | Performance figures derived from physical inputs | Typing in stall speed, max turn rate etc. directly | Typed-in figures can contradict the physics; derived ones can't |
 | D12 | Handling configured as response figures (frequency, damping ratio, roll rate) at a reference speed | Raw aerodynamic moment coefficients | Tunable by feel and testable; still scales physically with dynamic pressure |
-| D13 | Wheel brakes automatic at idle throttle | A dedicated brake key | No key in the brief; intuitive for keyboard play. To be revisited in Phase 2 |
+| D13 | Wheel brakes automatic at idle throttle (replaced by D34) | A dedicated brake key | No key in the brief; intuitive for keyboard play. To be revisited in Phase 2 |
 | D14 | Minimal ground handling (wheels, friction, brakes, crash points) pulled into Phase 1 | Air-start-only Phase 1 | A full flight test, take-off to landing, needs it. Phase 2 adds damage and refinements |
 | D15 | Vitest 4.1 rather than 5.x | Vitest 5 | Vitest 5 requires Node 22, 24 or ≥26; the dev machine runs Node 25. Upgrade when on an LTS release |
 | D16 | Analytic hit tests (segment vs sphere, ground height) for now; Rapier later | Rapier immediately | Exact and cheap for balloons; avoids a WebAssembly dependency until aircraft and buildings need complex shapes |
@@ -268,4 +268,10 @@ bombs and particles (Phase 4); keep shadow casters to aircraft only.
 | D27 | Arrestor hook as flight-model state plus a "wires" deck zone: arms in the air, catches on a main wheel in the zone, constant pull, holds until idle | Simulated cables | Deterministic and testable; feels right; the server runs the same code |
 | D28 | Rearm and repair rules in shared (`stepService`): stopped, idle, on a friendly base, for 6 s | Client-only logic | The Phase 5 server must apply the same rules |
 | D29 | Tricycle gear on every type, including the carrier aircraft | Historical tail-draggers | Forgiving ground handling for everyone (L36) |
+| D31 | Every combat rule in shared: targets, AA guns (lead, slew limits, bursts), aircraft hit spheres, carrier sinking (a status the world ground reads) | AA as client-side scenery | The Phase 5 server runs the same; deterministic scatter keeps client and server in step |
+| D32 | Rounds carry a team code; nothing is hit by its own side | Owner-only checks | Simple, and it will hold for Red and Blue players and AI alike |
+| D33 | Easier carrier landings: wires over the first 125 m, hook reach below the wheels, crash barrier, no ground effect from decks, LSO calls | Realistic-only carrier ops | Your feedback: traps were too hard. Each aid is real (barriers, LSOs), bar the missing deck ground effect |
+| D34 | Wheel brakes on B; no automatic brakes at idle | Auto-brake (D13) | Your request; lets you roll freely at idle (IL-2 uses B too) |
+| D35 | Sound synthesised with Web Audio (oscillators, filtered noise, generated buffers) | Recorded samples | Free, nothing to download or license, and it follows the simulation continuously |
+| D36 | Smoke, fire and explosions as pooled sprites (two sprite managers) | Babylon particle systems | Two draw calls for everything burning; particles never allocated during play |
 | D30 | MSAA 2x in the post-process pipeline | 4x | Indistinguishable on Retina; measured ~1 ms a frame cheaper, keeping 60 FPS with the sea and carriers |

@@ -145,7 +145,7 @@ export interface AirframeDesign {
   readonly roundel: { readonly span: number; readonly diameter: number; readonly chord: number };
   readonly radiatorScoop?: { readonly center: Vec3; readonly width: number; readonly height: number; readonly depth: number };
   readonly exhaustStacks?: { readonly x: number; readonly y: number; readonly firstZ: number; readonly count: number; readonly spacing: number };
-  /** Carrier arrestor hook, hinged under the tail. */
+  /** Carrier arrestor hook, hinged under the tail. Lowered (65 degrees down), its tip hangs below the main wheels in the landing attitude. */
   readonly tailhook?: { readonly pivot: Vec3; readonly length: number };
   /** Rear gunner's twin gun, pointing aft from the back of the canopy. */
   readonly rearGun?: { readonly pivot: Vec3; readonly length: number };
@@ -457,7 +457,7 @@ export const NAVAL_FIGHTER_AIRFRAME = defineAirframe({
   bandZ: [-2.9, -3.3],
   roundel: { span: 4.1, diameter: 1.0, chord: 0.38 },
   exhaustStacks: { x: 0.64, y: -0.25, firstZ: 2.6, count: 2, spacing: 0.3 },
-  tailhook: { pivot: { x: 0, y: -0.32, z: -4.85 }, length: 1.3 },
+  tailhook: { pivot: { x: 0, y: -0.32, z: -4.85 }, length: 1.7 },
 });
 
 /**
@@ -563,7 +563,7 @@ export const DIVE_BOMBER_AIRFRAME = defineAirframe({
   bandZ: [-3.6, -4.0],
   roundel: { span: 4.95, diameter: 1.0, chord: 0.36 },
   exhaustStacks: { x: 0.6, y: -0.1, firstZ: 2.55, count: 2, spacing: 0.32 },
-  tailhook: { pivot: { x: 0, y: -0.3, z: -5.6 }, length: 1.3 },
+  tailhook: { pivot: { x: 0, y: -0.3, z: -5.6 }, length: 1.7 },
   rearGun: { pivot: { x: 0, y: 0.84, z: -2.25 }, length: 1.1 },
 });
 

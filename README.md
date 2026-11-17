@@ -6,8 +6,10 @@ Squadron, rebuilt in full 3D.
 
 **Status:** Fly five aircraft types over a small stretch of sea with three
 islands and two aircraft carriers. Take off from an island airfield, or get
-catapulted off a carrier and land back on it with the arrestor hook. Guns
-have limited ammunition: land at a friendly base to rearm. Phase 3 (graphics)
+catapulted off a carrier and land back on it with the arrestor hook. Attack
+Red's island and carrier: their anti-aircraft guns shoot back, parked
+aircraft burn, and the carrier can be sunk. Guns have limited ammunition:
+land at a friendly base to rearm. All sound is synthesised in the browser. Phase 3 (graphics)
 and Phase 4 (combat) are in progress. See [docs/PROGRESS.md](docs/PROGRESS.md),
 and fly the [full flight test](docs/FLIGHT_TEST.md).
 
@@ -71,7 +73,8 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **W / S** | Pitch up / down |
 | **A / D** | Roll left / right |
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
-| **↑ / ↓** | Throttle up / down. At idle, the wheel brakes are applied. |
+| **↑ / ↓** | Throttle up / down |
+| **B** | Wheel brakes (hold) |
 | **F / V** | Flaps down / up a notch (UP → TAKE-OFF → LANDING) |
 | **X** | Dive brakes out / in (Dive Bomber) |
 | **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
@@ -82,6 +85,7 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
 | **1 – 5** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber |
 | **[ / ]** | Mouse sensitivity down / up (remembered) |
+| **M** | Sound on / off (sound starts with your first key press or click) |
 | **H** | Hide / show the controls list |
 | **`** | Debug stats (shown by default in dev) |
 | Mouse drag / wheel | Rotate / zoom (orbit camera) |
@@ -95,9 +99,17 @@ Watch the airframe: ailerons, elevators, rudder and flaps all move with your inp
 
 **Carrier tips:** on the catapult, push the throttle to full (**↑**) and the
 catapult throws you off the bow with take-off flaps set. To land back on,
-press **L** (or fly the approach yourself): landing flaps lower the hook;
-touch down early on the deck, among the wires, and the hook stops you in
-about 50 m. Throttle to idle to be released.
+press **L** (or fly the approach yourself): landing flaps lower the hook,
+and the **LSO** line under the title calls your approach (distance, high or
+low, come left or right, then CUT). Touch down anywhere in the first half of
+the deck and the hook stops you in about 50 m; miss every wire and the crash
+barrier stops you (with some damage). Throttle to idle to be released.
+
+**Attacking Red:** Red's airfield has four AA guns and four parked aircraft;
+its carrier has four more guns. The guns lead their target but slew slowly,
+so jink and cross their line of fire. Red tracers are incoming. Strafe a gun
+with a good burst to knock it out. The carrier takes two full loads of
+ammunition (rearm in between): it burns, then sinks by the stern.
 
 **Ammunition:** the AMMO readout counts your rounds. When they run out, fly
 to a friendly base (the BASE readout gives distance and bearing), land, stop

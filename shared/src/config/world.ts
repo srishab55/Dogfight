@@ -75,6 +75,12 @@ export interface CarrierDefinition {
   readonly deckWidth: number;
   /** Arrestor wires span this distance range, measured forward from the stern (m). */
   readonly wires: { readonly from: number; readonly to: number; readonly count: number };
+  /**
+   * Crash barrier: a cable net across the deck just past the wires. An
+   * aircraft that misses every wire (or has no hook) and rolls into it on
+   * its wheels is stopped, with some damage (FlightModel), instead of going off the bow.
+   */
+  readonly barrier: { readonly fromStern: number };
   /** The bow catapult's track, measured forward from the stern (m). Its aircraft spawn at the start of it. */
   readonly catapult: { readonly from: number; readonly to: number };
   /**
@@ -110,7 +116,9 @@ export const CATAPULT_CONFIG = {
 const CARRIER_SHAPE = {
   deckLength: 260,
   deckWidth: 34,
-  wires: { from: 22, to: 92, count: 7 },
+  // Ten wires over the first 125 m: generous, so a slightly long touchdown still traps.
+  wires: { from: 15, to: 125, count: 10 },
+  barrier: { fromStern: 140 },
   catapult: { from: 200, to: 200 + CATAPULT_CONFIG.stroke },
   island: { along: 150, across: 12.5, length: 34, width: 7, height: 22 },
   freeboard: CARRIER_FREEBOARD,
@@ -158,20 +166,28 @@ export function isOnRunway(runway: RunwayDefinition, x: number, z: number, margi
   return Math.abs(along) <= runway.length / 2 + margin && Math.abs(across) <= runway.width / 2 + margin;
 }
 
-/** What a point on a carrier is: the deck, the wire zone, the island (a solid block), or not on this carrier at all. */
-export type CarrierPart = 'deck' | 'wires' | 'island' | null;
+/** What a point on a carrier is: the deck, the wire zone, the barrier, the island (a solid block), or not on this carrier at all. */
+export type CarrierPart = 'deck' | 'wires' | 'barrier' | 'island' | null;
+
+/** The barrier is a strip this wide across the deck (m): a wheel rolling over it meets the net. */
+const BARRIER_DEPTH = 4;
 
 export function carrierPartAt(carrier: CarrierDefinition, x: number, z: number): CarrierPart {
-  const { along, across } = runwayLocal(carrierDeckRunway(carrier), x, z);
-  const fromStern = along + carrier.deckLength / 2;
+  // Inline rather than runwayLocal(): this runs for every ground query, and must not allocate.
+  const heading = (carrier.headingDegrees * Math.PI) / 180;
+  const dx = x - carrier.center.x;
+  const dz = z - carrier.center.z;
+  const across = dx * Math.cos(heading) - dz * Math.sin(heading);
+  const fromStern = dx * Math.sin(heading) + dz * Math.cos(heading) + carrier.deckLength / 2;
   if (fromStern < 0 || fromStern > carrier.deckLength || Math.abs(across) > carrier.deckWidth / 2) return null;
   const island = carrier.island;
   if (Math.abs(fromStern - island.along) <= island.length / 2 && Math.abs(across - island.across) <= island.width / 2) return 'island';
   if (fromStern >= carrier.wires.from && fromStern <= carrier.wires.to) return 'wires';
+  if (Math.abs(fromStern - carrier.barrier.fromStern) <= BARRIER_DEPTH / 2) return 'barrier';
   return 'deck';
 }
 
-export type SurfaceType = 'runway' | 'grass' | 'deck' | 'wires' | 'water';
+export type SurfaceType = 'runway' | 'grass' | 'deck' | 'wires' | 'barrier' | 'water';
 
 /** Tyre friction coefficients (force / normal load) per ground surface. */
 export interface SurfaceFriction {
@@ -191,6 +207,7 @@ export const SURFACE_FRICTION: Readonly<Record<SurfaceType, SurfaceFriction>> = 
   grass: { rolling: 0.07, braking: 0.35, lateral: 0.55 },
   deck: DECK_FRICTION,
   wires: DECK_FRICTION,
+  barrier: DECK_FRICTION,
   // Wheels in the sea: the flight model treats any contact as ditching; these only matter for one step.
   water: { rolling: 1, braking: 0, lateral: 1 },
 };

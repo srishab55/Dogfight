@@ -47,7 +47,7 @@ export class FlightInputController {
 
     const throttle = c.throttle + this.direction('throttleUp', 'throttleDown') * KEYBOARD_FLIGHT_CONFIG.throttlePerSecond * dt;
     c.throttle = Math.min(1, Math.max(0, throttle));
-    c.brake = KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && c.throttle === 0 ? 1 : 0;
+    c.brake = this.input.isHeld('brake') || (KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && c.throttle === 0) ? 1 : 0;
     c.fire = this.input.isHeld('fireGuns');
     return c;
   }

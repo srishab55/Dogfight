@@ -74,6 +74,9 @@ const ARRESTOR_DECELERATION = 16;
 /** Once stopped (below this speed, m/s) with the throttle below this, the deck crew frees the hook. */
 const ARRESTOR_RELEASE_SPEED = 0.5;
 const ARRESTOR_RELEASE_THROTTLE = 0.15;
+/** The crash barrier catches an aircraft rolling faster than this (m/s), costing this fraction of its hull. */
+const BARRIER_MIN_SPEED = 4;
+const BARRIER_DAMAGE = 0.15;
 
 // Scratch state, reused every step (the step allocates nothing).
 const bodyVelocity = vec3();
@@ -92,8 +95,12 @@ const BODY_FORWARD: Vec3 = { x: 0, y: 0, z: 1 };
  * Pure function of its inputs: the same state, controls and dt always give the
  * same result, which client prediction (Phase 5) depends on.
  */
-export function stepAircraft(state: AircraftState, controls: Readonly<FlightControls>, spec: AircraftClassSpec, ground: GroundQuery, dt: number): void {
+export function stepAircraft(state: AircraftState, pilotControls: Readonly<FlightControls>, spec: AircraftClassSpec, ground: GroundQuery, dt: number): void {
   if (state.crashed) return;
+  // Shot down: the pilot has lost control. The engine is dead and the
+  // aircraft rolls off into a falling spiral (always the same way, so the
+  // simulation stays deterministic).
+  const controls = state.shotDown ? outOfControl(pilotControls) : pilotControls;
 
   const { handling, engine } = spec;
   const g = PHYSICS_CONSTANTS.gravity;
@@ -129,7 +136,7 @@ export function stepAircraft(state: AircraftState, controls: Readonly<FlightCont
   const aero = applyFlaps(effectiveAero, spec, state.flapPosition, state.airbrakePosition);
 
   // ── Ground effect: the cushion of air under a wing close to the ground ──
-  const groundHeight = ground.heightAt(state.position.x, state.position.z);
+  const groundHeight = ground.groundEffectHeightAt ? ground.groundEffectHeightAt(state.position.x, state.position.z) : ground.heightAt(state.position.x, state.position.z);
   const wingHeight = state.position.y - groundHeight + spec.airframe.wing.y * spec.airframeScale;
   const inducedDragFactor = groundEffectInducedDragFactor(wingHeight, wingSpan(spec));
 
@@ -176,7 +183,8 @@ export function stepAircraft(state: AircraftState, controls: Readonly<FlightCont
     registerTouchdown(state, spec, groundContact.impactSinkRate);
     if (state.crashed) return;
   }
-  applyArrestorHook(state, spec, groundContact.onArrestorWires, worldForce);
+  applyArrestorHook(state, spec, groundContact.onArrestorWires, groundContact.onBarrier, worldForce);
+  if (state.crashed) return;
   applyCatapult(state, spec, controls, worldForce, dt);
 
   // ── Translation (semi-implicit Euler) ──
@@ -285,22 +293,34 @@ function registerTouchdown(state: AircraftState, spec: AircraftClassSpec, sinkRa
 }
 
 /**
- * The arrestor hook. It arms after a second in the air (so a take-off roll
- * over the wires doesn't catch one), catches a wire as soon as a main wheel
- * rolls across the wire zone, then pulls back along the deck until the
- * aircraft stops. It also cancels the engine's pull, so pilots can safely
- * hold power on touchdown in case they miss the wires, and it keeps holding
- * a stopped aircraft until the throttle comes back to idle, when the deck
- * crew frees the hook.
+ * Arrested landings. The hook arms after a second in the air (so a take-off
+ * roll over the wires doesn't catch one) and catches a wire as soon as a
+ * main wheel, or the hook itself just above the deck, is over the wire zone.
+ * An aircraft that misses the wires, or has no hook, and rolls into the
+ * crash barrier is stopped too, with some damage.
+ *
+ * Either way the aircraft is pulled back along the deck until it stops. The
+ * pull also cancels the engine's, so pilots can safely hold power on
+ * touchdown in case they miss the wires, and it keeps holding a stopped
+ * aircraft until the throttle comes back to idle, when the deck crew frees it.
  */
-function applyArrestorHook(state: AircraftState, spec: AircraftClassSpec, onWires: boolean, worldForce: Vec3): void {
-  if (!spec.airframe.tailhook) return;
-  if (!state.onGround && state.airborneTime >= MIN_AIRBORNE_TIME_FOR_TOUCHDOWN) state.hookArmed = true;
-  if (state.hookArmed && onWires) {
+function applyArrestorHook(state: AircraftState, spec: AircraftClassSpec, onWires: boolean, onBarrier: boolean, worldForce: Vec3): void {
+  const hasHook = spec.airframe.tailhook !== undefined;
+  if (hasHook && !state.onGround && state.airborneTime >= MIN_AIRBORNE_TIME_FOR_TOUCHDOWN) state.hookArmed = true;
+  if (hasHook && state.hookArmed && onWires) {
     state.hookEngaged = true;
     state.hookArmed = false;
   }
-  if (!state.hookEngaged) return;
+  const groundSpeed = Math.hypot(state.velocity.x, state.velocity.z);
+  if (onBarrier && !state.hookEngaged && !state.barrierEngaged && groundSpeed > BARRIER_MIN_SPEED) {
+    state.barrierEngaged = true;
+    state.hullHealth = Math.max(0, state.hullHealth - spec.combat.maxHullHealth * BARRIER_DAMAGE);
+    if (state.hullHealth <= 0) {
+      crash(state, 'wrecked in the crash barrier');
+      return;
+    }
+  }
+  if (!state.hookEngaged && !state.barrierEngaged) return;
 
   // The wire runs out behind the aircraft: it pulls back along the nose's heading.
   rotateVec3(noseDirection, state.orientation, BODY_FORWARD);
@@ -310,6 +330,7 @@ function applyArrestorHook(state: AircraftState, spec: AircraftClassSpec, onWire
   const forwardSpeed = -(state.velocity.x * backX + state.velocity.z * backZ);
   if (forwardSpeed < ARRESTOR_RELEASE_SPEED && state.throttle < ARRESTOR_RELEASE_THROTTLE) {
     state.hookEngaged = false;
+    state.barrierEngaged = false;
     return;
   }
   // Braking fades smoothly to zero at a standstill (tanh), so it never drags the aircraft backwards.
@@ -350,9 +371,21 @@ function applyCatapult(state: AircraftState, spec: AircraftClassSpec, controls: 
   if (state.catapultTravel >= CATAPULT_CONFIG.stroke) state.catapult = 'none';
 }
 
+const outOfControlScratch: FlightControls = { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: 0, flaps: 0, airbrake: 0, fire: false };
+
+function outOfControl(pilot: Readonly<FlightControls>): FlightControls {
+  const c = outOfControlScratch;
+  c.pitch = -0.15;
+  c.roll = 0.45;
+  c.yaw = 0.25;
+  c.flaps = pilot.flaps;
+  c.airbrake = pilot.airbrake;
+  return c;
+}
+
 function crash(state: AircraftState, reason: string): void {
   state.crashed = true;
-  state.crashReason = reason;
+  state.crashReason = state.shotDown ? 'shot down' : reason;
   setVec3(state.velocity, 0, 0, 0);
   setVec3(state.acceleration, 0, 0, 0);
   setVec3(state.angularVelocity, 0, 0, 0);

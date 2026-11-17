@@ -479,3 +479,60 @@ body {
     letter-spacing: 0.28em;
   }
 }
+
+/* Hit by flak: the screen edge glows red for a moment. */
+.hud-damage-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 140px 30px rgba(255, 40, 20, 0.55);
+}
+
+.hud-damage-flash[hidden] {
+  display: none;
+}
+
+/* Approach calls (LSO on a carrier), just under the title. */
+.hud-approach {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 6px 16px;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.hud-approach[hidden] {
+  display: none;
+}
+
+.hud-approach-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+}
+
+.hud-approach [data-tone='good'] {
+  color: var(--hud-text);
+}
+
+.hud-approach [data-tone='ok'] {
+  color: #e8eef5;
+}
+
+.hud-approach [data-tone='warn'] {
+  color: var(--warning-amber);
+}
+
+.hud-approach [data-tone='bad'] {
+  color: var(--warning-red);
+  font-weight: 700;
+}

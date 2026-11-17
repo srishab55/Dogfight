@@ -8,6 +8,7 @@ import {
   createAirborneState,
   createFlatGround,
   createGunState,
+  createPracticeTargets,
   gunMounts,
   segmentSphereIntersection,
   stepGuns,
@@ -23,6 +24,15 @@ const spec = AIRCRAFT_CLASSES.fighterBomber;
 const gun = GUN_SPECS.fighterBomber;
 const noScatter: GunSpec = { ...gun, dispersionDeg: 0 };
 const ignoreImpacts = { onGroundImpact: () => {}, onTargetHit: () => {} };
+
+/** A practice balloon at `position`, standing (or burst, with a respawn timer). */
+const balloonAt = (position: { x: number; y: number; z: number }, health: number = PRACTICE_TARGET_CONFIG.maxHealth, respawnTimer = 0): PracticeTarget => ({
+  ...(createPracticeTargets()[0] as PracticeTarget),
+  id: 0,
+  position,
+  health,
+  respawnTimer,
+});
 
 /** Level aircraft flying north at 1 km altitude. */
 const flyingNorth = (speed = 100): AircraftState => createAirborneState(spec, { x: 0, y: 1000, z: 0 }, 0, speed, 0.7);
@@ -123,13 +133,13 @@ describe('hit detection', () => {
   });
 
   it('firing at a balloon dead ahead bursts it', () => {
-    const target: PracticeTarget = { id: 0, position: { x: 0, y: 1000, z: 400 }, radius: PRACTICE_TARGET_CONFIG.radius, health: PRACTICE_TARGET_CONFIG.maxHealth, respawnTimer: 0 };
+    const target = balloonAt({ x: 0, y: 1000, z: 400 });
     const world = new CombatWorld(ground, [target]);
     const aircraft = flyingNorth();
     const guns = createGunState(spec);
     const events: string[] = [];
     for (let t = 0; t < 3; t += STEP) {
-      world.step(STEP, [{ id: 1, state: aircraft, spec, guns, trigger: t < 1.5 }]);
+      world.step(STEP, [{ id: 1, team: 'blue', state: aircraft, spec, guns, trigger: t < 1.5 }]);
       events.push(...world.drainEvents().map((e) => e.type));
     }
     expect(events).toContain('targetHit');
@@ -145,7 +155,7 @@ describe('hit detection', () => {
     const guns = createGunState(spec);
     let groundImpacts = 0;
     for (let t = 0; t < 2; t += STEP) {
-      world.step(STEP, [{ id: 1, state: aircraft, spec, guns, trigger: t < 0.5 }]);
+      world.step(STEP, [{ id: 1, team: 'blue', state: aircraft, spec, guns, trigger: t < 0.5 }]);
       groundImpacts += world.drainEvents().filter((e) => e.type === 'groundImpact').length;
     }
     expect(groundImpacts).toBeGreaterThan(10);
@@ -153,7 +163,7 @@ describe('hit detection', () => {
   });
 
   it('a burst balloon reappears after its respawn time', () => {
-    const target: PracticeTarget = { id: 0, position: { x: 0, y: 1000, z: 400 }, radius: 4, health: 0, respawnTimer: PRACTICE_TARGET_CONFIG.respawnSeconds };
+    const target = balloonAt({ x: 0, y: 1000, z: 400 }, 0, PRACTICE_TARGET_CONFIG.respawnSeconds);
     const world = new CombatWorld(ground, [target]);
     for (let t = 0; t < PRACTICE_TARGET_CONFIG.respawnSeconds + 0.1; t += STEP) world.step(STEP, []);
     expect(target.health).toBe(PRACTICE_TARGET_CONFIG.maxHealth);

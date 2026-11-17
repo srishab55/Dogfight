@@ -2,15 +2,22 @@ import { PHYSICS_CONSTANTS } from '../config/simulation';
 import type { GroundQuery } from '../flight/ground';
 import type { Vec3 } from '../types/vector';
 
-/** Anything a round can hit, approximated as a sphere. Aircraft hit shapes arrive with combat between aircraft. */
+/** Anything a round can hit, approximated as a sphere (aircraft are a few of them). */
 export interface SphereTarget {
   readonly position: Readonly<Vec3>;
   readonly radius: number;
+  /** Team code (see `teamCode`); rounds pass through their own team. Omitted or -1: anyone can hit it. */
+  readonly team?: number;
+}
+
+/** Team as a small integer for the typed arrays: 0 Blue, 1 Red, -1 nobody's (practice targets). */
+export function teamCode(team: 'blue' | 'red' | null): number {
+  return team === 'blue' ? 0 : team === 'red' ? 1 : -1;
 }
 
 /** Receives what rounds hit during a step. Plain arguments (no event objects) so the hot loop allocates nothing. */
 export interface ImpactListener {
-  onGroundImpact(x: number, y: number, z: number, owner: number): void;
+  onGroundImpact(x: number, y: number, z: number, owner: number, team: number, damage: number): void;
   onTargetHit(targetIndex: number, x: number, y: number, z: number, damage: number, owner: number): void;
 }
 
@@ -35,6 +42,8 @@ export class ProjectilePool {
   readonly lifetime: Float64Array;
   readonly damage: Float64Array;
   readonly owner: Int32Array;
+  /** Team code of whoever fired it: rounds don't hit their own side. */
+  readonly team: Int8Array;
   readonly active: Uint8Array;
   private readonly freeSlots: number[];
   activeCount = 0;
@@ -50,13 +59,14 @@ export class ProjectilePool {
     this.lifetime = new Float64Array(capacity);
     this.damage = new Float64Array(capacity);
     this.owner = new Int32Array(capacity);
+    this.team = new Int8Array(capacity);
     this.active = new Uint8Array(capacity);
     // Free slots as a stack, highest index at the bottom.
     this.freeSlots = Array.from({ length: capacity }, (_, i) => capacity - 1 - i);
   }
 
   /** Adds a round. Returns false if the pool is full (the round is dropped). */
-  spawn(position: Readonly<Vec3>, velocity: Readonly<Vec3>, lifetime: number, damage: number, owner: number): boolean {
+  spawn(position: Readonly<Vec3>, velocity: Readonly<Vec3>, lifetime: number, damage: number, owner: number, team = -1): boolean {
     const slot = this.freeSlots.pop();
     if (slot === undefined) return false;
     this.px[slot] = position.x;
@@ -69,6 +79,7 @@ export class ProjectilePool {
     this.lifetime[slot] = lifetime;
     this.damage[slot] = damage;
     this.owner[slot] = owner;
+    this.team[slot] = team;
     this.active[slot] = 1;
     this.activeCount++;
     return true;
@@ -107,9 +118,11 @@ export class ProjectilePool {
       // Earliest thing this step's segment touches: a target or the ground.
       let hitT = Infinity;
       let hitTarget = -1;
+      const team = this.team[i] ?? -1;
       for (let t = 0; t < targets.length; t++) {
         const target = targets[t];
         if (!target) continue;
+        if (team >= 0 && target.team === team) continue; // no friendly fire
         const along = segmentSphereIntersection(x0, y0, z0, dx, dy, dz, target);
         if (along < hitT) {
           hitT = along;
@@ -123,7 +136,7 @@ export class ProjectilePool {
         if (groundT < hitT) {
           hitT = groundT;
           hitTarget = -1;
-          listener.onGroundImpact(x0 + dx * groundT, groundY, z0 + dz * groundT, this.owner[i] ?? -1);
+          listener.onGroundImpact(x0 + dx * groundT, groundY, z0 + dz * groundT, this.owner[i] ?? -1, team, this.damage[i] ?? 0);
           this.release(i);
           continue;
         }

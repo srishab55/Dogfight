@@ -39,7 +39,7 @@ export function createCarrierModel(scene: Scene, carrier: CarrierDefinition): Tr
   const hull = merge(`${name}-hull`, [buildHull(scene, carrier), buildDeckSlab(scene, carrier)], hullMaterial);
   const deck = buildDeckSurface(scene, carrier);
   const island = merge(`${name}-island`, buildIsland(scene, carrier), islandMaterial);
-  const dark = merge(`${name}-fittings`, [...buildWires(scene, carrier), ...buildGunTubs(scene, carrier), ...buildIslandDetails(scene, carrier), buildCatapultTrack(scene, carrier)], darkMaterial);
+  const dark = merge(`${name}-fittings`, [...buildWires(scene, carrier), ...buildBarrier(scene, carrier), ...buildGunTubs(scene, carrier), ...buildIslandDetails(scene, carrier), buildCatapultTrack(scene, carrier)], darkMaterial);
   const team = merge(`${name}-team-colours`, buildTeamMarkings(scene, carrier), teamMaterial);
 
   for (const mesh of [hull, deck, island, dark, team]) {
@@ -149,6 +149,12 @@ function createDeckTexture(scene: Scene, carrier: CarrierDefinition): DynamicTex
   for (let i = 0; i < 4; i++) ctx.fillRect(0, yAt(1 + i * 2), width, 0.6 * scale);
   ctx.fillRect(0, yAt(carrier.wires.from), width, 0.4 * scale);
   ctx.fillRect(0, yAt(carrier.wires.to), width, 0.4 * scale);
+  // Amber and black stripes where the barrier stands.
+  for (let x = 0, i = 0; x < width; x += 2 * scale, i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#d9a21b' : '#1c1c1c';
+    ctx.fillRect(x, yAt(carrier.barrier.fromStern) - scale, 2 * scale, 2 * scale);
+  }
+  ctx.fillStyle = config.deckMarkingColor;
   // Hull number near the bow. Its top faces the bow, so it reads upright on approach from astern.
   ctx.save();
   ctx.translate(width / 2, yAt(carrier.deckLength - config.deckNumberFromBow));
@@ -170,6 +176,24 @@ function buildWires(scene: Scene, carrier: CarrierDefinition): Mesh[] {
     wire.position.set(0, 0.06, alongDeck(carrier, from + ((to - from) * i) / Math.max(1, count - 1)));
     return wire;
   });
+}
+
+/** The crash barrier: a stanchion at each deck edge with cables strung across between them. */
+function buildBarrier(scene: Scene, carrier: CarrierDefinition): Mesh[] {
+  const z = alongDeck(carrier, carrier.barrier.fromStern);
+  const parts: Mesh[] = [];
+  for (const side of [1, -1]) {
+    const post = CreateCylinder(`barrier-post-${side}`, { height: 1.6, diameter: 0.18, tessellation: 6 }, scene);
+    post.position.set(side * (carrier.deckWidth / 2 - 0.8), 0.8, z);
+    parts.push(post);
+  }
+  for (const height of [0.5, 1, 1.5]) {
+    const cable = CreateCylinder(`barrier-cable-${height}`, { height: carrier.deckWidth - 1.6, diameter: 0.05, tessellation: 4 }, scene);
+    cable.rotation.z = Math.PI / 2;
+    cable.position.set(0, height, z);
+    parts.push(cable);
+  }
+  return parts;
 }
 
 /** The catapult: a dark slot along the deck centreline at the bow. */

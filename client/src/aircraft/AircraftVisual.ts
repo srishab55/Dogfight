@@ -44,6 +44,11 @@ export class AircraftVisual {
     root.rotationQuaternion ??= Quaternion.Identity();
   }
 
+  /** Propeller speed as a fraction of full power's (0-1), lagged like the spin-up you see: drives the engine sound. */
+  get propellerSpeed(): number {
+    return this.propellerRevs / PROPELLER_VISUAL_CONFIG.maxRevsPerSecond;
+  }
+
   setPose(position: Vector3, orientation: Quaternion): void {
     this.root.position.copyFrom(position);
     // Set in the constructor, so it is never null here.

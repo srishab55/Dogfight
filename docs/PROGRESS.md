@@ -2,11 +2,11 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Islands-and-carriers milestone done (your request): the
-title, an island map with two carriers, five aircraft types, limited
-ammunition and rearming at bases. Phase 3 (graphics) and Phase 4 (combat)
-continue. Waiting for your flight test ([FLIGHT_TEST.md](FLIGHT_TEST.md),
-cards 19–24) and confirmation before continuing.
+**Current status:** Combat targets and sound done (your request: points 3 and
+4 of Phase 4), plus your fixes: a brake key and much easier carrier landings.
+Remaining in Phase 4: bombs and aircraft damage visuals beyond smoke. Waiting
+for your flight test ([FLIGHT_TEST.md](FLIGHT_TEST.md), cards 21, 25–28) and
+confirmation before continuing.
 
 ## Extras added along the way
 
@@ -29,6 +29,16 @@ cards 19–24) and confirmation before continuing.
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Milestone: something to fight, sound, easier landings ✅ (your request, 2026-11-17)
+
+- ✅ Red's defences (shared, deterministic): four AA guns at its airfield and four on its carrier (lead the target, slew at limited rates, fire bursts of 40 mm tracer), four parked aircraft, and the carrier itself. Everything takes damage, is destroyed, and respawns (practice rules until Phase 6)
+- ✅ Rounds carry their team: no friendly fire. Aircraft have hit shapes from their airframes; AA hits damage your hull; at zero you're shot down (out of control, falls, crashes as "shot down")
+- ✅ The Red carrier: armour halves gun damage; destroyed, it burns, sinks by the stern over about a minute (its deck stops being ground, its guns go down with it), and a fresh one returns after 3 minutes
+- ✅ Effects: fire, smoke and explosions as sprites (two draw calls); burning wrecks; a smoke trail as your hull drops, flames when shot down; red-orange enemy tracers; screen-edge red flash and camera kick when hit
+- ✅ Sound (Web Audio, all synthesised): engine per airframe type (four-engine beat), wind, your guns, AA "pom", explosions placed in 3D and delayed by the speed of sound, hit clanks, touchdown thump and tyre chirp, catapult whoosh, arrestor wire, stall horn, pull-up tone, dry click; **M** mutes
+- ✅ Your fixes: wheel brakes on **B** (no more automatic brakes at idle); carrier landings made easier: ten wires over the first 125 m, the hook catches from just above the deck, a crash barrier stops anyone who misses, no ground-effect float over the deck, LSO calls on the HUD (also for the runway)
+- Verified: 270 tests (1 skipped by design), typecheck, production build, and headless Chrome: AA fires red tracer and hits you, strafing destroys parked aircraft, the carrier burns and sinks, shot down by flak, sound level rises with the engine and guns, LSO calls and an early trap, B brakes to a stop. 60 FPS, no console errors
 
 ## Phase 0: Project foundation ✅
 
@@ -119,10 +129,10 @@ console errors, zero failed or external requests, and screenshots of each state.
 - ✅ 14 combat tests (`shared/test/combat.test.ts`)
 - ✅ Limited ammunition, rearming and repair at friendly bases (early, at your request); splashes where rounds hit the sea
 - ⬜ Bombs: release, inherited velocity, ballistic fall, ground impact, area damage
-- ⬜ Aircraft-vs-aircraft hits and hull damage (needs other aircraft: AI or a second player); Rapier for complex hit shapes
-- ⬜ Damage effects: white smoke < 60%, dark smoke and fire < 30%, explosion and debris at 0
+- ✅ Hits on aircraft and hull damage (from AA guns now; from other aircraft when AI or a second player arrive)
+- ✅ Damage effects: grey smoke below 60% hull, black smoke and fire below 30%, explosion when destroyed or crashed (debris: later)
 - ⬜ HUD: health, gun heat, bomb count
-- ⬜ Procedural audio: engine, guns, bomb whistle, explosion, warnings; mute
+- ✅ Procedural audio: engine, guns, explosions, warnings, mute (bomb whistle comes with bombs)
 
 ## Phase 5: Multiplayer ⬜
 
@@ -139,7 +149,8 @@ console errors, zero failed or external requests, and screenshots of each state.
 - ⬜ Base health, destruction to neutral, capture by landing
 - ✅ Rearming and repair at your team's bases (early)
 - ⬜ Forward spawning; rearming at captured bases
-- ⬜ AA turrets; team scoring; victory (all bases, or 25 kills)
+- ✅ AA guns (early, Red's side)
+- ⬜ Team scoring; victory (all bases, or 25 kills)
 
 ## Phase 7: AI ⬜
 

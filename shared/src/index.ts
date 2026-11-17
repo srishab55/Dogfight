@@ -84,8 +84,12 @@ export { stallAngles, wingSpan } from './flight/aerodynamics';
 export { DEFAULT_DIRECTION_PILOT, steerTowards, type DirectionPilotTuning, type StickInputs } from './flight/directionPilot';
 
 export { GUN_SPECS, PRACTICE_TARGET_CONFIG, SERVICE_CONFIG, type GunSpec } from './config/weapons';
-export { createGunState, fullAmmo, gunMounts, stepGuns, type GunState } from './combat/guns';
+export { createGunState, fullAmmo, gunMounts, hashToUnit, stepGuns, type GunState } from './combat/guns';
+export { AA_GUN_CONFIG, AIRCRAFT_HIT_SHAPE_CONFIG, CARRIER_DAMAGE_CONFIG, ENEMY_LAYOUT, PARKED_AIRCRAFT_CONFIG } from './config/targets';
+export { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './combat/antiAircraft';
+export { airframeHitSpheres, placeHitSpheres, type HitSphere, type PlacedSphere } from './combat/hitShapes';
+export { createCarrierStatuses, type CarrierStatus, type CarrierStatusMap } from './world/carrierStatus';
 export { createServiceStatus, needsService, stepService, type ServiceEvent, type ServiceStatus } from './combat/service';
-export { ProjectilePool, segmentSphereIntersection, type ImpactListener, type SphereTarget } from './combat/projectiles';
-export { createPracticeTargets, isTargetAlive, type PracticeTarget } from './combat/targets';
+export { ProjectilePool, segmentSphereIntersection, teamCode, type ImpactListener, type SphereTarget } from './combat/projectiles';
+export { createPracticeTargets, createTargets, damageTarget, isTargetAlive, updateTargets, type CombatTarget, type PracticeTarget, type TargetKind } from './combat/targets';
 export { CombatWorld, type CombatEvent, type Shooter } from './combat/CombatWorld';

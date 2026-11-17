@@ -16,7 +16,7 @@ export class TargetBalloons {
 
   constructor(scene: Scene, targets: readonly PracticeTarget[]) {
     const texture = createStripeTexture(scene);
-    this.balloons = targets.map((target) => {
+    this.balloons = targets.filter((target) => target.kind === 'balloon').map((target) => {
       const mesh = CreateSphere(`balloon-${target.id}`, { diameter: target.radius * 2, segments: 16 }, scene);
       mesh.position.set(target.position.x, target.position.y, target.position.z);
       mesh.isPickable = false;

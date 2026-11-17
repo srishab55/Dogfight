@@ -36,3 +36,54 @@ export const BALLOON_CONFIG = {
   /** How long a balloon glows after taking a hit (s). */
   hitFlashSeconds: 0.12,
 } as const;
+
+/** AA tracer colour: red-orange, so incoming fire reads differently from your own. */
+export const ENEMY_TRACER_COLOR = '#ff6a3a';
+
+/**
+ * Smoke, flames and explosions: soft camera-facing sprites. Fire is drawn
+ * additively and brighter than white, so the post-process bloom makes it glow.
+ */
+export const FIRE_AND_SMOKE_CONFIG = {
+  smokeCapacity: 1_400,
+  fireCapacity: 700,
+  /** Puff lifetimes (s), sizes at birth and death (m), and how fast puffs rise (m/s). */
+  smoke: { life: 6, startSize: 3, endSize: 16, rise: 5, drift: 1.5 },
+  flame: { life: 0.7, startSize: 3.5, endSize: 1, rise: 6 },
+  /** Grey of light (engine-damage) smoke and of black (fire) smoke, sRGB 0-1. */
+  lightSmokeShade: 0.78,
+  darkSmokeShade: 0.1,
+  /** Flame colour (HDR: above 1 blooms). */
+  flameColor: [3.2, 1.5, 0.45],
+  /** Explosions: fireball size (m) per unit of `scale`, and how many smoke puffs and flames make one. */
+  explosion: { fireballSize: 16, flames: 14, puffs: 10, life: 0.9 },
+} as const;
+
+/**
+ * Burning things. Emitters spawn puffs at these rates (per second) while a
+ * target burns; damaged aircraft trail smoke.
+ */
+export const BURN_CONFIG = {
+  /** A destroyed gun or parked aircraft: flames for this long, then smoke until it's replaced (s). */
+  wreckFlameSeconds: 30,
+  wreckSmokePerSecond: 5,
+  wreckFlamesPerSecond: 14,
+  /** The carrier: smoke below this hull fraction, fires below the second, a blaze once destroyed. */
+  carrierSmokeBelow: 0.7,
+  carrierFireBelow: 0.35,
+  /** Aircraft: light smoke below this hull fraction, black smoke and flames below the second. */
+  aircraftSmokeBelow: 0.6,
+  aircraftFireBelow: 0.3,
+  aircraftSmokePerSecond: 22,
+} as const;
+
+/** Look of the AA guns and of wrecks. */
+export const DEFENCE_VISUAL_CONFIG = {
+  sandbagColor: '#8b7d5c',
+  gunColor: '#3b3f36',
+  wreckColor: '#1d1b19',
+  /** Red flash on the screen edge when you're hit (s). */
+  hitFlashSeconds: 0.35,
+  /** Camera kick when hit (m of shake, decaying). */
+  hitShake: 0.35,
+} as const;

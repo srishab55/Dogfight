@@ -5,7 +5,7 @@
  *
  * Throttle is on the arrow keys (decision D10 in ARCHITECTURE.md): Ctrl+W
  * closes the browser tab on Windows and Linux, and pages can't block it.
- * Guns are on Space. Bombs (B) arrive with the rest of Phase 4. The mouse can
+ * Guns are on Space; wheel brakes on B (IL-2's key). Bombs arrive with the rest of Phase 4, on another key. The mouse can
  * fly the aircraft too (MOUSE_FLIGHT_CONFIG below). X opens and closes the
  * dive brakes (only the Dive Bomber has them).
  * The Settings screen (Phase 8) will let players override these defaults.
@@ -21,6 +21,7 @@ export const KEY_BINDINGS = {
   throttleDown: ['ArrowDown'],
   flapsDown: ['KeyF'],
   flapsUp: ['KeyV'],
+  brake: ['KeyB'],
   toggleDiveBrakes: ['KeyX'],
   fireGuns: ['Space'],
   cycleCamera: ['KeyC'],
@@ -34,6 +35,7 @@ export const KEY_BINDINGS = {
   selectDiveBomber: ['Digit5'],
   mouseSensitivityDown: ['BracketLeft'],
   mouseSensitivityUp: ['BracketRight'],
+  toggleMute: ['KeyM'],
   toggleControlsHelp: ['KeyH'],
   toggleDebugOverlay: ['Backquote'],
 } as const satisfies Record<string, readonly string[]>;
@@ -54,8 +56,11 @@ export const KEYBOARD_FLIGHT_CONFIG = {
   axisReturnPerSecond: 6,
   /** Throttle lever travel per second while an arrow is held (0.5 = idle to full in 2 s). */
   throttlePerSecond: 0.5,
-  /** Apply the wheel brakes automatically whenever the throttle is at idle. */
-  autoBrakeAtIdle: true,
+  /**
+   * Apply the wheel brakes automatically whenever the throttle is at idle.
+   * Off: the brakes are on their own key (B), so you can roll freely at idle.
+   */
+  autoBrakeAtIdle: false,
   /** Flap lever positions that F / V step through: up, take-off, landing. */
   flapNotches: [0, 0.5, 1],
   flapNotchNames: ['UP', 'TAKE-OFF', 'LANDING'],
@@ -94,7 +99,8 @@ export const CONTROLS_HINT_ROWS: ReadonlyArray<{ readonly actions: readonly Inpu
   { actions: ['pitchUp', 'pitchDown'], label: 'Pitch up / down' },
   { actions: ['rollLeft', 'rollRight'], label: 'Roll left / right' },
   { actions: ['yawLeft', 'yawRight'], label: 'Rudder left / right (steers on the ground)' },
-  { actions: ['throttleUp', 'throttleDown'], label: 'Throttle up / down (idle = brakes)' },
+  { actions: ['throttleUp', 'throttleDown'], label: 'Throttle up / down' },
+  { actions: ['brake'], label: 'Wheel brakes (hold)' },
   { actions: ['flapsDown', 'flapsUp'], label: 'Flaps down / up a notch' },
   { actions: ['toggleDiveBrakes'], label: 'Dive brakes out / in (Dive Bomber)' },
   { actions: ['fireGuns'], label: 'Fire guns (hold; limited ammo, watch the heat)' },
@@ -104,6 +110,7 @@ export const CONTROLS_HINT_ROWS: ReadonlyArray<{ readonly actions: readonly Inpu
   { actions: ['landingPractice'], label: 'Landing practice (carrier aircraft: the carrier)' },
   { actions: ['selectInterceptor', 'selectFighterBomber', 'selectHeavyBomber', 'selectNavalFighter', 'selectDiveBomber'], label: 'Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber' },
   { actions: ['mouseSensitivityDown', 'mouseSensitivityUp'], label: 'Mouse sensitivity down / up' },
+  { actions: ['toggleMute'], label: 'Sound on / off' },
   { actions: ['toggleControlsHelp'], label: 'Hide this help' },
   { actions: ['toggleDebugOverlay'], label: 'Debug stats' },
 ];

@@ -21,11 +21,9 @@ None known.
 | L13 | The Interceptor and the Fighter-Bomber share one airframe shape (the Interceptor is 8% smaller) | They look alike | Phase 3 (Blender models) |
 | L14 | Cockpit view hides the player's airframe (no cockpit model yet) | No wing or nose reference in that view | Phase 3 |
 | L15 | Keyboard only: no joystick, gamepad or mouse-aim flight | Fine control takes practice (taps) | Later, if wanted (Gamepad API) |
-| L16 | Brakes are automatic at idle throttle; there is no brake key | Can't roll freely at idle on the ground | Decide when play-testing |
 | L18 | No world boundary: you can fly past the 14 km playable area over open sea | Can wander off the map | Phase 6 (soft boundary) |
 | L19 | The Heavy Bomber can't complete a loop: it stalls near the top | By design (power and g-limit) | None |
-| L20 | Only practice balloons can be hit; aircraft have no hit shapes yet | Nothing shoots back | Phase 4/7 (AI) or 5 (second player) |
-| L21 | No sound yet: no engine, guns or warning tones | Silent | Phase 4 (Web Audio) |
+| L20 | No enemy aircraft yet: Red's AA guns shoot back, but nothing flies against you | No dogfights | Phase 7 (AI) or 5 (second player) |
 | L22 | Hit detection uses analytic spheres and the world ground (terrain, sea, carrier blocks), not Rapier (decision D16) | Exact for balloons; aircraft and buildings need better shapes | When aircraft hit shapes arrive |
 | L23 | Rounds have no air drag (gravity only) | Slightly flatter trajectories than real at long range | Add if gunnery feel needs it |
 | L24 | Tracers are drawn at physics-step positions (not interpolated) | Possible slight shimmer on 120 Hz displays | Interpolate if noticed |
@@ -38,13 +36,18 @@ None known.
 | L27 | Bombs not implemented yet | B does nothing | Phase 4 |
 | L33 | Carriers are anchored: they don't sail, turn into the wind or leave a wake | Static targets and decks | Later (moving decks need moving-platform ground contact) |
 | L34 | No wind, so no wind over the deck; the catapult gives 3 g to make up for it (WWII catapults gave less) | Launches are a little brisker than history | Revisit with wind (L12) |
-| L35 | The Red carrier, airfield and ships can be hit but not damaged | Rounds stop on them; nothing happens | Phase 4/6 (ship and base damage) |
+| L35 | Only Red has AA guns, parked aircraft and a damageable carrier; Blue's bases can't be attacked (there's no enemy to attack them) | One-sided | Phase 6/7 |
 | L36 | Every type has tricycle gear, including the Naval Fighter and Dive Bomber (historically tail-draggers) | Easier ground handling | By design (ARCHITECTURE D29) |
 | L37 | Rearming also fully repairs the hull, in 6 s, at any friendly base | Generous | Phase 6 (repair and capture rules) |
-| L38 | Hands-off carrier approaches float about 40 m long in ground effect over the deck; the glide slope aims just past the first wire to compensate | A flown approach should aim early | By design |
+| L38 | Carrier decks give no ground effect (the cushion would float aircraft past the wires) | Carrier approaches feel a little firmer than a runway's | By design (ARCHITECTURE D33) |
 | L39 | The Heavy Bomber floats in ground effect after touchdown unless you lower the nose (its 24 m wing is 2 m off the runway) | Push gently after touchdown | By design (real big aircraft do this) |
 | L40 | The sea reflects only the sky: no aircraft, island or ship reflections, no shadows on the water; the waves are shading on a flat surface | Looks right from the air; less so at wave-top height | Later, if wanted |
 | L41 | Sea bed more than 1.5 m deep is drawn deeper than it is (hidden under the opaque sea), to stop depth-buffer flicker far away | None visible | By design |
+| L42 | Sound is synthesised: convincing in the main but simple; no Doppler shift, and your own engine doesn't change between cockpit and chase views | Fine on laptop speakers | Later, if wanted |
+| L43 | Sound starts only after your first key press or click (browser autoplay rules) | A silent title screen | By design |
+| L44 | Destroyed targets come back after 1.5 to 3 minutes; destroyed things have no debris, only fire and smoke | Practice rules | Phase 6 (base rules) |
+| L45 | The AA has light guns only; no heavy flak bursting at altitude | High bombers are safe above about 1.5 km | Later, if wanted |
+| L46 | Bombs now need a key other than B (B is the wheel brake) | None yet | Phase 4 bombs |
 | L32 | Vercel hosts only the static client. Its free Hobby plan is for non-commercial use (about 100 GB transfer a month) and can't run the long-lived WebSocket game server | Fine for single-player; multiplayer needs another host | Phase 5 (self-host the Colyseus server; see README "Deploying") |
 
 ## Upcoming risks (decide before or during the relevant phase)
@@ -83,6 +86,11 @@ None known.
 | Landing too hard: no flaps, no glide-slope cues, firm arrivals destroyed the aircraft | User feedback, Phase 2 | Flaps, ground effect, rebound damping, PAPI, flight-path marker, landing practice, damage instead of a crash below 7.5 m/s |
 | Runway hidden behind the aircraft on short final in chase view | Phase 2 screenshot | Chase camera raised (5 m up, 17 m back) |
 | Key-tapping test pilot crashed the landing practice | Phase 2 browser test | Practice now starts at the derived hands-off speed and throttle, so it holds the glide slope by itself |
+| Brakes were automatic at idle, with no brake key (was L16) | Your request | Wheel brakes on B; automatic braking off |
+| Carrier landings too hard | Your feedback | Longer wire zone, hook reach, crash barrier, no deck ground effect, LSO calls; tests "hook catches from just above the deck" and "barrier stops a hookless aircraft" |
+| Strafing tests aimed the flight path, not the guns, so rounds passed over the target | Combat browser test | Test fixed (not a game bug: the guns point along the nose and converge at 300 m) |
+| AA guns barely hit anything | Hit-rate measurement per geometry | 4 rounds/s, tighter scatter, 8 damage: a battery takes a third to a half of a Fighter-Bomber's hull per pass |
+| The lowered hook didn't reach below the wheels | Carrier tests | Hooks 1.7 m long, lowered 65 degrees |
 | Terrain shader didn't compile (`vMainUV1` undeclared), so the scene never loaded | Phase 3 browser test | Splat coordinates from the world position (`vPositionW`) instead |
 | Sea drawn over low coastal land when seen from altitude (white surf stripes across the island) | Islands browser test | Removed the water's polygon offset; deep sea bed pushed down in the render mesh instead |
 | Approach lights 8 km away floated over the horizon as red boxes | Islands browser test | Lights only show inside their approach sector (±15°, < 9 km), like real PAPI optics |

@@ -6,45 +6,52 @@ import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
 import type { ProjectilePool } from '@dogfight/shared';
-import { TRACER_CONFIG } from '../config/combatVisuals';
+import { ENEMY_TRACER_COLOR, TRACER_CONFIG } from '../config/combatVisuals';
 
 /**
  * Draws every round in flight as a glowing streak, all in ONE draw call using
  * thin instances: one box mesh, plus a buffer of per-instance transform
- * matrices refilled each frame. 200 separate meshes would cost 200 draw calls.
+ * matrices refilled each frame. 200 separate meshes would cost 200 draw calls;
+ * this costs one per colour.
  */
 export class TracerRenderer {
-  private readonly mesh: Mesh;
-  private readonly matrices: Float32Array;
+  /** One thin-instanced mesh per colour: gold for Blue's rounds, red-orange for Red's (incoming flak). */
+  private readonly layers: Array<{ mesh: Mesh; matrices: Float32Array; count: number }>;
 
   constructor(
     scene: Scene,
     private readonly pool: ProjectilePool,
   ) {
-    this.mesh = CreateBox('tracers', { size: 1 }, scene);
-    const material = new StandardMaterial('tracer-material', scene);
-    // Unlit and self-coloured: tracers burn, so lighting shouldn't darken them.
-    material.disableLighting = true;
-    material.emissiveColor = Color3.FromHexString(TRACER_CONFIG.color);
-    this.mesh.material = material;
-    this.mesh.isPickable = false;
-    // Bright at range: don't fade tracers into the haze.
-    this.mesh.applyFog = false;
-    // Instances are everywhere, so skip frustum culling of the shared mesh.
-    this.mesh.alwaysSelectAsActiveMesh = true;
-
-    this.matrices = new Float32Array(pool.capacity * 16);
-    this.mesh.thinInstanceSetBuffer('matrix', this.matrices, 16, false);
-    this.mesh.thinInstanceCount = 0;
+    this.layers = [TRACER_CONFIG.color, ENEMY_TRACER_COLOR].map((color, index) => {
+      const mesh = CreateBox(`tracers-${index}`, { size: 1 }, scene);
+      const material = new StandardMaterial(`tracer-material-${index}`, scene);
+      // Unlit and self-coloured: tracers burn, so lighting shouldn't darken them.
+      material.disableLighting = true;
+      material.emissiveColor = Color3.FromHexString(color);
+      mesh.material = material;
+      mesh.isPickable = false;
+      // Bright at range: don't fade tracers into the haze.
+      mesh.applyFog = false;
+      // Instances are everywhere, so skip frustum culling of the shared mesh.
+      mesh.alwaysSelectAsActiveMesh = true;
+      const matrices = new Float32Array(pool.capacity * 16);
+      mesh.thinInstanceSetBuffer('matrix', matrices, 16, false);
+      mesh.thinInstanceCount = 0;
+      return { mesh, matrices, count: 0 };
+    });
   }
 
   /** Rebuilds the instance matrices from the rounds currently in flight. */
   update(cameraPosition: Vector3): void {
     const p = this.pool;
-    const m = this.matrices;
-    let count = 0;
+    for (const layer of this.layers) layer.count = 0;
     for (let i = 0; i < p.capacity; i++) {
       if (!p.active[i]) continue;
+      // Team 1 is Red: their rounds draw in the enemy colour.
+      const layer = this.layers[(p.team[i] ?? 0) === 1 ? 1 : 0];
+      if (!layer) continue;
+      const m = layer.matrices;
+      const count = layer.count;
       const x = p.px[i] ?? 0;
       const y = p.py[i] ?? 0;
       const z = p.pz[i] ?? 0;
@@ -96,13 +103,15 @@ export class TracerRenderer {
       m[o + 13] = y - (fy * length) / 2;
       m[o + 14] = z - (fz * length) / 2;
       m[o + 15] = 1;
-      count++;
+      layer.count++;
     }
-    this.mesh.thinInstanceCount = count;
-    this.mesh.thinInstanceBufferUpdated('matrix');
+    for (const layer of this.layers) {
+      layer.mesh.thinInstanceCount = layer.count;
+      layer.mesh.thinInstanceBufferUpdated('matrix');
+    }
   }
 
   dispose(): void {
-    this.mesh.dispose();
+    for (const layer of this.layers) layer.mesh.dispose();
   }
 }

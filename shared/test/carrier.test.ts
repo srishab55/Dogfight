@@ -20,8 +20,8 @@ import { fly, holdPitchAttitude, rollToBank } from './testPilot';
 const world = createWorldGround(createTerrain());
 const deck = carrierDeckRunway(BLUE_CARRIER);
 const CARRIER_CLASSES: readonly AircraftClassId[] = ['navalFighter', 'diveBomber'];
-/** Where the carrier glide slope meets the deck: just past the first wire. Hands-off approaches float a little long. */
-const CARRIER_AIM_POINT = BLUE_CARRIER.wires.from + 8;
+/** Where the carrier glide slope meets the deck: early in the wire zone (the client's landing practice uses the same). */
+const CARRIER_AIM_POINT = BLUE_CARRIER.wires.from + 15;
 
 /** Distance forward from the stern along the deck (m). */
 const fromStern = (p: { x: number; z: number }) => runwayLocal(deck, p.x, p.z).along + deck.length / 2;
@@ -117,12 +117,14 @@ describe('carrier operations', () => {
         flaps: 1,
       });
       let stoppedAt = Number.NaN;
+      let touchdownAt = Number.NaN;
       fly(
         approach,
         spec,
         90,
         () => ({ throttle: perf.approachThrottle, flaps: 1 }),
         (v) => {
+          if (v.state.onGround && Number.isNaN(touchdownAt)) touchdownAt = fromStern(v.state.position);
           const speed = Math.hypot(v.state.velocity.x, v.state.velocity.z);
           if (v.state.onGround && speed < 0.5) stoppedAt = fromStern(v.state.position);
           return !Number.isNaN(stoppedAt);
@@ -134,13 +136,43 @@ describe('carrier operations', () => {
       expect(approach.lastTouchdownDamage).toBe(0);
       expect(approach.hookEngaged).toBe(true);
       expect(stoppedAt).toBeGreaterThan(BLUE_CARRIER.wires.from);
-      // Stops in a few dozen metres, well before the bow.
-      expect(stoppedAt).toBeLessThan(BLUE_CARRIER.wires.to + 80);
+      // No float over the deck: it touches down in the first half of the wire zone, and stops short of the barrier.
+      expect(touchdownAt).toBeGreaterThan(BLUE_CARRIER.wires.from);
+      expect(touchdownAt).toBeLessThan((BLUE_CARRIER.wires.from + BLUE_CARRIER.wires.to) / 2 + 10);
+      expect(stoppedAt).toBeLessThan(BLUE_CARRIER.barrier.fromStern);
       expect(Math.abs(offCentre(approach.position))).toBeLessThan(deck.width / 2 - 6);
       // The wire holds it at approach power; at idle the crew frees the hook.
       fly(approach, spec, 3, () => ({ throttle: 0, flaps: 1 }), undefined, world);
       expect(approach.hookEngaged).toBe(false);
     });
+  });
+
+  it('the hook catches a wire from just above the deck, before the wheels touch', () => {
+    const spec = AIRCRAFT_CLASSES.navalFighter;
+    const perf = computePerformance(spec);
+    // Level over the wire zone, wheels 0.25 m above the deck, hook armed.
+    const state = createApproachState(spec, deck, { distanceFromThreshold: -40, glideSlopeDeg: 0.0001, aimPointPastThreshold: 0, speed: perf.handsOffApproachSpeed, throttle: perf.approachThrottle, flaps: 1 });
+    state.position.y += 0.25;
+    state.hookArmed = true;
+    let caughtInAir = false;
+    fly(state, spec, 0.5, () => ({ throttle: perf.approachThrottle, flaps: 1 }), (v) => {
+      caughtInAir ||= v.state.hookEngaged && !v.state.onGround;
+      return v.state.hookEngaged;
+    }, world);
+    expect(state.hookEngaged).toBe(true);
+    expect(caughtInAir).toBe(true);
+  });
+
+  it('an aircraft with no hook that lands on the deck is stopped by the crash barrier, damaged, instead of rolling off the bow', () => {
+    const spec = AIRCRAFT_CLASSES.fighterBomber;
+    const perf = computePerformance(spec);
+    const approach = createApproachState(spec, deck, { distanceFromThreshold: 1_200, glideSlopeDeg: 3, aimPointPastThreshold: 40, speed: perf.handsOffApproachSpeed, throttle: perf.approachThrottle, flaps: 1 });
+    fly(approach, spec, 60, (v) => ({ throttle: v.state.onGround ? 0 : perf.approachThrottle, flaps: 1 }), (v) => v.state.onGround && Math.hypot(v.state.velocity.x, v.state.velocity.z) < 0.5, world);
+    expect(approach.crashed).toBe(false);
+    expect(approach.hookEngaged).toBe(false);
+    expect(fromStern(approach.position)).toBeLessThan(deck.length);
+    expect(fromStern(approach.position)).toBeGreaterThan(BLUE_CARRIER.barrier.fromStern - 10);
+    expect(approach.hullHealth).toBeLessThan(spec.combat.maxHullHealth);
   });
 
   it('carrier aircraft spawn on the catapult, clear of the landing area and the island', () => {

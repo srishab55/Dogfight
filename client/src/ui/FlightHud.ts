@@ -6,7 +6,7 @@ import { TOUCHDOWN_GRADES, TOUCHDOWN_MESSAGE_SECONDS } from '../config/landing';
 /** Numbers refresh this often (s): readable, and cheap on the DOM. Warnings update every frame. */
 const READOUT_INTERVAL = 0.05;
 /** "PULL UP" when the ground is less than this many seconds away at the current sink rate. */
-const PULL_UP_SECONDS = 4;
+export const PULL_UP_SECONDS = 4;
 
 /** Everything the HUD shows for one frame. */
 export interface HudFrame {
@@ -29,8 +29,24 @@ export interface HudFrame {
   readonly serviceProgress: number | null;
   /** The nearest friendly base: where to go to rearm. */
   readonly nearestBase: { readonly kind: 'airfield' | 'carrier'; readonly distance: number; readonly bearingDeg: number } | null;
+  /** Approach guidance to a friendly base while on final with landing flaps, else null. */
+  readonly approach: ApproachGuide | null;
   /** Practice balloons burst this session. */
   readonly targetsDestroyed: number;
+}
+
+/**
+ * Where the aircraft is on its final approach: like a carrier's Landing
+ * Signal Officer calling corrections, or an approach controller for a runway.
+ */
+export interface ApproachGuide {
+  readonly kind: 'airfield' | 'carrier';
+  /** Distance to go to the aim point (m). */
+  readonly distance: number;
+  /** Above (+) or below (-) the 3-degree glide slope (deg). */
+  readonly glideDeviationDeg: number;
+  /** Right (+) or left (-) of the extended centreline, seen from the aim point (deg). */
+  readonly lineupDeg: number;
 }
 
 export interface ScreenPoint {
@@ -55,6 +71,10 @@ export class FlightHud {
   private readonly pullUpWarning: HTMLElement;
   private readonly crashPanel: HTMLElement;
   private readonly crashReason: HTMLElement;
+  private readonly crashTitle: HTMLElement;
+  /** Red flash around the screen edge when you're hit. */
+  private readonly damageFlash: HTMLElement;
+  private damageFlashTimer = 0;
   private readonly gunsight: HTMLElement;
   private readonly aimReticle: HTMLElement;
   private readonly gunHeatBar: HTMLElement;
@@ -62,6 +82,7 @@ export class FlightHud {
   private readonly overheatWarning: HTMLElement;
   private readonly outOfAmmoWarning: HTMLElement;
   private readonly service: HTMLElement;
+  private readonly approach: HTMLElement;
   private readonly serviceBar: HTMLElement;
   private hitMarkerTimer = 0;
   private readonly flightPathMarker: HTMLElement;
@@ -127,10 +148,17 @@ export class FlightHud {
     this.service.append(element('div', 'hud-service-label', 'REARMING & REPAIRING'), serviceTrack);
     this.service.hidden = true;
 
+    // Approach calls along the top: distance, glide slope, line-up.
+    this.approach = element('div', 'hud-approach');
+    this.approach.hidden = true;
+
     this.crashPanel = element('div', 'hud-crash');
     this.crashReason = element('div', 'hud-crash-reason');
     const respawnKey = KEY_BINDINGS.respawn.map(formatKeyCode).join(' / ');
-    this.crashPanel.append(element('div', 'hud-crash-title', 'CRASHED'), this.crashReason, element('div', 'hud-crash-hint', `Press ${respawnKey} to respawn`));
+    this.crashTitle = element('div', 'hud-crash-title', 'CRASHED');
+    this.crashPanel.append(this.crashTitle, this.crashReason, element('div', 'hud-crash-hint', `Press ${respawnKey} to respawn`));
+    this.damageFlash = element('div', 'hud-damage-flash');
+    this.damageFlash.hidden = true;
 
     // Gunsight: where the gun streams converge. Put it on the target and fire.
     this.gunsight = element('div', 'hud-gunsight');
@@ -148,8 +176,13 @@ export class FlightHud {
     this.aimReticle = element('div', 'hud-aim');
     this.aimReticle.hidden = true;
 
-    this.root.append(warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service);
+    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.approach);
     parent.append(this.root);
+  }
+
+  /** Flash the screen edge red: you've been hit. */
+  registerDamage(seconds: number): void {
+    this.damageFlashTimer = seconds;
   }
 
   /** Flash the gunsight: a round just hit something. */
@@ -179,10 +212,17 @@ export class FlightHud {
     toggle(this.stallWarning, airborne && t.stallWarning);
     toggle(this.pullUpWarning, airborne && sinking > 5 && heightAboveGround / sinking < PULL_UP_SECONDS);
     toggle(this.crashPanel, state.crashed);
-    if (state.crashed) this.crashReason.textContent = `Cause: ${state.crashReason ?? 'unknown'}`;
+    if (state.crashed) {
+      this.crashTitle.textContent = state.crashReason === 'shot down' ? 'SHOT DOWN' : 'CRASHED';
+      this.crashReason.textContent = state.crashReason === 'shot down' ? 'Brought down by anti-aircraft fire' : `Cause: ${state.crashReason ?? 'unknown'}`;
+    }
+    this.damageFlashTimer = Math.max(0, this.damageFlashTimer - deltaSeconds);
+    toggle(this.damageFlash, this.damageFlashTimer > 0);
+    if (this.damageFlashTimer > 0) this.damageFlash.style.opacity = Math.min(1, this.damageFlashTimer * 4).toFixed(2);
     toggle(this.overheatWarning, frame.guns.overheated && !state.crashed);
     toggle(this.outOfAmmoWarning, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
     toggle(this.service, frame.serviceProgress !== null);
+    this.updateApproach(frame.approach);
     if (frame.serviceProgress !== null) this.serviceBar.style.width = `${(frame.serviceProgress * 100).toFixed(0)}%`;
     placeMarker(this.flightPathMarker, frame.flightPathMarker);
     placeMarker(this.gunsight, frame.gunsight);
@@ -235,6 +275,27 @@ export class FlightHud {
     this.root.remove();
   }
 
+  /**
+   * Corrections in plain words, as an LSO or approach controller would call
+   * them. Glide slope: within 0.3 deg is on it; beyond 0.8 deg is high, or
+   * low with a call for power. Line-up: within 1.2 deg is on the centreline.
+   */
+  private updateApproach(guide: ApproachGuide | null): void {
+    toggle(this.approach, guide !== null);
+    if (!guide) return;
+    const d = guide.glideDeviationDeg;
+    const glide: [string, string] =
+      d > 0.8 ? ['HIGH', 'warn'] : d > 0.3 ? ['A LITTLE HIGH', 'ok'] : d >= -0.3 ? ['ON GLIDE SLOPE', 'good'] : d >= -0.8 ? ['A LITTLE LOW', 'ok'] : ['LOW · POWER!', 'bad'];
+    const l = guide.lineupDeg;
+    const lineup: [string, string] = Math.abs(l) <= 1.2 ? ['ON CENTRELINE', 'good'] : l > 0 ? ['COME LEFT', l > 4 ? 'warn' : 'ok'] : ['COME RIGHT', l < -4 ? 'warn' : 'ok'];
+    const cut = guide.kind === 'carrier' && guide.distance < 70 && Math.abs(d) < 0.8 && Math.abs(l) < 2.5;
+    const label = guide.kind === 'carrier' ? 'LSO' : 'APPROACH';
+    const parts = cut
+      ? `<span class="hud-approach-label">${label}</span><span data-tone="good">CUT · TOUCH DOWN</span>`
+      : `<span class="hud-approach-label">${label}</span><span>${formatDistance(guide.distance)}</span><span data-tone="${glide[1]}">${glide[0]}</span><span data-tone="${lineup[1]}">${lineup[0]}</span>`;
+    if (this.approach.innerHTML !== parts) this.approach.innerHTML = parts;
+  }
+
   /** Shows a grade for a few seconds after each touchdown: "TOUCHDOWN 1.2 m/s · SMOOTH". */
   private updateTouchdownMessage(deltaSeconds: number, state: Readonly<AircraftState>): void {
     if (state.touchdownCount !== this.lastSeenTouchdown) {
@@ -244,7 +305,9 @@ export class FlightHud {
         const sink = state.lastTouchdownSinkRate;
         const grade = TOUCHDOWN_GRADES.find((g) => sink <= g.maxSinkRate) ?? TOUCHDOWN_GRADES[TOUCHDOWN_GRADES.length - 1];
         const damage = state.lastTouchdownDamage > 0 ? ` · hull −${state.lastTouchdownDamage.toFixed(0)}` : '';
-        this.showMessage(`TOUCHDOWN ${sink.toFixed(1)} m/s · ${grade?.label ?? ''}${damage}`, grade?.tone ?? 'ok', TOUCHDOWN_MESSAGE_SECONDS);
+        const brakeKey = KEY_BINDINGS.brake.map(formatKeyCode).join('/');
+        const stop = state.hookEngaged ? ' · caught a wire' : ` · hold ${brakeKey} to brake`;
+        this.showMessage(`TOUCHDOWN ${sink.toFixed(1)} m/s · ${grade?.label ?? ''}${damage}${stop}`, grade?.tone ?? 'ok', TOUCHDOWN_MESSAGE_SECONDS);
       }
     }
     this.touchdownMessageTimer = Math.max(0, this.touchdownMessageTimer - deltaSeconds);
@@ -255,10 +318,12 @@ export class FlightHud {
 /** What the aircraft is doing, in a few words: on the catapult, held by a wire, braking, airborne... */
 function statusLine(state: Readonly<AircraftState>, controls: Readonly<FlightControls>): string {
   if (state.crashed) return 'DESTROYED';
+  if (state.shotDown) return 'SHOT DOWN · OUT OF CONTROL';
   const brakes = state.airbrakePosition > 0.05 ? ' · DIVE BRAKES' : '';
   if (state.catapult === 'held') return 'ON CATAPULT · FULL THROTTLE TO LAUNCH';
   if (state.catapult === 'launching') return 'CATAPULT LAUNCH';
   if (state.hookEngaged) return Math.hypot(state.velocity.x, state.velocity.z) > 1 ? 'HOOK CAUGHT A WIRE' : 'ON THE WIRE · IDLE TO RELEASE';
+  if (state.barrierEngaged) return Math.hypot(state.velocity.x, state.velocity.z) > 1 ? 'CAUGHT BY THE BARRIER' : 'IN THE BARRIER · IDLE TO RELEASE';
   if (state.onGround) return controls.brake > 0 ? 'ON GROUND · BRAKES' : 'ON GROUND';
   return `AIRBORNE${brakes}`;
 }

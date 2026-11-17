@@ -10,6 +10,8 @@ export interface CameraEffectInputs {
   readonly buffet: number;
   readonly firing: boolean;
   readonly loadFactor: number;
+  /** Extra shake from being hit, decaying (m). */
+  readonly impact?: number;
 }
 
 /**
@@ -34,7 +36,8 @@ export class CameraEffects {
     const amplitude =
       config.stallShake * inputs.buffet +
       (inputs.firing ? config.firingShake : 0) +
-      config.gShakePerG * Math.max(0, inputs.loadFactor - 4);
+      config.gShakePerG * Math.max(0, inputs.loadFactor - 4) +
+      (inputs.impact ?? 0);
     const w = 2 * Math.PI * config.shakeFrequency * this.time;
     this.applied.x = amplitude * (Math.sin(w) * 0.6 + Math.sin(w * 2.37 + 1.3) * 0.4);
     this.applied.y = amplitude * (Math.sin(w * 1.13 + 0.7) * 0.6 + Math.sin(w * 3.11 + 2.1) * 0.4);

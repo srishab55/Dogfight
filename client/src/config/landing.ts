@@ -19,11 +19,10 @@ export const LANDING_PRACTICE = {
   carrier: {
     distanceFromThreshold: 1_500,
     /**
-     * Just past the first arrestor wire (m from the stern). Hands-off
-     * approaches float a little long in ground effect over the deck, which
-     * still lands them among the wires.
+     * Early in the wire zone (m from the stern), so a slightly long
+     * touchdown still traps. Must match the carrier landing test.
      */
-    aimPointPastThreshold: BLUE_CARRIER.wires.from + 8,
+    aimPointPastThreshold: BLUE_CARRIER.wires.from + 15,
   },
   /** How long the briefing message stays up (s). */
   briefingSeconds: 6,

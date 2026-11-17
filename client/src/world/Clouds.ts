@@ -5,6 +5,7 @@ import { SpriteManager } from '@babylonjs/core/Sprites/spriteManager';
 import { Sprite } from '@babylonjs/core/Sprites/sprite';
 import '@babylonjs/core/Sprites/spriteSceneComponent';
 import { CLOUD_CONFIG } from '../config/graphics';
+import { createPuffTextureUrl } from '../rendering/puffTexture';
 
 /**
  * Cumulus clouds: each a cluster of soft, camera-facing puffs (sprites),
@@ -73,37 +74,6 @@ export class Clouds {
   dispose(): void {
     this.manager.dispose();
   }
-}
-
-/** A soft, slightly lumpy white blob with a transparent edge, as a PNG data URL. */
-function createPuffTextureUrl(): string {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas unavailable for cloud texture');
-  const random = seededRandom(5);
-  // Several overlapping soft circles make a lumpier, more natural puff than one gradient.
-  for (let i = 0; i < 14; i++) {
-    const x = size / 2 + (random() - 0.5) * size * 0.35;
-    const y = size / 2 + (random() - 0.5) * size * 0.3;
-    const r = size * (0.22 + random() * 0.16);
-    const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
-    gradient.addColorStop(0, 'rgba(255,255,255,0.55)');
-    gradient.addColorStop(0.6, 'rgba(255,255,255,0.22)');
-    gradient.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, size, size);
-  }
-  // Fade everything to fully transparent at the edge so no square outline shows.
-  ctx.globalCompositeOperation = 'destination-in';
-  const edge = ctx.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size / 2);
-  edge.addColorStop(0, 'rgba(0,0,0,1)');
-  edge.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = edge;
-  ctx.fillRect(0, 0, size, size);
-  return canvas.toDataURL('image/png');
 }
 
 function lerp(a: number, b: number, t: number): number {

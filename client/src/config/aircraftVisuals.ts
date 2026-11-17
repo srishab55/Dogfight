@@ -63,7 +63,7 @@ export const CONTROL_SURFACE_VISUAL_CONFIG = {
   diveBrakeMaxDeg: 60,
   /** Arrestor hook angle below the fuselage line: stowed (negative = tucked up) and lowered. */
   tailhookStowedDeg: -4,
-  tailhookLoweredDeg: 50,
+  tailhookLoweredDeg: 65,
   /** How quickly surfaces follow the stick (1/s). Real surfaces lag slightly. */
   actuatorSharpness: 14,
 } as const;

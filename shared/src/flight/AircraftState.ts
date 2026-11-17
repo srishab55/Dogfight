@@ -63,6 +63,8 @@ export interface AircraftState {
    */
   hookArmed: boolean;
   hookEngaged: boolean;
+  /** Stopped by a carrier's crash barrier (missed the wires). Holds like a wire until idle. */
+  barrierEngaged: boolean;
   /**
    * Carrier catapult: 'held' on the holdback bar waiting for full throttle,
    * 'launching' while it accelerates the aircraft, otherwise 'none'.
@@ -82,6 +84,11 @@ export interface AircraftState {
   /** Seconds since a wheel last touched the ground (0 while on the ground). */
   airborneTime: number;
   crashed: boolean;
+  /**
+   * Shot down: hull destroyed in the air. The aircraft is out of control
+   * (engine dead, controls gone) and falls until it hits the ground or sea.
+   */
+  shotDown: boolean;
   /** Why the aircraft crashed (for the HUD and tests), or null. */
   crashReason: string | null;
   telemetry: FlightTelemetry;
@@ -119,6 +126,7 @@ function baseState(spec: AircraftClassSpec): AircraftState {
     airbrakePosition: 0,
     hookArmed: false,
     hookEngaged: false,
+    barrierEngaged: false,
     catapult: 'none',
     catapultTravel: 0,
     hullHealth: spec.combat.maxHullHealth,
@@ -129,6 +137,7 @@ function baseState(spec: AircraftClassSpec): AircraftState {
     // Factories that start in the air have been "airborne for a while", so their first touchdown counts.
     airborneTime: 60,
     crashed: false,
+    shotDown: false,
     crashReason: null,
     telemetry: emptyTelemetry(),
   };
@@ -217,6 +226,7 @@ export function copyAircraftState(target: AircraftState, source: Readonly<Aircra
   target.airbrakePosition = source.airbrakePosition;
   target.hookArmed = source.hookArmed;
   target.hookEngaged = source.hookEngaged;
+  target.barrierEngaged = source.barrierEngaged;
   target.catapult = source.catapult;
   target.catapultTravel = source.catapultTravel;
   target.hullHealth = source.hullHealth;
@@ -226,6 +236,7 @@ export function copyAircraftState(target: AircraftState, source: Readonly<Aircra
   target.onGround = source.onGround;
   target.airborneTime = source.airborneTime;
   target.crashed = source.crashed;
+  target.shotDown = source.shotDown;
   target.crashReason = source.crashReason;
   Object.assign(target.telemetry, source.telemetry);
   return target;
