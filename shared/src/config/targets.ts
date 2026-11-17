@@ -40,8 +40,8 @@ export const AA_GUN_CONFIG = {
   maxHealth: 20,
   /** Seconds after being destroyed before a fresh gun is in place. */
   respawnSeconds: 90,
-  /** Hit sphere around the mount (m). */
-  hitRadius: 3,
+  /** Hit sphere around the emplacement: gun, crew and sandbags (m). */
+  hitRadius: 5,
   /** Barrel pivot above the ground or deck (m). */
   mountHeight: 1.6,
 } as const;
@@ -51,7 +51,7 @@ export const PARKED_AIRCRAFT_CONFIG = {
   maxHealth: 14,
   respawnSeconds: 120,
   /** One sphere around the fuselage and wing roots (m). */
-  hitRadius: 4.5,
+  hitRadius: 6,
 } as const;
 
 /**

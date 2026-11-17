@@ -93,8 +93,11 @@ export interface AircraftClassSpec {
   };
 
   /**
-   * Dive brakes (dive bomber only): plates that open into the airflow, adding
-   * drag but no lift. They hold a steep dive to a steady, aimable speed.
+   * Air brakes (B): plates that open into the airflow, adding drag but no
+   * lift, so you can slow down in the air with the engine still running.
+   * Every class has them (a gameplay addition: most WWII fighters didn't);
+   * the Dive Bomber's real dive brakes are by far the strongest, holding a
+   * steep dive to a steady, aimable speed.
    */
   readonly airbrake?: {
     /** Zero-lift drag coefficient added when fully open. */
@@ -103,7 +106,12 @@ export interface AircraftClassSpec {
     readonly travelTime: number;
   };
 
-  /** Handling, expressed at `referenceSpeed` at sea level. It scales with dynamic pressure elsewhere. */
+  /**
+   * Handling, expressed at `referenceSpeed` at sea level. It scales with
+   * dynamic pressure elsewhere. Roll and pitch response are on the brisk
+   * side of the real aircraft: quick direction changes matter more here
+   * than an exact match to the history books.
+   */
   readonly handling: {
     /** Speed at which the handling figures below apply (m/s). */
     readonly referenceSpeed: number;
@@ -202,6 +210,12 @@ const COMMON_GEAR = {
   steeringFadeSpeed: 30,
 } as const;
 
+/**
+ * Speed brakes for the classes that historically had none: enough drag to
+ * slow down at full throttle at cruise speed (about 0.3 g at 450 km/h).
+ */
+const SPEED_BRAKES = { dragIncrement: 0.08, travelTime: 0.8 } as const;
+
 /** Split flaps on the inner wing, typical of propeller-era fighters. */
 const COMMON_FLAPS = {
   liftIncrement: 0.6,
@@ -224,15 +238,16 @@ const INTERCEPTOR: AircraftClassSpec = {
   momentOfInertia: estimateInertia(2_900, AIRFRAMES.fighter, 0.92),
   engine: { staticThrust: 17_000, maxPower: 1_300_000, propellerEfficiency: 0.82, spoolTime: 0.7 },
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.021 },
+  airbrake: SPEED_BRAKES,
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.55, travelTime: 2.5 },
   handling: {
     referenceSpeed: 100,
-    pitch: { frequency: 4.0, dampingRatio: 0.55, fullStickAngleOfAttackDeg: 18, trimAngleOfAttackDeg: 2.5 },
-    roll: { maxRateDeg: 160, responseTime: 0.18 },
+    pitch: { frequency: 4.8, dampingRatio: 0.55, fullStickAngleOfAttackDeg: 18, trimAngleOfAttackDeg: 2.5 },
+    roll: { maxRateDeg: 216, responseTime: 0.144 },
     yaw: { frequency: 2.8, dampingRatio: 0.5, fullRudderSideslipDeg: 9 },
     dihedralEffect: 5,
     stallPitchDown: 3,
-    gLimit: 8,
+    gLimit: 9,
     negativeGLimit: 4,
   },
   landingGear: COMMON_GEAR,
@@ -252,15 +267,16 @@ const FIGHTER_BOMBER: AircraftClassSpec = {
   engine: { staticThrust: 20_000, maxPower: 1_650_000, propellerEfficiency: 0.82, spoolTime: 0.9 },
   // Bomb racks and a bigger radiator add drag.
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.024 },
+  airbrake: SPEED_BRAKES,
   flaps: COMMON_FLAPS,
   handling: {
     referenceSpeed: 105,
-    pitch: { frequency: 3.2, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 18, trimAngleOfAttackDeg: 2.5 },
-    roll: { maxRateDeg: 120, responseTime: 0.25 },
+    pitch: { frequency: 3.84, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 18, trimAngleOfAttackDeg: 2.5 },
+    roll: { maxRateDeg: 162, responseTime: 0.2 },
     yaw: { frequency: 2.3, dampingRatio: 0.55, fullRudderSideslipDeg: 8 },
     dihedralEffect: 5,
     stallPitchDown: 2.5,
-    gLimit: 7,
+    gLimit: 8,
     negativeGLimit: 3.5,
   },
   landingGear: COMMON_GEAR,
@@ -284,12 +300,13 @@ const HEAVY_BOMBER: AircraftClassSpec = {
   engine: { staticThrust: 46_000, maxPower: 3_500_000, propellerEfficiency: 0.8, spoolTime: 1.6 },
   // Turrets, nacelles and a deep fuselage add drag.
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.03 },
+  airbrake: { ...SPEED_BRAKES, travelTime: 1.2 },
   // Big Fowler-style flaps: more lift, slower to move, blown up at a lower speed.
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.75, maxExtensionSpeed: 70, travelTime: 4 },
   handling: {
     referenceSpeed: 95,
     pitch: { frequency: 1.8, dampingRatio: 0.7, fullStickAngleOfAttackDeg: 17, trimAngleOfAttackDeg: 3 },
-    roll: { maxRateDeg: 50, responseTime: 0.55 },
+    roll: { maxRateDeg: 55, responseTime: 0.5 },
     yaw: { frequency: 1.4, dampingRatio: 0.6, fullRudderSideslipDeg: 6 },
     dihedralEffect: 4,
     stallPitchDown: 1.5,
@@ -318,15 +335,16 @@ const NAVAL_FIGHTER: AircraftClassSpec = {
   engine: { staticThrust: 24_000, maxPower: 1_500_000, propellerEfficiency: 0.82, spoolTime: 0.8 },
   // The big radial engine's frontal area adds drag.
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.025 },
+  airbrake: SPEED_BRAKES,
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.7, dragIncrement: 0.04, travelTime: 2.5 },
   handling: {
     referenceSpeed: 100,
-    pitch: { frequency: 3.4, dampingRatio: 0.68, fullStickAngleOfAttackDeg: 19, trimAngleOfAttackDeg: 2.5 },
-    roll: { maxRateDeg: 135, responseTime: 0.22 },
+    pitch: { frequency: 4.08, dampingRatio: 0.68, fullStickAngleOfAttackDeg: 19, trimAngleOfAttackDeg: 2.5 },
+    roll: { maxRateDeg: 182, responseTime: 0.176 },
     yaw: { frequency: 2.5, dampingRatio: 0.52, fullRudderSideslipDeg: 9 },
     dihedralEffect: 5,
     stallPitchDown: 2.5,
-    gLimit: 7.5,
+    gLimit: 8,
     negativeGLimit: 3.5,
   },
   // Carrier gear: built for firm arrivals on a deck.
@@ -355,8 +373,8 @@ const DIVE_BOMBER: AircraftClassSpec = {
   handling: {
     referenceSpeed: 95,
     // Full back stick commands a high angle of attack: a dive bomber must pull hard out of its dive at modest speeds.
-    pitch: { frequency: 3.0, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 2.5 },
-    roll: { maxRateDeg: 90, responseTime: 0.3 },
+    pitch: { frequency: 3.6, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 2.5 },
+    roll: { maxRateDeg: 122, responseTime: 0.24 },
     yaw: { frequency: 2.1, dampingRatio: 0.56, fullRudderSideslipDeg: 8 },
     dihedralEffect: 5,
     stallPitchDown: 2.2,

@@ -123,6 +123,15 @@ the flare. McCormick's approximation is used: induced drag × φ, with
 
 ## The direction pilot (mouse flight, later the AI)
 
+Tuned for quick direction changes: it pulls hard even for a modest aim
+error (16 g per radian, capped by the wing and the g-limit), uses the wing
+up to 2 degrees short of the stall, and rolls in fast. It points the
+**nose** (the guns), not the flight path, at the aim; and the client raises
+the aim by the rounds' drop at the range where it meets the ground, so
+"aim circle on the target, fire" hits. A fighter turns 90 degrees in about
+4-5 s (it was 8).
+
+
 `flight/directionPilot.ts` turns "fly towards this direction" into stick
 inputs the way a pilot does, by **pointing the lift vector**:
 
@@ -148,10 +157,10 @@ contradict each other. `npm test` prints this table:
 
 | Class | Stall km/h | Top km/h | Climb m/s | Max turn °/s | Corner km/h | T/W | Wing loading Pa |
 |---|---|---|---|---|---|---|---|
-| Interceptor | 159 | 598 | 32.4 | 35.6 | 451 | 0.60 | 1626 |
-| Fighter-Bomber | 171 | 566 | 26.0 | 31.0 | 453 | 0.47 | 1875 |
+| Interceptor | 159 | 598 | 32.4 | 37.9 | 478 | 0.60 | 1626 |
+| Fighter-Bomber | 171 | 566 | 26.0 | 33.2 | 484 | 0.47 | 1875 |
 | Heavy Bomber | 175 | 457 | 15.7 | 20.7 | 328 | 0.33 | 1962 |
-| Naval Fighter | 156 | 496 | 22.0 | 35.2 | 427 | 0.53 | 1556 |
+| Naval Fighter | 156 | 496 | 22.0 | 36.4 | 441 | 0.53 | 1556 |
 | Dive Bomber | 158 | 414 | 12.3 | 32.3 | 402 | 0.40 | 1592 |
 
 The Naval Fighter trades top speed for the lowest stall speed (a big wing for
@@ -187,9 +196,14 @@ aircraft until the throttle comes back to idle.
 and throttle as the runway. It aims just past the first wire, because a
 hands-off approach floats about 40 m in ground effect over the deck.
 
-## Dive brakes
+## Air brakes and dive brakes
 
-Only the Dive Bomber has them (**X**). They are drag with no lift: zero-lift
+Every aircraft has air brakes while **B** is held (a gameplay addition:
+most WWII fighters had none): zero-lift drag +0.08, enough to slow down at
+full throttle at cruise speed. The Dive Bomber's dive brakes (also locked
+open with **X**) are the real thing and twice as strong.
+
+The Dive Bomber's dive brakes: They are drag with no lift: zero-lift
 drag rises by 0.16 when fully open (1.5 s travel), so the stall speed
 doesn't change. In a vertical dive, drag balances weight near 450 km/h with
 them out; without them the aircraft keeps accelerating far past that. A

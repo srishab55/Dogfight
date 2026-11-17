@@ -47,19 +47,31 @@ export interface DirectionPilotTuning {
   readonly aoaMarginDeg: number;
   /** Strongest push allowed (negative g is uncomfortable; rolling and pulling is better). */
   readonly maxPush: number;
+  /**
+   * Point the NOSE (and so the guns) at the target, rather than the flight
+   * path. The nose rides a few degrees above the path (the angle of attack),
+   * so steering the path onto a target leaves the guns shooting over it.
+   */
+  readonly aimWithNose: boolean;
 }
 
+/**
+ * Tuned for quick direction changes (your feedback: mouse turns were too
+ * slow): it pulls hard for even a modest aim error, uses the wing up to 2
+ * degrees short of the stall, and rolls in fast.
+ */
 export const DEFAULT_DIRECTION_PILOT: DirectionPilotTuning = {
-  turnAccelPerRadG: 4.5,
-  maxTurnAccelG: 6,
-  rollGain: 3.2,
-  rollRateDamping: 0.15,
-  pitchRateDamping: 0.6,
-  loadFeedback: 0.25,
+  turnAccelPerRadG: 16,
+  maxTurnAccelG: 8,
+  rollGain: 5,
+  rollRateDamping: 0.14,
+  pitchRateDamping: 0.45,
+  loadFeedback: 0.3,
   yawGain: 2,
   yawRateDamping: 0.3,
-  aoaMarginDeg: 4,
+  aoaMarginDeg: 2,
   maxPush: 0.5,
+  aimWithNose: true,
 };
 
 export interface StickInputs {
@@ -71,6 +83,7 @@ export interface StickInputs {
 const DEG = Math.PI / 180;
 const clamp = (value: number, min = -1, max = 1) => Math.max(min, Math.min(max, value));
 const BODY_FORWARD: Vec3 = { x: 0, y: 0, z: 1 };
+const nose = vec3();
 const BODY_RIGHT: Vec3 = { x: 1, y: 0, z: 0 };
 // Scratch vectors.
 const target = vec3();
@@ -108,6 +121,14 @@ export function steerTowards(
   const speed = lengthVec3(state.velocity);
   if (speed > 5) setVec3(path, state.velocity.x / speed, state.velocity.y / speed, state.velocity.z / speed);
   else rotateVec3(path, state.orientation, BODY_FORWARD);
+  // Aiming with the nose: steer the flight path to where it has to be for
+  // the nose to sit on the target, i.e. the target shifted by (path - nose).
+  if (tuning.aimWithNose && speed > 5) {
+    rotateVec3(nose, state.orientation, BODY_FORWARD);
+    setVec3(target, target.x + path.x - nose.x, target.y + path.y - nose.y, target.z + path.z - nose.z);
+    normalizeVec3(target, target);
+    inverseRotateVec3(targetBody, state.orientation, target);
+  }
   const cosOff = clamp(dotVec3(target, path));
   const angleOff = Math.acos(cosOff);
 

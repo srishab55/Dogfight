@@ -536,3 +536,69 @@ body {
   color: var(--warning-red);
   font-weight: 700;
 }
+
+/* Enemy target markers: red brackets with what and how far. */
+.hud-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud-enemy {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 86, 64, 0.95);
+  border-radius: 3px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.hud-enemy[data-kind='carrier'] {
+  width: 48px;
+  height: 26px;
+}
+
+.hud-enemy[hidden] {
+  display: none;
+}
+
+.hud-enemy-label {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #ff8a73;
+  white-space: nowrap;
+}
+
+/* Where your rounds will hit the ground: put it on the target and fire. */
+.hud-impact {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #ffb341;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hud-impact::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #ffb341;
+}
+
+.hud-impact[hidden] {
+  display: none;
+}

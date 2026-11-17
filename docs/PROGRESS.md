@@ -2,11 +2,10 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Combat targets and sound done (your request: points 3 and
-4 of Phase 4), plus your fixes: a brake key and much easier carrier landings.
-Remaining in Phase 4: bombs and aircraft damage visuals beyond smoke. Waiting
-for your flight test ([FLIGHT_TEST.md](FLIGHT_TEST.md), cards 21, 25–28) and
-confirmation before continuing.
+**Current status:** Your handling and aiming fixes are in: quicker turns and
+rolls, faster mouse flight that aims the guns, air brakes on B, and visible,
+marked enemy targets with a strafing aim point. Remaining in Phase 4: bombs.
+Waiting for your test (FLIGHT_TEST.md cards 26, 29, 30) and confirmation.
 
 ## Extras added along the way
 
@@ -29,6 +28,14 @@ confirmation before continuing.
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Fixes: handling, aiming, air brakes ✅ (your feedback, 2026-11-17)
+
+- ✅ Quicker turns: roll rates up about 35% and pitch response 20% (Heavy Bomber kept sluggish by design); fighter g-limits +1
+- ✅ Mouse flight much quicker: a 90-degree turn in about 4-5 s (was 8), with no overshoot; it points the nose (the guns) at the aim, corrected for the rounds' drop
+- ✅ Air brakes on every aircraft while B is held (slows you even at full throttle); wheel brakes on the ground as before
+- ✅ Enemy targets easy to find and hit: bigger emplacements with tall red flags, bright muzzle flashes, red HUD brackets with distance, and an orange aim point where your rounds will hit the ground; ground targets' hit areas enlarged
+- Verified: 281 tests (new: nose on target within 1.5 degrees for every class, air brakes slow every class at full throttle), and headless Chrome: air brakes 534 -> 434 km/h in 5 s at full throttle, markers on screen, one mouse-flight strafing pass destroys an AA gun (19 hits)
 
 ## Milestone: something to fight, sound, easier landings ✅ (your request, 2026-11-17)
 

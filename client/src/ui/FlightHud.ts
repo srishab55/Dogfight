@@ -29,6 +29,10 @@ export interface HudFrame {
   readonly serviceProgress: number | null;
   /** The nearest friendly base: where to go to rearm. */
   readonly nearestBase: { readonly kind: 'airfield' | 'carrier'; readonly distance: number; readonly bearingDeg: number } | null;
+  /** Enemy targets on screen within range, nearest first. */
+  readonly enemyMarkers: readonly EnemyMarker[];
+  /** Where your rounds would hit the ground if you fired now (strafing aim), or null. */
+  readonly impactPoint: ScreenPoint | null;
   /** Approach guidance to a friendly base while on final with landing flaps, else null. */
   readonly approach: ApproachGuide | null;
   /** Practice balloons burst this session. */
@@ -48,6 +52,17 @@ export interface ApproachGuide {
   /** Right (+) or left (-) of the extended centreline, seen from the aim point (deg). */
   readonly lineupDeg: number;
 }
+
+/** A red bracket over an enemy target, with what it is and how far. */
+export interface EnemyMarker {
+  readonly x: number;
+  readonly y: number;
+  readonly kind: 'aaGun' | 'parkedAircraft' | 'carrier' | 'balloon';
+  readonly distance: number;
+}
+
+const MARKER_LABELS: Readonly<Record<EnemyMarker['kind'], string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '' };
+const MAX_MARKERS = 16;
 
 export interface ScreenPoint {
   readonly x: number;
@@ -83,6 +98,8 @@ export class FlightHud {
   private readonly outOfAmmoWarning: HTMLElement;
   private readonly service: HTMLElement;
   private readonly approach: HTMLElement;
+  private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string }> = [];
+  private readonly impactPoint: HTMLElement;
   private readonly serviceBar: HTMLElement;
   private hitMarkerTimer = 0;
   private readonly flightPathMarker: HTMLElement;
@@ -152,6 +169,19 @@ export class FlightHud {
     this.approach = element('div', 'hud-approach');
     this.approach.hidden = true;
 
+    // Strafing aim: where the rounds will strike the ground.
+    this.impactPoint = element('div', 'hud-impact');
+    this.impactPoint.hidden = true;
+    const markerLayer = element('div', 'hud-markers');
+    for (let i = 0; i < MAX_MARKERS; i++) {
+      const box = element('div', 'hud-enemy');
+      const label = element('div', 'hud-enemy-label');
+      box.append(label);
+      box.hidden = true;
+      markerLayer.append(box);
+      this.markers.push({ box, label, text: '' });
+    }
+
     this.crashPanel = element('div', 'hud-crash');
     this.crashReason = element('div', 'hud-crash-reason');
     const respawnKey = KEY_BINDINGS.respawn.map(formatKeyCode).join(' / ');
@@ -176,7 +206,7 @@ export class FlightHud {
     this.aimReticle = element('div', 'hud-aim');
     this.aimReticle.hidden = true;
 
-    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.approach);
+    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.approach, markerLayer, this.impactPoint);
     parent.append(this.root);
   }
 
@@ -223,6 +253,18 @@ export class FlightHud {
     toggle(this.outOfAmmoWarning, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
     toggle(this.service, frame.serviceProgress !== null);
     this.updateApproach(frame.approach);
+    placeMarker(this.impactPoint, frame.impactPoint);
+    this.markers.forEach((marker, i) => {
+      const enemy = frame.enemyMarkers[i];
+      placeMarker(marker.box, enemy ?? null);
+      if (!enemy) return;
+      marker.box.dataset['kind'] = enemy.kind;
+      const text = `${MARKER_LABELS[enemy.kind]} ${formatDistance(enemy.distance)}`;
+      if (text !== marker.text) {
+        marker.text = text;
+        marker.label.textContent = text;
+      }
+    });
     if (frame.serviceProgress !== null) this.serviceBar.style.width = `${(frame.serviceProgress * 100).toFixed(0)}%`;
     placeMarker(this.flightPathMarker, frame.flightPathMarker);
     placeMarker(this.gunsight, frame.gunsight);
@@ -319,7 +361,7 @@ export class FlightHud {
 function statusLine(state: Readonly<AircraftState>, controls: Readonly<FlightControls>): string {
   if (state.crashed) return 'DESTROYED';
   if (state.shotDown) return 'SHOT DOWN · OUT OF CONTROL';
-  const brakes = state.airbrakePosition > 0.05 ? ' · DIVE BRAKES' : '';
+  const brakes = state.airbrakePosition > 0.05 ? ' · AIR BRAKES' : '';
   if (state.catapult === 'held') return 'ON CATAPULT · FULL THROTTLE TO LAUNCH';
   if (state.catapult === 'launching') return 'CATAPULT LAUNCH';
   if (state.hookEngaged) return Math.hypot(state.velocity.x, state.velocity.z) > 1 ? 'HOOK CAUGHT A WIRE' : 'ON THE WIRE · IDLE TO RELEASE';

@@ -47,7 +47,10 @@ None known.
 | L43 | Sound starts only after your first key press or click (browser autoplay rules) | A silent title screen | By design |
 | L44 | Destroyed targets come back after 1.5 to 3 minutes; destroyed things have no debris, only fire and smoke | Practice rules | Phase 6 (base rules) |
 | L45 | The AA has light guns only; no heavy flak bursting at altitude | High bombers are safe above about 1.5 km | Later, if wanted |
-| L46 | Bombs now need a key other than B (B is the wheel brake) | None yet | Phase 4 bombs |
+| L46 | Bombs now need a key other than B (B is the brake) | None yet | Phase 4 bombs |
+| L47 | Air brakes on every type are a gameplay addition (most WWII fighters had none); only the Dive Bomber shows brake plates | Other types slow down with nothing visibly opening | By design |
+| L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
+| L49 | The strafing aim point and the mouse drop correction assume a round at muzzle velocity with no drag; the wing guns converge at 300 m | Small errors beyond about 800 m | Fine at strafing range |
 | L32 | Vercel hosts only the static client. Its free Hobby plan is for non-commercial use (about 100 GB transfer a month) and can't run the long-lived WebSocket game server | Fine for single-player; multiplayer needs another host | Phase 5 (self-host the Colyseus server; see README "Deploying") |
 
 ## Upcoming risks (decide before or during the relevant phase)
@@ -86,6 +89,10 @@ None known.
 | Landing too hard: no flaps, no glide-slope cues, firm arrivals destroyed the aircraft | User feedback, Phase 2 | Flaps, ground effect, rebound damping, PAPI, flight-path marker, landing practice, damage instead of a crash below 7.5 m/s |
 | Runway hidden behind the aircraft on short final in chase view | Phase 2 screenshot | Chase camera raised (5 m up, 17 m back) |
 | Key-tapping test pilot crashed the landing practice | Phase 2 browser test | Practice now starts at the derived hands-off speed and throttle, so it holds the glide slope by itself |
+| Turns and rolls too slow; mouse direction changes sluggish | Your feedback | Faster handling; mouse pilot pulls harder and rolls in faster (90 degrees in 4-5 s, was 8) |
+| No way to slow down in the air | Your feedback | Air brakes on B for every type |
+| Enemy guns hard to see and to hit | Your feedback | Flags, bigger emplacements, muzzle flashes, HUD markers, ground aim point, larger hit areas |
+| Mouse flight aimed the flight path, so rounds went over targets; and they fell short in shallow dives | Browser strafing test | The pilot points the nose, and the aim is raised for the rounds' drop |
 | Brakes were automatic at idle, with no brake key (was L16) | Your request | Wheel brakes on B; automatic braking off |
 | Carrier landings too hard | Your feedback | Longer wire zone, hook reach, crash barrier, no deck ground effect, LSO calls; tests "hook catches from just above the deck" and "barrier stops a hookless aircraft" |
 | Strafing tests aimed the flight path, not the guns, so rounds passed over the target | Combat browser test | Test fixed (not a game bug: the guns point along the nose and converge at 300 m) |

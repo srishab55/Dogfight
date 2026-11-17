@@ -10,6 +10,8 @@ import type { InputManager } from './InputManager';
 export class FlightInputController {
   private readonly current: FlightControls = neutralControls();
   private flapNotch = 0;
+  /** The Dive Bomber's dive brakes, toggled with X. B opens the air brakes only while held. */
+  private diveBrakesOpen = false;
 
   constructor(private readonly input: InputManager) {}
 
@@ -31,8 +33,8 @@ export class FlightInputController {
 
   /** Dive brakes: one key press opens them, the next closes them. Returns whether they are now open. */
   toggleAirbrake(): boolean {
-    this.current.airbrake = this.current.airbrake > 0 ? 0 : 1;
-    return this.current.airbrake > 0;
+    this.diveBrakesOpen = !this.diveBrakesOpen;
+    return this.diveBrakesOpen;
   }
 
   /**
@@ -47,7 +49,10 @@ export class FlightInputController {
 
     const throttle = c.throttle + this.direction('throttleUp', 'throttleDown') * KEYBOARD_FLIGHT_CONFIG.throttlePerSecond * dt;
     c.throttle = Math.min(1, Math.max(0, throttle));
-    c.brake = this.input.isHeld('brake') || (KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && c.throttle === 0) ? 1 : 0;
+    // B: wheel brakes on the ground, air brakes in the air (both at once is fine: each only acts where it can).
+    const braking = this.input.isHeld('brake');
+    c.brake = braking || (KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && c.throttle === 0) ? 1 : 0;
+    c.airbrake = braking || this.diveBrakesOpen ? 1 : 0;
     c.fire = this.input.isHeld('fireGuns');
     return c;
   }
@@ -57,6 +62,7 @@ export class FlightInputController {
     const notches: readonly number[] = KEYBOARD_FLIGHT_CONFIG.flapNotches;
     // Snap the flap lever to the nearest notch.
     this.flapNotch = notches.reduce((best, value, index) => (Math.abs(value - flaps) < Math.abs((notches[best] ?? 0) - flaps) ? index : best), 0);
+    this.diveBrakesOpen = false;
     Object.assign(this.current, neutralControls(), { throttle, flaps: notches[this.flapNotch] ?? 0 });
     this.current.brake = KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && throttle === 0 ? 1 : 0;
   }

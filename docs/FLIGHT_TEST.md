@@ -370,6 +370,24 @@ and the bomber's four engines beat. Wind rises with speed. Your guns, the AA's
 Stall horn and pull-up tone with the warnings. M mutes and unmutes.
 **Pass:** No crackling, nothing missing.
 
+## Card 29: Quick turns and air brakes
+
+**Do:** Air start (**T**), fly with the mouse: swing the aim circle 90
+degrees to one side, then back; then hold **B** at full throttle.
+**Expect:** The aircraft rolls in at once and comes round in about 4-5
+seconds (fighters), settling on the aim without wobbling. Holding B, the
+speed falls (about 100 km/h in 5 s) and the status shows "AIR BRAKES".
+**Pass:** Direction changes feel quick; B slows you in the air.
+
+## Card 30: Strafing with the aim point
+
+**Do:** Dive gently at a Red AA gun (red bracket, "AA 600 m"). Put the
+orange aim circle (keyboard) or the mouse aim circle on it at about 600 m
+and fire a 1-2 s burst; pull up before 250 m.
+**Expect:** Rounds land on the gun; a good burst destroys it (explosion,
+burning wreck, AA GUN DESTROYED). Muzzle flashes show where fire is coming from.
+**Pass:** You can reliably knock guns out in one or two passes.
+
 ---
 
 ## Reporting a problem

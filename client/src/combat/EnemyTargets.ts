@@ -10,6 +10,9 @@ import { AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, typ
 import { createAircraftModel } from '../aircraft/aircraftModel';
 import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { degreesToRadians } from '../math/orientation';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { TEAM_PAINT } from '../config/aircraftVisuals';
 import { createPbrSurface } from '../rendering/materials';
 import type { FireAndSmoke } from '../effects/FireAndSmoke';
 
@@ -36,6 +39,8 @@ const scratchPos = new Vector3();
 export class EnemyTargets {
   private readonly gunBases: InstancedLayer;
   private readonly gunBarrels: InstancedLayer;
+  /** A tall pole with a red flag at each gun: you can find them from a long way off. */
+  private readonly gunFlags: InstancedLayer;
   private readonly wrecks: InstancedLayer;
   private readonly parked: InstancedLayer;
   private readonly guns: readonly CombatTarget[];
@@ -60,6 +65,11 @@ export class EnemyTargets {
 
     this.gunBases = layer(mergeParts('aa-base', buildGunBase(scene), sandbags), this.guns.length);
     this.gunBarrels = layer(mergeParts('aa-barrels', buildGunBarrels(scene), steel), this.guns.length);
+    // Unlit and bright, so the flags read against the ground even far away.
+    const flagMaterial = new StandardMaterial('aa-flag', scene);
+    flagMaterial.disableLighting = true;
+    flagMaterial.emissiveColor = Color3.FromHexString(TEAM_PAINT.red.accent);
+    this.gunFlags = layer(mergeParts('aa-flag', buildGunFlag(scene), flagMaterial), this.guns.length);
     this.wrecks = layer(mergeParts('wreck', buildWreck(scene), charred), this.guns.length + this.parkedTargets.length);
     this.parked = layer(bakeParkedAircraft(scene), this.parkedTargets.length);
     for (const l of [this.gunBases, this.gunBarrels, this.wrecks, this.parked]) l.mesh.receiveShadows = true;
@@ -67,7 +77,7 @@ export class EnemyTargets {
 
   /** Meshes that should cast shadows. */
   get shadowCasters(): Mesh[] {
-    return [this.gunBases.mesh, this.gunBarrels.mesh, this.parked.mesh];
+    return [this.gunBases.mesh, this.gunBarrels.mesh, this.gunFlags.mesh, this.parked.mesh];
   }
 
   update(deltaSeconds: number): void {
@@ -82,6 +92,8 @@ export class EnemyTargets {
       setMatrix(this.gunBases, i, alive ? scratchPos : null, 0, 0);
       scratchPos.y = p.y - sink;
       setMatrix(this.gunBarrels, i, alive ? scratchPos : null, gun.yaw, gun.pitch);
+      scratchPos.y = p.y - sink - 1.4;
+      setMatrix(this.gunFlags, i, alive ? scratchPos : null, 0, 0);
       scratchPos.y = p.y - sink - 1.3;
       // On a carrier that's going down, the wreck goes with it; under water it isn't drawn.
       const showWreck = !alive && p.y - sink > -4;
@@ -98,7 +110,7 @@ export class EnemyTargets {
       setMatrix(this.wrecks, wreck++, alive ? null : scratchPos, degreesToRadians(target.headingDegrees), 0);
       if (!alive) this.burn(target, p.x, p.y, p.z, 1.6, deltaSeconds);
     });
-    for (const l of [this.gunBases, this.gunBarrels, this.wrecks, this.parked]) l.mesh.thinInstanceBufferUpdated('matrix');
+    for (const l of [this.gunBases, this.gunBarrels, this.gunFlags, this.wrecks, this.parked]) l.mesh.thinInstanceBufferUpdated('matrix');
     for (const carrier of this.carriers) this.burnCarrier(carrier, deltaSeconds);
   }
 
@@ -182,25 +194,34 @@ function mergeParts(name: string, parts: Mesh[], material: Material): Mesh {
 
 /** Sandbag ring and floor, centred under the gun's pivot (which sits 1.4 m above it). */
 function buildGunBase(scene: Scene): Mesh[] {
-  const ring = CreateTorus('aa-sandbags-ring', { diameter: 4.6, thickness: 1.1, tessellation: 18 }, scene);
-  ring.position.y = 0.5;
+  const ring = CreateTorus('aa-sandbags-ring', { diameter: 7, thickness: 1.5, tessellation: 20 }, scene);
+  ring.position.y = 0.6;
   ring.scaling.y = 0.8;
-  const floor = CreateCylinder('aa-floor', { height: 0.2, diameter: 4.4, tessellation: 16 }, scene);
+  const floor = CreateCylinder('aa-floor', { height: 0.2, diameter: 6.8, tessellation: 18 }, scene);
   floor.position.y = 0.1;
   return [ring, floor];
 }
 
+/** A 9 m pole beside the emplacement with a red flag at the top. */
+function buildGunFlag(scene: Scene): Mesh[] {
+  const pole = CreateCylinder('aa-flag-pole', { height: 9, diameter: 0.16, tessellation: 6 }, scene);
+  pole.position.set(4, 4.5, 0);
+  const flag = CreateBox('aa-flag-cloth', { width: 0.06, height: 1.6, depth: 2.6 }, scene);
+  flag.position.set(4, 8.1, 1.3);
+  return [pole, flag];
+}
+
 /** Mount, shield and twin barrels around the pivot; +Z is the way the barrels point. */
 function buildGunBarrels(scene: Scene): Mesh[] {
-  const mount = CreateCylinder('aa-mount', { height: 1.1, diameter: 1.1, tessellation: 10 }, scene);
+  const mount = CreateCylinder('aa-mount', { height: 1.1, diameter: 1.4, tessellation: 10 }, scene);
   mount.position.y = -0.6;
-  const cradle = CreateBox('aa-cradle', { width: 1, height: 0.6, depth: 1.4 }, scene);
-  const shield = CreateBox('aa-shield', { width: 1.6, height: 0.9, depth: 0.06 }, scene);
-  shield.position.set(0, 0.2, 0.7);
-  const barrels = [-0.22, 0.22].map((x, i) => {
-    const barrel = CreateCylinder(`aa-barrel-${i}`, { height: 3, diameter: 0.14, tessellation: 8 }, scene);
+  const cradle = CreateBox('aa-cradle', { width: 1.3, height: 0.7, depth: 1.7 }, scene);
+  const shield = CreateBox('aa-shield', { width: 2.1, height: 1.1, depth: 0.08 }, scene);
+  shield.position.set(0, 0.25, 0.85);
+  const barrels = [-0.3, 0.3].map((x, i) => {
+    const barrel = CreateCylinder(`aa-barrel-${i}`, { height: 3.8, diameter: 0.2, tessellation: 8 }, scene);
     barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(x, 0.05, 1.6);
+    barrel.position.set(x, 0.05, 2);
     return barrel;
   });
   return [mount, cradle, shield, ...barrels];

@@ -49,7 +49,7 @@ import { applyPixelRatio, createEngine } from '../rendering/createEngine';
 import { createPostProcessing } from '../rendering/postProcessing';
 import { createControlsHint } from '../ui/ControlsHint';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
-import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
+import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
 import { createGameTitle } from '../ui/GameTitle';
 import { Environment } from '../world/Environment';
 import { FixedTimestepLoop } from './FixedTimestepLoop';
@@ -65,6 +65,8 @@ const CLASS_KEYS = [
   ['selectNavalFighter', 'navalFighter'],
   ['selectDiveBomber', 'diveBomber'],
 ] as const;
+/** Mouse aim is corrected for the rounds' drop out to this range (m). */
+const DROP_COMPENSATION_RANGE = 1_500;
 /** Height of the air start above the home base (m). */
 const AIR_START_HEIGHT = 800;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -142,6 +144,9 @@ export class Game {
   private readonly toPoint = new Vector3();
   private readonly projected = new Vector3();
   private readonly wheelHeightPoint = new Vector3();
+  private readonly markerPoint = new Vector3();
+  /** The mouse aim, raised to allow for the rounds' drop: what the nose is actually pointed at. */
+  private readonly gunAim = new Vector3();
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     this.engine = createEngine(canvas);
@@ -219,7 +224,8 @@ export class Game {
       let assist: StickInputs | null = null;
       if (mouseFlying) {
         this.mouseFlight.aimDirection(this.aimDirection);
-        assist = steerTowards(this.aircraft.state, this.aircraft.spec, this.aimDirection, this.mouseSticks);
+        this.compensateForDrop(this.aimDirection, this.gunAim);
+        assist = steerTowards(this.aircraft.state, this.aircraft.spec, this.gunAim, this.mouseSticks);
       }
       const controls = this.flightInput.update(dt, assist);
       this.aircraft.step(controls, dt);
@@ -275,6 +281,8 @@ export class Game {
       serviceProgress: this.service.base ? this.service.progress : null,
       nearestBase: this.nearestBase(),
       approach: this.approachGuide(),
+      enemyMarkers: this.enemyMarkers(),
+      impactPoint: this.projectImpactPoint(),
       targetsDestroyed: this.targetsDestroyed,
     });
     this.debugOverlay.update(deltaSeconds, this.debugLines);
@@ -293,8 +301,9 @@ export class Game {
         this.effects.spawn(this.ground.surfaceAt(event.x, event.z) === 'water' ? 'splash' : 'dust', event.x, event.y, event.z);
         return;
       case 'aaFired':
-        // Muzzle flash at the gun.
-        this.effects.spawn('spark', event.x, event.y, event.z);
+        // Muzzle flash and a puff of smoke at the gun: shows where the fire is coming from.
+        this.fireAndSmoke.flame(event.x, event.y + 0.5, event.z, 1.4);
+        this.fireAndSmoke.smokePuff(event.x, event.y + 1, event.z, 0.4, 0.6, 2);
         return;
       case 'targetRespawned':
         return;
@@ -520,6 +529,96 @@ export class Game {
     return best;
   }
 
+  /**
+   * Mouse flight points the nose (the guns) at the aim. Rounds fall under
+   * gravity, though: at 600 m nearly 2 m, which in a shallow strafing dive
+   * lands them 15 m short of a gun. So when the aim meets the ground within
+   * gun range, the nose is raised by exactly the drop at that range, and the
+   * rounds land where the aim circle is.
+   */
+  private compensateForDrop(aim: Vector3, out: Vector3): void {
+    out.copyFrom(aim);
+    const { state, spec, renderPosition: p } = this.aircraft;
+    let range = 0;
+    for (let d = 40; d <= DROP_COMPENSATION_RANGE; d += 20) {
+      const x = p.x + aim.x * d;
+      const y = p.y + aim.y * d;
+      const z = p.z + aim.z * d;
+      if (y < this.ground.heightAt(x, z)) {
+        range = d;
+        break;
+      }
+    }
+    if (range === 0) return;
+    const roundSpeed = GUN_SPECS[spec.id].muzzleVelocity + (state.velocity.x * aim.x + state.velocity.y * aim.y + state.velocity.z * aim.z);
+    const time = range / Math.max(100, roundSpeed);
+    out.scaleInPlace(range);
+    out.y += 0.5 * 9.81 * time * time;
+    out.normalize();
+  }
+
+  /**
+   * Red brackets over the enemy targets you could attack: alive, on screen,
+   * within 3.5 km (8 km for the carrier). Nearest first.
+   */
+  private enemyMarkers(): EnemyMarker[] {
+    const markers: EnemyMarker[] = [];
+    const p = this.aircraft.state.position;
+    for (const target of this.combat.targets) {
+      if (target.team !== 'red' || target.health <= 0 || target.kind === 'balloon') continue;
+      const sink = target.carrierId ? (this.carrierStatuses.get(target.carrierId)?.sink ?? 0) : 0;
+      const lift = target.kind === 'carrier' ? 14 : 2;
+      this.markerPoint.set(target.position.x, target.position.y - sink + lift, target.position.z);
+      const distance = Math.hypot(this.markerPoint.x - p.x, this.markerPoint.y - p.y, this.markerPoint.z - p.z);
+      if (distance > (target.kind === 'carrier' ? 8_000 : 3_500)) continue;
+      const screen = this.projectToScreen(this.markerPoint);
+      if (screen) markers.push({ x: screen.x, y: screen.y, kind: target.kind, distance });
+    }
+    // Nearest first; drop markers that would sit on top of a nearer one (the parked aircraft stand close together).
+    markers.sort((a, b) => a.distance - b.distance);
+    return markers.filter((m, i) => !markers.slice(0, i).some((n) => Math.hypot(m.x - n.x, m.y - n.y) < 26));
+  }
+
+  /**
+   * Where a round fired now would hit the ground: follows its path (nose
+   * direction at muzzle velocity, plus the aircraft's velocity, falling
+   * under gravity) until it meets the terrain, sea or a deck. Shown within
+   * 1.6 km. Put it on a ground target and fire.
+   */
+  private projectImpactPoint(): ScreenPoint | null {
+    const { state, spec, renderPosition, renderOrientation } = this.aircraft;
+    if (state.crashed || state.onGround) return null;
+    const gun = GUN_SPECS[spec.id];
+    Vector3.Forward().rotateByQuaternionToRef(renderOrientation, this.toPoint);
+    let x = renderPosition.x;
+    let y = renderPosition.y;
+    let z = renderPosition.z;
+    let vx = state.velocity.x + this.toPoint.x * gun.muzzleVelocity;
+    let vy = state.velocity.y + this.toPoint.y * gun.muzzleVelocity;
+    const vz = state.velocity.z + this.toPoint.z * gun.muzzleVelocity;
+    const dt = 0.02;
+    let above = y - this.ground.heightAt(x, z);
+    for (let t = 0; t < gun.projectileLifetime; t += dt) {
+      vy -= 9.81 * dt;
+      const nx = x + vx * dt;
+      const ny = y + vy * dt;
+      const nz = z + vz * dt;
+      const nextAbove = ny - this.ground.heightAt(nx, nz);
+      if (nextAbove <= 0) {
+        // Interpolate to where the path crosses the ground within this step.
+        const f = above / Math.max(1e-6, above - nextAbove);
+        this.worldPoint.set(x + (nx - x) * f, y + (ny - y) * f, z + (nz - z) * f);
+        if (Vector3.Distance(this.worldPoint, renderPosition) > 1_600) return null;
+        return this.projectToScreen(this.worldPoint);
+      }
+      x = nx;
+      y = ny;
+      z = nz;
+      above = nextAbove;
+    }
+    return null;
+  }
+
   /** One line on how to get going from where the aircraft has just spawned. */
   private briefSpawn(): void {
     const { state, spec } = this.aircraft;
@@ -614,8 +713,8 @@ export class Game {
     if (input.wasPressed('flapsUp')) this.flightInput.stepFlaps(-1);
 
     if (input.wasPressed('toggleDiveBrakes')) {
-      if (this.aircraft.spec.airbrake) this.hud.showMessage(this.flightInput.toggleAirbrake() ? 'DIVE BRAKES OUT' : 'DIVE BRAKES IN', 'good', 2);
-      else this.hud.showMessage(`The ${this.aircraft.spec.displayName} has no dive brakes (the Dive Bomber does: 5)`, 'ok', 3);
+      if (this.aircraft.spec.id === 'diveBomber') this.hud.showMessage(this.flightInput.toggleAirbrake() ? 'DIVE BRAKES OUT' : 'DIVE BRAKES IN', 'good', 2);
+      else this.hud.showMessage(`The ${this.aircraft.spec.displayName} has no dive brakes to lock open: hold B for air brakes`, 'ok', 3);
     }
 
     const selected = CLASS_KEYS.find(([action]) => input.wasPressed(action))?.[1] ?? null;

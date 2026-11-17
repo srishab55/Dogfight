@@ -55,6 +55,17 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
     expect(stalled).toBe(false);
   });
 
+  it('points the nose (the guns) at the target, not just the flight path', () => {
+    const state = createAirborneState(spec, { x: 0, y: 1500, z: 0 }, 0, perf.stallSpeed * 2.2, 0.8);
+    const goal = direction(20, -8);
+    fly(state, spec, 12, steer(goal, 0.8));
+    const noseX = 2 * (state.orientation.x * state.orientation.z + state.orientation.w * state.orientation.y);
+    const noseY = 2 * (state.orientation.y * state.orientation.z - state.orientation.w * state.orientation.x);
+    const noseZ = 1 - 2 * (state.orientation.x * state.orientation.x + state.orientation.y * state.orientation.y);
+    const errorDeg = Math.acos(Math.min(1, noseX * goal.x + noseY * goal.y + noseZ * goal.z)) / DEG;
+    expect(errorDeg).toBeLessThan(1.5);
+  });
+
   it('flies straight and level when the target is straight ahead (no wobble)', () => {
     const state = createAirborneState(spec, { x: 0, y: 1500, z: 0 }, 0, perf.stallSpeed * 2, 0.6);
     let worstBank = 0;

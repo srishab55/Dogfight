@@ -74,9 +74,9 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **A / D** | Roll left / right |
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
 | **↑ / ↓** | Throttle up / down |
-| **B** | Wheel brakes (hold) |
+| **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air |
 | **F / V** | Flaps down / up a notch (UP → TAKE-OFF → LANDING) |
-| **X** | Dive brakes out / in (Dive Bomber) |
+| **X** | Lock the Dive Bomber's dive brakes out / in |
 | **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** releases. |
 | **C** | Camera: chase → cockpit → orbit |
@@ -105,10 +105,14 @@ low, come left or right, then CUT). Touch down anywhere in the first half of
 the deck and the hook stops you in about 50 m; miss every wire and the crash
 barrier stops you (with some damage). Throttle to idle to be released.
 
-**Attacking Red:** Red's airfield has four AA guns and four parked aircraft;
-its carrier has four more guns. The guns lead their target but slew slowly,
-so jink and cross their line of fire. Red tracers are incoming. Strafe a gun
-with a good burst to knock it out. The carrier takes two full loads of
+**Attacking Red:** Red's airfield has four AA guns (sandbag rings with a tall
+red flag) and four parked aircraft; its carrier has four more guns. Red
+brackets on the HUD mark them with their distance. When you dive at the
+ground, an orange circle shows where your rounds will hit: put it on the
+target and fire (in mouse flight, put the aim circle on it: the nose is
+pointed so the rounds land there). The guns lead their target but slew
+slowly, so jink and cross their line of fire. Red tracers are incoming.
+A good burst knocks a gun out. The carrier takes two full loads of
 ammunition (rearm in between): it burns, then sinks by the stern.
 
 **Ammunition:** the AMMO readout counts your rounds. When they run out, fly
