@@ -83,7 +83,8 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **R** | Respawn at your home base (airfield, or the carrier's catapult) |
 | **T** | Air start at 800 m (for testing manoeuvres) |
 | **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
-| **P** | Auto-land at the nearest base within 10 km (any team; carriers need a hook). The HUD offers it within 5 km. **P** or any flight key takes over |
+| **P** | Auto-land at the nearest base within 10 km (any team; every type but the Heavy Bomber can land on a carrier). The HUD offers it within 5 km. **P** or any flight key takes over |
+| **N** | Map: corner → big → off (remembered) |
 | **1 – 5** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber |
 | **[ / ]** | Mouse sensitivity down / up (remembered) |
 | **K** | Steering: easy turns (default) / direct roll |
@@ -108,6 +109,12 @@ and the **LSO** line under the title calls your approach (distance, high or
 low, come left or right, then CUT). Touch down anywhere in the first half of
 the deck and the hook stops you in about 50 m; miss every wire and the crash
 barrier stops you (with some damage). Throttle to idle to be released.
+
+**Finding the bases:** a column of light rises from every base in its
+owner's colour (blue or red; blinking amber when an enemy base is
+defenceless), visible across the whole map, with the base's name and
+distance on the HUD. The map (**N**) shows the islands, runways and
+carriers, every base in its owner's colour, and you.
 
 **Attacking and capturing Red's airfield:** it's defended by one big AA gun
 on a flak platform with a tall red flag, and has a hangar, a fuel depot and

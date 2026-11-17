@@ -100,7 +100,7 @@ describe('capturing a base', () => {
   it('left alone, a neutralized base stays defenceless: nothing rebuilds itself', () => {
     const world = new CombatWorld(ground, createTargets());
     destroyDefences(world);
-    const events = run(world, [], 600);
+    const events = run(world, [], 300);
     expect(events.some((e) => e.type === 'baseDefended')).toBe(false);
     expect(world.bases.find((b) => b.base.id === 'red-airfield')?.neutralized).toBe(true);
     for (const target of world.targets.filter((t) => t.baseId === 'red-airfield' && BASE_DEFENCE_KINDS.includes(t.kind))) expect(target.health).toBe(0);

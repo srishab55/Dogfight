@@ -424,9 +424,21 @@ the status line says what it is doing: flying out, joining the approach, on
 final (flaps and gear come down), flare, braking. It touches down gently on
 the centreline, stops, and tells you the ground crew is rearming you. W
 hands control straight back ("YOU HAVE CONTROL"). The Naval Fighter lands on
-the carrier and catches a wire. Near Red's airfield it lands there too, but
+the carrier and catches a wire, and so do the Interceptor and Fighter-Bomber near the carrier (the Heavy Bomber is told it's too big, and offered the airfield). Near Red's airfield it lands there too, but
 you aren't rearmed (and their gun fires at you while it's defended).
 **Pass:** It lands every time without damage, and taking over is instant and smooth.
+
+## Card 35: Map and base beacons
+
+**Do:** Sit on the runway and look around. Air start (**T**) and look
+around again. Press **N** three times.
+**Expect:** A column of light rises from each base: blue over yours, red
+over Red's, visible even 9 km away, with the base's name and distance over
+it. The corner map shows the islands, runways, carriers and coloured base
+dots, with your arrow. N: the big map (labels and legend), N: no map, N:
+back in the corner. Destroy Red's defences: its column and map dot blink
+amber; capture it and both turn blue.
+**Pass:** You can always tell where each base is and who holds it.
 
 ## Card 34: Retractable gear
 
@@ -467,4 +479,5 @@ ALT, AoA, G), plus the debug overlay if possible.
 | all | flies a complete sortie · determinism · reaches its top speed · thin air at 6 km |
 | 33 | `autoLand.test.ts`: base choice · every class from 6 km · U-turn · abeam · over the mountain · teardrop · enemy airfield · carrier traps from three directions |
 | 32 | `bases.test.ts`: capture rules · nothing rebuilds itself · repaired for the new owner · the repaired gun fires at Red only · the radar shot from the runway, then captured |
+| 35 | headless Chrome (client only): labels, map modes, amber when defenceless |
 | 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

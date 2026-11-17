@@ -125,7 +125,8 @@ describe('auto-land: choosing the base', { timeout: 20_000 }, () => {
   it('carriers only for aircraft with a hook, and never a sinking one', () => {
     const nearBlueCarrier = { x: blueCarrier.runway.center.x - 300, y: 400, z: blueCarrier.runway.center.z };
     expect(autoLandBaseFor(AIRCRAFT_CLASSES.navalFighter, nearBlueCarrier)?.id).toBe('blue-carrier');
-    expect(autoLandBaseFor(AIRCRAFT_CLASSES.interceptor, nearBlueCarrier)?.id).toBe('blue-airfield');
+    expect(autoLandBaseFor(AIRCRAFT_CLASSES.fighterBomber, nearBlueCarrier)?.id).toBe('blue-carrier');
+    expect(autoLandBaseFor(AIRCRAFT_CLASSES.heavyBomber, nearBlueCarrier)?.id).toBe('blue-airfield');
     const statuses = createCarrierStatuses();
     statuses.get('blue-carrier')!.sink = 3;
     expect(autoLandBaseFor(AIRCRAFT_CLASSES.navalFighter, nearBlueCarrier, statuses)?.id).toBe('blue-airfield');
@@ -186,7 +187,7 @@ describe('auto-land: carriers', { timeout: 20_000 }, () => {
     ['from ahead of the bow', { x: -3_300, y: 500, z: 1_500 }, 200],
     ['from astern', { x: -5_500, y: 400, z: -6_500 }, 15],
   ];
-  describe.each(['navalFighter', 'diveBomber'] as const)('%s', (id) => {
+  describe.each(['navalFighter', 'diveBomber', 'interceptor', 'fighterBomber'] as const)('%s', (id) => {
     it.each(starts)('%s: flies onto the deck and catches a wire', (_label, start, heading) => {
       const outcome = autoLand(id, blueCarrier, start, heading, 130);
       expect(outcome.crashed, String(outcome.crashReason)).toBe(false);

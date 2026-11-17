@@ -4,6 +4,7 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import {
   AIRCRAFT_CLASSES,
   AIRFRAMES,
+  CARRIERS,
   baseSpawnPoint,
   cloneAircraftState,
   computePerformance,
@@ -30,6 +31,8 @@ import { createAircraftModel } from './aircraftModel';
 
 /** Landing flaps' position at which the arrestor hook is lowered (the landing notch). */
 const HOOK_DOWN_FLAPS = 0.75;
+/** ...and, for the land fighters (which carry a hook too), only this close to a carrier (m). */
+const HOOK_NEAR_CARRIER = 3_000;
 /** Flaps for a catapult launch: the take-off notch. */
 const CATAPULT_FLAPS = 0.5;
 
@@ -155,8 +158,9 @@ export class PlayerAircraft {
     visual.setFlapDeflection(flaps);
     visual.setAirbrake(a.airbrakePosition + (b.airbrakePosition - a.airbrakePosition) * alpha);
     visual.setGear(a.gearPosition + (b.gearPosition - a.gearPosition) * alpha);
-    // The hook comes down with landing flaps, and stays down while it holds a wire.
-    visual.setTailhook(b.hookEngaged || flaps >= HOOK_DOWN_FLAPS ? 1 : 0);
+    // The hook comes down with landing flaps (carrier aircraft, or anyone near a carrier), and stays down while it holds a wire.
+    const nearCarrier = this.spec.homeBase === 'carrier' || CARRIERS.some((c) => Math.hypot(c.center.x - b.position.x, c.center.z - b.position.z) < HOOK_NEAR_CARRIER);
+    visual.setTailhook(b.hookEngaged || (flaps >= HOOK_DOWN_FLAPS && nearCarrier) ? 1 : 0);
     if (controls && !b.crashed) visual.updateControlSurfaces(frameSeconds, controls.pitch, controls.roll, controls.yaw);
     visual.updatePropeller(frameSeconds, this.engineFraction(b));
   }

@@ -352,6 +352,10 @@ export const FIGHTER_AIRFRAME = defineAirframe({
   roundel: { span: 3.55, diameter: 0.92, chord: 0.38 },
   radiatorScoop: { center: { x: 0, y: -0.66, z: -0.2 }, width: 0.55, height: 0.32, depth: 1.3 },
   exhaustStacks: { x: 0.6, y: 0.22, firstZ: 2.45, count: 3, spacing: 0.32 },
+  // An arrestor hook, as on the naval versions of land fighters (a gameplay
+  // assist: any fighter can land on a carrier). Its lowered tip reaches just
+  // above the main wheels, like the Naval Fighter's.
+  tailhook: { pivot: { x: 0, y: -0.2, z: -4.3 }, length: 1.7 },
 });
 
 /**

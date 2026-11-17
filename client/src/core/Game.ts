@@ -61,8 +61,12 @@ import { applyPixelRatio, createEngine } from '../rendering/createEngine';
 import { createPostProcessing } from '../rendering/postProcessing';
 import { createControlsHint } from '../ui/ControlsHint';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
-import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
+import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
 import { createGameTitle } from '../ui/GameTitle';
+import { MiniMap } from '../ui/MiniMap';
+import { describeBases, type BaseView } from '../combat/baseViews';
+import { BASE_COLORS, BEACON_CONFIG } from '../config/map';
+import { BaseBeacons } from '../world/BaseBeacons';
 import { Environment } from '../world/Environment';
 import { FixedTimestepLoop } from './FixedTimestepLoop';
 
@@ -127,6 +131,10 @@ export class Game {
   private readonly fireAndSmoke: FireAndSmoke;
   private readonly enemyTargets: EnemyTargets;
   private readonly baseStructures: BaseStructures;
+  /** A column of light over every base, in its owner's colour. */
+  private readonly beacons: BaseBeacons;
+  /** The map (N). */
+  private readonly miniMap: MiniMap;
   private targetsDestroyed = 0;
   /** Camera shake from being hit (m), decaying. */
   private impactShake = 0;
@@ -209,6 +217,8 @@ export class Game {
     this.debugOverlay = new DebugOverlay(uiRoot, this.engine, this.scene, import.meta.env.DEV);
     this.controlsHint = createControlsHint(uiRoot, KEY_BINDINGS);
     createGameTitle(uiRoot);
+    this.miniMap = new MiniMap(uiRoot, terrain);
+    this.beacons = new BaseBeacons(this.scene);
     this.afterTeleport(0);
     this.briefSpawn();
   }
@@ -227,6 +237,8 @@ export class Game {
     this.hud.dispose();
     this.debugOverlay.dispose();
     this.controlsHint.remove();
+    this.miniMap.dispose();
+    this.beacons.dispose();
     this.cameras.dispose();
     this.tracers.dispose();
     this.effects.dispose();
@@ -282,6 +294,14 @@ export class Game {
     // The glide slope (and so the PAPI) is defined for the wheels, not the centre of mass.
     this.wheelHeightPoint.copyFrom(renderPosition).y -= groundClearance(this.aircraft.spec);
     this.environment.update(deltaSeconds, renderPosition, this.wheelHeightPoint, this.scene.activeCamera?.globalPosition ?? renderPosition);
+    const baseViews = describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM);
+    this.beacons.update(baseViews, this.scene.activeCamera?.globalPosition ?? renderPosition, this.clock);
+    const flying = this.aircraft.state;
+    this.miniMap.update(deltaSeconds, {
+      player: flying.crashed ? null : { x: renderPosition.x, z: renderPosition.z, headingDeg: (Math.atan2(flying.velocity.x, flying.velocity.z) * RAD_TO_DEG + 360) % 360 },
+      bases: baseViews,
+      playerTeam: PLAYER_TEAM,
+    });
     if (this.scene.activeCamera) this.tracers.update(this.scene.activeCamera.globalPosition);
     this.effects.update(deltaSeconds);
     this.balloons.update(deltaSeconds);
@@ -311,6 +331,7 @@ export class Game {
       approach: this.approachGuide(),
       baseStatus: this.enemyBaseStatus(),
       enemyMarkers: this.enemyMarkers(),
+      baseLabels: this.baseLabels(baseViews),
       impactPoint: this.projectImpactPoint(),
       targetsDestroyed: this.targetsDestroyed,
       autoLand: this.autoLandHud(),
@@ -604,7 +625,7 @@ export class Game {
     }
     const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
     if (!base) {
-      this.hud.showMessage(`AUTO-LAND · no base within ${AUTO_LAND_CONFIG.offerRange / 1000} km${spec.airframe.tailhook ? '' : ' (carriers need a tailhook)'}`, 'ok', 3);
+      this.hud.showMessage(`AUTO-LAND · no base within ${AUTO_LAND_CONFIG.offerRange / 1000} km${spec.airframe.tailhook ? '' : ` (the ${spec.displayName} is too big for a carrier)`}`, 'ok', 3);
       return;
     }
     this.autoLand = planAutoLand(base, state);
@@ -674,11 +695,15 @@ export class Game {
     }
     if (state.onGround) return null;
     const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
-    if (!base) return null;
-    const distance = Math.hypot(base.runway.center.x - state.position.x, base.runway.center.z - state.position.z);
-    if (distance > AUTO_LAND_HUD.promptDistance) return null;
+    // An aircraft with no hook (the Heavy Bomber) near a carrier: say why it isn't offered, and offer the nearest airfield.
+    const p = state.position;
+    const carrierNearby = !spec.airframe.tailhook && CARRIERS.some((c) => Math.hypot(c.center.x - p.x, c.center.z - p.z) < AUTO_LAND_HUD.promptDistance);
+    const tooBig = carrierNearby ? ` (the ${spec.displayName} is too big for the carrier)` : '';
+    if (!base) return carrierNearby ? { active: false, text: `The ${spec.displayName} is too big to land on a carrier` } : null;
+    const distance = Math.hypot(base.runway.center.x - p.x, base.runway.center.z - p.z);
+    if (distance > AUTO_LAND_HUD.promptDistance && !carrierNearby) return null;
     const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
-    return { active: false, text: `P · AUTO-LAND at ${base.name}${enemy ? ' (enemy)' : ''} · ${(distance / 1000).toFixed(1)} km` };
+    return { active: false, text: `P · AUTO-LAND at ${base.name}${enemy ? ' (enemy)' : ''} · ${(distance / 1000).toFixed(1)} km${tooBig}` };
   }
 
   /** Distance and compass bearing from the aircraft to the nearest friendly base. */
@@ -879,6 +904,36 @@ export class Game {
    * view-projection, so call it after scene.render(). Null in orbit view, when
    * crashed, or when the point is behind the camera.
    */
+  /**
+   * A label over each base far enough away to need finding: its name and
+   * distance in its owner's colour (amber: defenceless, land to capture).
+   * It sits just above the base, under its beacon's light.
+   */
+  private baseLabels(views: readonly BaseView[]): BaseLabel[] {
+    const labels: BaseLabel[] = [];
+    const p = this.aircraft.renderPosition;
+    if (this.aircraft.state.crashed) return labels;
+    for (const view of views) {
+      if (view.state === 'gone') continue;
+      const distance = Math.hypot(view.x - p.x, view.z - p.z);
+      if (distance < BEACON_CONFIG.labelMinDistance) continue;
+      // An enemy carrier within 8 km already has its red bracket.
+      if (view.base.kind === 'carrier' && view.owner !== PLAYER_TEAM && distance < 8_000) continue;
+      this.markerPoint.set(view.x, view.y + BEACON_CONFIG.labelHeight, view.z);
+      const screen = this.projectToScreen(this.markerPoint);
+      if (!screen) continue;
+      const captured = view.owner !== view.base.team;
+      const status = view.state === 'open' ? ' · DEFENCELESS' : captured && view.owner === PLAYER_TEAM ? ' · YOURS' : '';
+      labels.push({
+        x: screen.x,
+        y: screen.y - 26,
+        text: `${view.base.name.toUpperCase()}${status} ${(distance / 1000).toFixed(1)} km`,
+        color: view.state === 'open' ? BASE_COLORS.open : BASE_COLORS[view.owner],
+      });
+    }
+    return labels;
+  }
+
   private projectToScreen(point: Vector3): ScreenPoint | null {
     const camera = this.scene.activeCamera;
     if (!camera || this.cameras.mode === 'orbit' || this.aircraft.state.crashed) return null;
@@ -911,6 +966,7 @@ export class Game {
       this.hud.showMessage(this.steering === 'easy' ? 'EASY STEERING · A/D turn, the aircraft levels itself (K: direct roll)' : 'DIRECT ROLL · A/D roll, pull back (W) to turn (K: easy steering)', 'good', 3);
     }
     if (input.wasPressed('autoLand')) this.toggleAutoLand();
+    if (input.wasPressed('toggleMap')) this.miniMap.cycle();
     if (input.wasPressed('toggleMute')) this.hud.showMessage(this.audio.toggleMute() ? 'SOUND OFF (M)' : 'SOUND ON (M)', 'good', 1.5);
     if (input.wasPressed('toggleControlsHelp')) this.controlsHint.hidden = !this.controlsHint.hidden;
     for (const [action, factor] of [['mouseSensitivityUp', MOUSE_FLIGHT_CONFIG.sensitivityStep], ['mouseSensitivityDown', 1 / MOUSE_FLIGHT_CONFIG.sensitivityStep]] as const) {

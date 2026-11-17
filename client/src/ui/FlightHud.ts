@@ -40,6 +40,8 @@ export interface HudFrame {
   readonly baseStatus: BaseStatus | null;
   /** Practice balloons burst this session. */
   readonly targetsDestroyed: number;
+  /** Bases on screen and far enough away to need finding, with their labels. */
+  readonly baseLabels: readonly BaseLabel[];
   /** Auto-land: flying a landing (`active`), or on offer (press P), with its status line; null when unavailable. */
   readonly autoLand: { readonly active: boolean; readonly text: string } | null;
 }
@@ -56,6 +58,15 @@ export interface ApproachGuide {
   readonly glideDeviationDeg: number;
   /** Right (+) or left (-) of the extended centreline, seen from the aim point (deg). */
   readonly lineupDeg: number;
+}
+
+/** A base seen from far off: a diamond in its owner's colour with its name and distance, just above it. */
+export interface BaseLabel {
+  readonly x: number;
+  readonly y: number;
+  readonly text: string;
+  /** CSS colour: the owner's, or amber for a defenceless enemy base. */
+  readonly color: string;
 }
 
 /** A red bracket over an enemy target, with what it is and how far. */
@@ -85,6 +96,8 @@ export interface ScreenPoint {
   readonly y: number;
 }
 
+/** At most this many base labels at once (there are four bases). */
+const MAX_BASE_LABELS = 6;
 /** How long the gunsight glows red after a hit (s). */
 const HIT_MARKER_SECONDS = 0.15;
 
@@ -115,6 +128,7 @@ export class FlightHud {
   private readonly service: HTMLElement;
   private readonly approach: HTMLElement;
   private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string }> = [];
+  private readonly baseLabelPool: Array<{ box: HTMLElement; text: string; color: string }> = [];
   private readonly impactPoint: HTMLElement;
   private readonly baseStatus: HTMLElement;
   private readonly baseStatusText: HTMLElement;
@@ -218,6 +232,12 @@ export class FlightHud {
       markerLayer.append(box);
       this.markers.push({ box, label, text: '' });
     }
+    for (let i = 0; i < MAX_BASE_LABELS; i++) {
+      const box = element('div', 'hud-base-label');
+      box.hidden = true;
+      markerLayer.append(box);
+      this.baseLabelPool.push({ box, text: '', color: '' });
+    }
 
     this.crashPanel = element('div', 'hud-crash');
     this.crashReason = element('div', 'hud-crash-reason');
@@ -306,6 +326,19 @@ export class FlightHud {
       if (text !== marker.text) {
         marker.text = text;
         marker.label.textContent = text;
+      }
+    });
+    this.baseLabelPool.forEach((slot, i) => {
+      const label = frame.baseLabels[i];
+      placeMarker(slot.box, label ?? null);
+      if (!label) return;
+      if (label.text !== slot.text) {
+        slot.text = label.text;
+        slot.box.textContent = label.text;
+      }
+      if (label.color !== slot.color) {
+        slot.color = label.color;
+        slot.box.style.setProperty('--base-color', label.color);
       }
     });
     if (frame.serviceProgress !== null) this.serviceBar.style.width = `${(frame.serviceProgress * 100).toFixed(0)}%`;

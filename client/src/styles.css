@@ -668,3 +668,79 @@ body {
   color: #9fd3ff;
   border-color: rgba(159, 211, 255, 0.6);
 }
+
+/* A base far off: a diamond in its owner's colour, its name and distance. */
+.hud-base-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 1px 6px 1px 18px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--base-color, #ffffff);
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+
+.hud-base-label::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  background: var(--base-color, #ffffff);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.hud-base-label[hidden] {
+  display: none;
+}
+
+/* The map (N): a corner map, or a big one in the middle. */
+.minimap {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.minimap[hidden] {
+  display: none;
+}
+
+.minimap canvas {
+  display: block;
+  border-radius: 4px;
+}
+
+.minimap[data-mode='large'] {
+  top: 50%;
+  right: auto;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px;
+}
+
+.minimap-legend {
+  display: none;
+  gap: 14px;
+  justify-content: center;
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.minimap[data-mode='large'] .minimap-legend {
+  display: flex;
+}
+
+.minimap-key {
+  opacity: 0.6;
+}
+

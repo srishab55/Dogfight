@@ -118,15 +118,15 @@ describe('anti-aircraft guns', () => {
     const state = createAirborneState(spec, { x: gun.position.x + 200, y: 300, z: gun.position.z + 300 }, 0, 100, 0.75);
     const events = run(world, flat, [blueShooter(state)], 5, 300);
     expect(events.filter((e) => e.type === 'aaFired' && e.targetId === gun.id)).toHaveLength(0);
-    // Ten minutes later it is still a wreck.
+    // Five minutes later (it used to be rebuilt in four) it is still a wreck.
     let back = false;
-    for (let t = 0; t < 600 && !back; t += STEP) {
+    for (let t = 0; t < 300 && !back; t += STEP) {
       world.step(STEP, []);
       back = world.drainEvents().some((e) => e.type === 'targetRespawned' && e.targetId === gun.id);
     }
     expect(back).toBe(false);
     expect(gun.health).toBe(0);
-    expect(gun.destroyedSeconds).toBeGreaterThan(599);
+    expect(gun.destroyedSeconds).toBeGreaterThan(299);
   });
 
   it('do not hit their own side, and Blue rounds do not hit Blue aircraft', () => {
@@ -171,7 +171,7 @@ describe('parked aircraft', () => {
     for (let i = 0; i < PARKED_AIRCRAFT_CONFIG.maxHealth; i++) world.applyHit(parked, 1, 1);
     expect(world.drainEvents().some((e) => e.type === 'targetDestroyed' && e.targetId === parked.id)).toBe(true);
     expect(parked.health).toBe(0);
-    for (let t = 0; t < 600; t += STEP) world.step(STEP, []);
+    for (let t = 0; t < 300; t += STEP) world.step(STEP, []);
     expect(parked.health).toBe(0);
   });
 });

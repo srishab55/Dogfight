@@ -2,9 +2,10 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Base rules changed (your request): destruction sticks,
-capture repairs, and the radar stands by the runway. Remaining in Phase 4:
-bombs. Waiting for your test (FLIGHT_TEST.md cards 32-34) and confirmation.
+**Current status:** A map (N) and base beacons are in, and auto-land is
+offered at the carrier to every type but the Heavy Bomber (your requests).
+Remaining in Phase 4: bombs. Waiting for your test (FLIGHT_TEST.md cards
+33 and 35) and confirmation.
 
 ## Extras added along the way
 
@@ -27,6 +28,15 @@ bombs. Waiting for your test (FLIGHT_TEST.md cards 32-34) and confirmation.
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Map, base beacons, carrier auto-land for fighters ✅ (your request, 2026-11-17)
+
+- ✅ Map (**N**: corner → big → off, remembered): the islands from above (hill-shaded, from the real terrain), runways and carriers to scale, every base as a dot in its owner's colour (amber, blinking: defenceless; a cross: a sunk carrier), and you as an arrow. The big map labels the bases and has a legend. Pulled forward from Phase 6
+- ✅ Base beacons: a 1.2 km column of light rising from every base in its owner's colour, drawn without fog and widened with distance, so it can be seen from anywhere on the map; it fades when you're close, blinks amber while an enemy base is defenceless, turns blue when you capture it, and goes out when a carrier sinks
+- ✅ HUD base labels: the name and distance of every base beyond 1.2 km, in its owner's colour, just above it
+- ✅ Fix: auto-land wasn't offered at the carrier when flying a land aircraft (only hooked types could use it). The Interceptor and Fighter-Bomber now carry an arrestor hook (as the real naval versions of land fighters did), so they can land on a carrier by hand or with auto-land; the hook only shows near a carrier. The Heavy Bomber (24 m span) is too big for the deck: near a carrier the HUD says so and offers the airfield
+- ✅ 6 new carrier auto-land tests (Interceptor and Fighter-Bomber, three directions each)
+- Verified: 337 tests (1 skipped by design), typecheck, build, and headless Chrome: labels for all four bases with distances; the map cycling corner, big, off; Red's base amber and "DEFENCELESS" once its defences were down; the Fighter-Bomber offered "AUTO-LAND at Blue carrier" and landed on it on a wire; the Heavy Bomber told it is too big; beacons visible in colour at 8-9 km; 58 FPS, no console errors
 
 ## Base rules: destruction sticks, capture repairs ✅ (your request, 2026-11-17)
 

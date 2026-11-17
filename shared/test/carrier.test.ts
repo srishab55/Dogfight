@@ -14,6 +14,7 @@ import {
   runwayLocal,
   teamBase,
   type AircraftClassId,
+  type AircraftClassSpec,
 } from '../src/index';
 import { fly, holdPitchAttitude, rollToBank } from './testPilot';
 
@@ -28,15 +29,15 @@ const fromStern = (p: { x: number; z: number }) => runwayLocal(deck, p.x, p.z).a
 const offCentre = (p: { x: number; z: number }) => runwayLocal(deck, p.x, p.z).across;
 
 describe('carrier operations', () => {
-  it('carrier aircraft have tailhooks and spawn on the carrier; island aircraft do not', () => {
+  it('carrier aircraft have tailhooks and spawn on the carrier; the land fighters have hooks too (they can visit a carrier); only the Heavy Bomber has none', () => {
     for (const id of CARRIER_CLASSES) {
       expect(hasTailhook(AIRCRAFT_CLASSES[id])).toBe(true);
       expect(AIRCRAFT_CLASSES[id].homeBase).toBe('carrier');
     }
-    for (const id of ['interceptor', 'fighterBomber', 'heavyBomber'] as const) {
-      expect(hasTailhook(AIRCRAFT_CLASSES[id])).toBe(false);
-      expect(AIRCRAFT_CLASSES[id].homeBase).toBe('airfield');
-    }
+    for (const id of ['interceptor', 'fighterBomber', 'heavyBomber'] as const) expect(AIRCRAFT_CLASSES[id].homeBase).toBe('airfield');
+    expect(hasTailhook(AIRCRAFT_CLASSES.interceptor)).toBe(true);
+    expect(hasTailhook(AIRCRAFT_CLASSES.fighterBomber)).toBe(true);
+    expect(hasTailhook(AIRCRAFT_CLASSES.heavyBomber)).toBe(false);
   });
 
   describe.each(CARRIER_CLASSES)('%s', (id) => {
@@ -164,7 +165,8 @@ describe('carrier operations', () => {
   });
 
   it('an aircraft with no hook that lands on the deck is stopped by the crash barrier, damaged, instead of rolling off the bow', () => {
-    const spec = AIRCRAFT_CLASSES.fighterBomber;
+    // A Fighter-Bomber with its hook taken off.
+    const spec: AircraftClassSpec = { ...AIRCRAFT_CLASSES.fighterBomber, airframe: { ...AIRCRAFT_CLASSES.fighterBomber.airframe, tailhook: undefined } };
     const perf = computePerformance(spec);
     const approach = createApproachState(spec, deck, { distanceFromThreshold: 1_200, glideSlopeDeg: 3, aimPointPastThreshold: 40, speed: perf.handsOffApproachSpeed, throttle: perf.approachThrottle, flaps: 1 });
     fly(approach, spec, 60, (v) => ({ throttle: v.state.onGround ? 0 : perf.approachThrottle, flaps: 1 }), (v) => v.state.onGround && Math.hypot(v.state.velocity.x, v.state.velocity.z) < 0.5, world);
