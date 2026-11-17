@@ -274,4 +274,6 @@ bombs and particles (Phase 4); keep shadow casters to aircraft only.
 | D34 | Wheel brakes on B; no automatic brakes at idle | Auto-brake (D13) | Your request; lets you roll freely at idle (IL-2 uses B too) |
 | D35 | Sound synthesised with Web Audio (oscillators, filtered noise, generated buffers) | Recorded samples | Free, nothing to download or license, and it follows the simulation continuously |
 | D36 | Smoke, fire and explosions as pooled sprites (two sprite managers) | Babylon particle systems | Two draw calls for everything burning; particles never allocated during play |
+| D37 | Easy steering is the direction pilot with a target that leads the flight path sideways while A/D are held (and anticipates the roll-out on release) | A separate arcade turn model that rotates the velocity directly | The turn stays physical (bank and pull, speed bleeds), so it behaves the same for the server and the AI; one pilot to maintain |
+| D38 | Base capture in shared (`baseControl.ts`): defences all down, then an enemy aircraft stopped on the runway for 5 s; ownership drives rearming via an owner lookup | Client-side capture | Server-authoritative later, and the same rules for Phase 6 teams and AI |
 | D30 | MSAA 2x in the post-process pipeline | 4x | Indistinguishable on Retina; measured ~1 ms a frame cheaper, keeping 60 FPS with the sea and carriers |

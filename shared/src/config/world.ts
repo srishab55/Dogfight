@@ -234,9 +234,12 @@ export const BASES: readonly BaseDefinition[] = [
   { id: 'red-carrier', team: 'red', name: 'Red carrier', kind: 'carrier', runway: carrierDeckRunway(RED_CARRIER), serviceMargin: 0 },
 ];
 
-/** The team's base containing world point (x, z), or null. */
-export function friendlyBaseAt(team: Team, x: number, z: number): BaseDefinition | null {
-  return BASES.find((base) => base.team === team && isOnRunway(base.runway, x, z, base.serviceMargin)) ?? null;
+/** Who holds a base now: its original team unless it's been captured (see combat/baseControl.ts). */
+export type BaseOwnerLookup = (base: BaseDefinition) => Team;
+
+/** The team's base containing world point (x, z), or null. Captured bases count for their new owner. */
+export function friendlyBaseAt(team: Team, x: number, z: number, ownerOf: BaseOwnerLookup = (base) => base.team): BaseDefinition | null {
+  return BASES.find((base) => ownerOf(base) === team && isOnRunway(base.runway, x, z, base.serviceMargin)) ?? null;
 }
 
 /** The team's base of the given kind (each team has one airfield and one carrier). */

@@ -12,6 +12,8 @@ export class FlightInputController {
   private flapNotch = 0;
   /** The Dive Bomber's dive brakes, toggled with X. B opens the air brakes only while held. */
   private diveBrakesOpen = false;
+  /** Left/right as a smooth turn command (-1 to 1) for car-like steering. */
+  private turn = 0;
 
   constructor(private readonly input: InputManager) {}
 
@@ -38,13 +40,24 @@ export class FlightInputController {
   }
 
   /**
-   * @param assist stick positions from the mouse-flight pilot, or null. On
-   *   each axis a held key wins; otherwise the assist value is used.
+   * Car-like steering inputs for this step: the left/right keys as a turn
+   * command (ramped, so a tap is a gentle turn), and whether a pitch key is held.
    */
-  update(dt: number, assist: Readonly<StickInputs> | null = null): Readonly<FlightControls> {
+  steeringInputs(dt: number): { turn: number; pitchByHand: boolean } {
+    this.turn = rampAxis(this.turn, this.direction('rollRight', 'rollLeft'), dt);
+    return { turn: this.turn, pitchByHand: this.input.isHeld('pitchUp') || this.input.isHeld('pitchDown') };
+  }
+
+  /**
+   * @param assist stick positions from a pilot assist (mouse flight or car-like steering), or null.
+   * @param steering true for car-like steering: left/right drive the assist, so the assist always sets the roll.
+   *   Otherwise a held key wins on each axis, and the assist fills in the rest.
+   * @param assistAirbrake air brakes the assist asks for (to slow to the best turning speed), 0-1.
+   */
+  update(dt: number, assist: Readonly<StickInputs> | null = null, steering = false, assistAirbrake = 0): Readonly<FlightControls> {
     const c = this.current;
     c.pitch = this.axis(c.pitch, 'pitchUp', 'pitchDown', assist?.pitch, dt);
-    c.roll = this.axis(c.roll, 'rollRight', 'rollLeft', assist?.roll, dt);
+    c.roll = steering && assist ? assist.roll : this.axis(c.roll, 'rollRight', 'rollLeft', assist?.roll, dt);
     c.yaw = this.axis(c.yaw, 'yawRight', 'yawLeft', assist?.yaw, dt);
 
     const throttle = c.throttle + this.direction('throttleUp', 'throttleDown') * KEYBOARD_FLIGHT_CONFIG.throttlePerSecond * dt;
@@ -52,7 +65,7 @@ export class FlightInputController {
     // B: wheel brakes on the ground, air brakes in the air (both at once is fine: each only acts where it can).
     const braking = this.input.isHeld('brake');
     c.brake = braking || (KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && c.throttle === 0) ? 1 : 0;
-    c.airbrake = braking || this.diveBrakesOpen ? 1 : 0;
+    c.airbrake = braking || this.diveBrakesOpen ? 1 : assistAirbrake;
     c.fire = this.input.isHeld('fireGuns');
     return c;
   }
@@ -63,6 +76,7 @@ export class FlightInputController {
     // Snap the flap lever to the nearest notch.
     this.flapNotch = notches.reduce((best, value, index) => (Math.abs(value - flaps) < Math.abs((notches[best] ?? 0) - flaps) ? index : best), 0);
     this.diveBrakesOpen = false;
+    this.turn = 0;
     Object.assign(this.current, neutralControls(), { throttle, flaps: notches[this.flapNotch] ?? 0 });
     this.current.brake = KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && throttle === 0 ? 1 : 0;
   }

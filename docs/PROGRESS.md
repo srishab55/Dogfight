@@ -2,10 +2,9 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Your handling and aiming fixes are in: quicker turns and
-rolls, faster mouse flight that aims the guns, air brakes on B, and visible,
-marked enemy targets with a strafing aim point. Remaining in Phase 4: bombs.
-Waiting for your test (FLIGHT_TEST.md cards 26, 29, 30) and confirmation.
+**Current status:** Easy car-like steering, calmer mouse flight, and
+capturable enemy bases are in (your request). Remaining in Phase 4: bombs.
+Waiting for your test (FLIGHT_TEST.md cards 31-32) and confirmation.
 
 ## Extras added along the way
 
@@ -28,6 +27,16 @@ Waiting for your test (FLIGHT_TEST.md cards 26, 29, 30) and confirmation.
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Easy steering and capturable bases ✅ (your request, 2026-11-17)
+
+- ✅ Easy steering (default; K switches to direct roll): A/D turn the aircraft like a car. It banks and pulls into the tightest level turn, eases the air brakes out above the best turning speed, and on release rolls the wings level, anticipating, so it stops close to where you let go, then holds its height. W/S pitch as before. Shared `steerWithTurnInput`; 10 tests (90 degrees in under 4.5 s for fighters, height held, wings level after release)
+- ✅ Quicker turns at every speed: wings stall at 18 degrees instead of 15 (about 18% more lift)
+- ✅ Calmer mouse flight (between the original and the last version)
+- ✅ Red's airfield redesigned: one big AA gun (quad 40 mm on a flak platform, 18 m flag), a hangar, a fuel depot and a radar station with a sweeping dish, plus the parked aircraft; the carrier has one AA gun
+- ✅ Base capture (shared rules): destroy the AA gun, hangar, fuel depot and radar to make the base defenceless; land and stop on its runway for 5 s to capture it; it changes sides (its flag turns blue, you can rearm there, its old defences stay down); left alone, it rebuilds after 4 minutes. 5 tests
+- ✅ HUD: base status line (defences left, defenceless, capturing %, captured), markers for every structure, capture messages
+- Verified: 296 tests (1 skipped by design), typecheck, build, and headless Chrome: easy steering holds height in a 90-degree turn and levels on release; the base status counts down; destroying the defences, landing and stopping captures the base; rearmed there to a full 1,200 rounds. 58 FPS, no console errors
 
 ## Fixes: handling, aiming, air brakes ✅ (your feedback, 2026-11-17)
 
@@ -153,7 +162,7 @@ console errors, zero failed or external requests, and screenshots of each state.
 
 - ✅ Map with a Red base (airfield and carrier) opposite Blue's (early, with the island map)
 - ⬜ Red and Blue teams; neutral central objective
-- ⬜ Base health, destruction to neutral, capture by landing
+- ✅ Base defences, destruction to defenceless, capture by landing (early, your request)
 - ✅ Rearming and repair at your team's bases (early)
 - ⬜ Forward spawning; rearming at captured bases
 - ✅ AA guns (early, Red's side)

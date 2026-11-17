@@ -5,24 +5,21 @@
  */
 
 /**
- * Light anti-aircraft cannon, like a WWII 40 mm Bofors: rapid single shots
- * with tracer, fired in bursts. It leads its target (aims where the aircraft
- * will be when the shell gets there), but it slews at a limited rate, so a
- * fast crossing target or a jinking one is much harder to hit than one
- * flying straight at it.
+ * Each base's one anti-aircraft gun: a quad 40 mm mount on a raised concrete
+ * flak platform, with a tall flag, so you can see it from far off. It fires
+ * rapid tracer in bursts and leads its target (aims where the aircraft will
+ * be when the shell gets there), but it slews at a limited rate, so a fast
+ * crossing target or a jinking one is much harder to hit than one flying
+ * straight at it.
  */
 export const AA_GUN_CONFIG = {
   /** Opens fire at aircraft closer than this (m). */
-  range: 1_800,
+  range: 2_000,
   muzzleVelocity: 880,
-  roundsPerSecond: 4,
-  projectileLifetime: 2.6,
-  /**
-   * A 40 mm shell hits far harder than a machine-gun round (1). Tuned with
-   * the scatter below so a four-gun battery takes roughly a third of a
-   * Fighter-Bomber's hull on one pass at 300 m: dangerous, but you survive
-   * a pass or two.
-   */
+  /** Four barrels: about five shells a second. */
+  roundsPerSecond: 5,
+  projectileLifetime: 2.8,
+  /** A 40 mm shell hits far harder than a machine-gun round (1). */
   damagePerRound: 8,
   /** Random scatter of each shell around the aim line (deg). */
   dispersionDeg: 0.6,
@@ -36,14 +33,32 @@ export const AA_GUN_CONFIG = {
   fireWithinDeg: 4,
   /** Won't fire lower than this above the horizon (deg): it would hit its own ground. */
   minElevationDeg: 3,
-  /** A good burst knocks one out: about 20 hits from machine guns. */
-  maxHealth: 20,
-  /** Seconds after being destroyed before a fresh gun is in place. */
-  respawnSeconds: 90,
-  /** Hit sphere around the emplacement: gun, crew and sandbags (m). */
-  hitRadius: 5,
-  /** Barrel pivot above the ground or deck (m). */
-  mountHeight: 1.6,
+  /** About 50 machine-gun hits: two good passes, or one long one. */
+  maxHealth: 50,
+  /** Seconds after being destroyed before it's rebuilt (if the base hasn't been captured). */
+  respawnSeconds: 240,
+  /** Hit sphere around the platform and gun (m). */
+  hitRadius: 7,
+  /** The guns sit on top of the platform (m above the ground or deck). */
+  mountHeight: 5,
+} as const;
+
+/**
+ * A base's buildings. Destroying them, with its AA gun, leaves the base
+ * defenceless: land on it and it's yours. Size: the hit sphere's radius (m);
+ * health in machine-gun hits; rebuilt after `respawnSeconds` unless captured.
+ */
+export const BASE_STRUCTURE_CONFIG = {
+  hangar: { hitRadius: 17, height: 7, maxHealth: 80, respawnSeconds: 240 },
+  fuelDepot: { hitRadius: 12, height: 4, maxHealth: 40, respawnSeconds: 240 },
+  radar: { hitRadius: 8, height: 9, maxHealth: 30, respawnSeconds: 240 },
+} as const;
+
+/** Capturing: stop on a defenceless enemy base's runway (or aprons) for this long. */
+export const CAPTURE_CONFIG = {
+  seconds: 5,
+  /** Counts as stopped below this ground speed (m/s). */
+  maxGroundSpeed: 3,
 } as const;
 
 /** Aircraft parked on an airfield's apron: soft targets. */
@@ -78,30 +93,23 @@ export const CARRIER_DAMAGE_CONFIG = {
 /**
  * Where the defences are. Airfield positions are relative to the runway's
  * centre in its own frame (`along` towards its heading, `across` to its
- * right, m); carrier positions are distance from the stern and side (+1
- * starboard, -1 port).
+ * right, m), all on the flattened airfield pad; carrier positions are
+ * distance from the stern and side (+1 starboard, -1 port).
  */
 export const ENEMY_LAYOUT = {
   team: 'red',
-  airfieldAaGuns: [
-    { along: -420, across: 90 },
-    { along: -420, across: -90 },
-    { along: 120, across: 95 },
-    { along: 420, across: -90 },
-  ],
-  /** Parked beside the runway, nose towards it (heading = runway heading - 90 deg on the right side). */
+  airfieldAaGun: { along: -20, across: -98 },
+  hangar: { along: -250, across: 100 },
+  fuelDepot: { along: 160, across: 98 },
+  radar: { along: 400, across: -98 },
+  /** Parked in front of the hangar, nose towards the runway. */
   parkedAircraft: [
-    { along: -200, across: 72 },
-    { along: -170, across: 72 },
-    { along: -140, across: 72 },
-    { along: -110, across: 72 },
+    { along: -287, across: 66 },
+    { along: -262, across: 66 },
+    { along: -237, across: 66 },
+    { along: -212, across: 66 },
   ],
-  carrierAaGuns: [
-    { fromStern: 45, side: -1 },
-    { fromStern: 45, side: 1 },
-    { fromStern: 205, side: -1 },
-    { fromStern: 235, side: 1 },
-  ],
+  carrierAaGun: { fromStern: 205, side: -1 },
 } as const;
 
 /**

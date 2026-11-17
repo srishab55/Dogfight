@@ -6,7 +6,7 @@ import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder';
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
-import { AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, type CombatWorld } from '@dogfight/shared';
+import { AA_GUN_CONFIG, AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, type CombatWorld } from '@dogfight/shared';
 import { createAircraftModel } from '../aircraft/aircraftModel';
 import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { degreesToRadians } from '../math/orientation';
@@ -59,7 +59,7 @@ export class EnemyTargets {
     this.parkedTargets = combat.targets.filter((t) => t.kind === 'parkedAircraft');
     this.carriers = combat.targets.filter((t) => t.kind === 'carrier');
     const config = DEFENCE_VISUAL_CONFIG;
-    const sandbags = createPbrSurface(scene, 'aa-sandbags', { color: config.sandbagColor, roughness: 0.95 });
+    const sandbags = createPbrSurface(scene, 'aa-platform', { color: config.sandbagColor, roughness: 0.95 });
     const steel = createPbrSurface(scene, 'aa-steel', { color: config.gunColor, roughness: 0.6 });
     const charred = createPbrSurface(scene, 'wreck', { color: config.wreckColor, roughness: 1 });
 
@@ -88,17 +88,19 @@ export class EnemyTargets {
       const sink = target.carrierId ? (this.carrierStatuses.get(target.carrierId)?.sink ?? 0) : 0;
       const alive = isTargetAlive(target);
       const p = target.position;
-      scratchPos.set(p.x, p.y - sink - 1.4, p.z);
-      setMatrix(this.gunBases, i, alive ? scratchPos : null, 0, 0);
+      // The flak platform stands on the ground (or deck) and reaches up to just under the guns.
+      const mount = target.carrierId ? AA_GUN_CONFIG.mountHeight * 0.6 : AA_GUN_CONFIG.mountHeight;
+      const groundY = p.y - sink - mount;
+      scratchPos.set(p.x, groundY, p.z);
+      setMatrix(this.gunBases, i, alive ? scratchPos : null, 0, 0, (mount - 1.2) / PLATFORM_HEIGHT);
+      setMatrix(this.gunFlags, i, alive ? scratchPos : null, 0, 0);
       scratchPos.y = p.y - sink;
       setMatrix(this.gunBarrels, i, alive ? scratchPos : null, gun.yaw, gun.pitch);
-      scratchPos.y = p.y - sink - 1.4;
-      setMatrix(this.gunFlags, i, alive ? scratchPos : null, 0, 0);
-      scratchPos.y = p.y - sink - 1.3;
+      scratchPos.y = groundY;
       // On a carrier that's going down, the wreck goes with it; under water it isn't drawn.
-      const showWreck = !alive && p.y - sink > -4;
-      setMatrix(this.wrecks, wreck++, showWreck ? scratchPos : null, degreesToRadians(target.id * 47), 0);
-      if (showWreck) this.burn(target, p.x, p.y - sink - 1, p.z, 1, deltaSeconds);
+      const showWreck = !alive && groundY > -6;
+      setMatrix(this.wrecks, wreck++, showWreck ? scratchPos : null, degreesToRadians(target.id * 47), 0, 2);
+      if (showWreck) this.burn(target, p.x, groundY + 1, p.z, 1.6, deltaSeconds);
     });
     // Parked aircraft.
     this.parkedTargets.forEach((target, i) => {
@@ -173,11 +175,14 @@ function layer(mesh: Mesh, count: number): InstancedLayer {
   return { mesh, matrices };
 }
 
-/** Writes instance `index`'s matrix: placed and turned (yaw, then pitch up), or zero-scaled (hidden) if `position` is null. */
-function setMatrix(l: InstancedLayer, index: number, position: Vector3 | null, yaw: number, pitch: number): void {
+const scratchScale = new Vector3();
+
+/** Writes instance `index`'s matrix: placed and turned (yaw, then pitch up), stretched vertically by `scaleY`, or zero-scaled (hidden) if `position` is null. */
+function setMatrix(l: InstancedLayer, index: number, position: Vector3 | null, yaw: number, pitch: number, scaleY = 1): void {
   if (position) {
     Quaternion.RotationYawPitchRollToRef(yaw, -pitch, 0, scratchQuat);
-    Matrix.ComposeToRef(ONE, scratchQuat, position, scratchMatrix);
+    scratchScale.set(1, scaleY, 1);
+    Matrix.ComposeToRef(scaleY === 1 ? ONE : scratchScale, scratchQuat, position, scratchMatrix);
   } else {
     Matrix.ComposeToRef(ZERO, IDENTITY, ZERO, scratchMatrix);
   }
@@ -192,36 +197,41 @@ function mergeParts(name: string, parts: Mesh[], material: Material): Mesh {
   return merged;
 }
 
-/** Sandbag ring and floor, centred under the gun's pivot (which sits 1.4 m above it). */
+/** Height of the flak platform's model (m); it's stretched to each gun's mount height. */
+const PLATFORM_HEIGHT = 3.8;
+
+/** A concrete flak platform with a sandbag parapet, standing on the ground (origin at its foot). */
 function buildGunBase(scene: Scene): Mesh[] {
-  const ring = CreateTorus('aa-sandbags-ring', { diameter: 7, thickness: 1.5, tessellation: 20 }, scene);
-  ring.position.y = 0.6;
+  const platform = CreateBox('aa-platform', { width: 10, height: PLATFORM_HEIGHT, depth: 10 }, scene);
+  platform.position.y = PLATFORM_HEIGHT / 2;
+  const ring = CreateTorus('aa-parapet', { diameter: 8, thickness: 1.2, tessellation: 20 }, scene);
+  ring.position.y = PLATFORM_HEIGHT + 0.3;
   ring.scaling.y = 0.8;
-  const floor = CreateCylinder('aa-floor', { height: 0.2, diameter: 6.8, tessellation: 18 }, scene);
-  floor.position.y = 0.1;
-  return [ring, floor];
+  const steps = CreateBox('aa-steps', { width: 2, height: PLATFORM_HEIGHT * 0.6, depth: 3 }, scene);
+  steps.position.set(0, PLATFORM_HEIGHT * 0.3, -6);
+  return [platform, ring, steps];
 }
 
-/** A 9 m pole beside the emplacement with a red flag at the top. */
+/** An 18 m mast at the platform's corner with a big flag: you can spot the gun from kilometres away. */
 function buildGunFlag(scene: Scene): Mesh[] {
-  const pole = CreateCylinder('aa-flag-pole', { height: 9, diameter: 0.16, tessellation: 6 }, scene);
-  pole.position.set(4, 4.5, 0);
-  const flag = CreateBox('aa-flag-cloth', { width: 0.06, height: 1.6, depth: 2.6 }, scene);
-  flag.position.set(4, 8.1, 1.3);
+  const pole = CreateCylinder('aa-flag-pole', { height: 18, diameter: 0.3, tessellation: 6 }, scene);
+  pole.position.set(5.5, 9, 5.5);
+  const flag = CreateBox('aa-flag-cloth', { width: 0.1, height: 3, depth: 5 }, scene);
+  flag.position.set(5.5, 16.4, 8);
   return [pole, flag];
 }
 
-/** Mount, shield and twin barrels around the pivot; +Z is the way the barrels point. */
+/** A quad 40 mm mount around the pivot, with a shield; +Z is the way the barrels point. */
 function buildGunBarrels(scene: Scene): Mesh[] {
-  const mount = CreateCylinder('aa-mount', { height: 1.1, diameter: 1.4, tessellation: 10 }, scene);
-  mount.position.y = -0.6;
-  const cradle = CreateBox('aa-cradle', { width: 1.3, height: 0.7, depth: 1.7 }, scene);
-  const shield = CreateBox('aa-shield', { width: 2.1, height: 1.1, depth: 0.08 }, scene);
-  shield.position.set(0, 0.25, 0.85);
-  const barrels = [-0.3, 0.3].map((x, i) => {
-    const barrel = CreateCylinder(`aa-barrel-${i}`, { height: 3.8, diameter: 0.2, tessellation: 8 }, scene);
+  const mount = CreateCylinder('aa-mount', { height: 1.2, diameter: 2.2, tessellation: 12 }, scene);
+  mount.position.y = -0.7;
+  const cradle = CreateBox('aa-cradle', { width: 2, height: 0.9, depth: 2.2 }, scene);
+  const shield = CreateBox('aa-shield', { width: 2.8, height: 1.4, depth: 0.1 }, scene);
+  shield.position.set(0, 0.35, 1.1);
+  const barrels = [-0.75, -0.3, 0.3, 0.75].map((x, i) => {
+    const barrel = CreateCylinder(`aa-barrel-${i}`, { height: 4.5, diameter: 0.22, tessellation: 8 }, scene);
     barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(x, 0.05, 2);
+    barrel.position.set(x, 0.15, 2.6);
     return barrel;
   });
   return [mount, cradle, shield, ...barrels];

@@ -7,6 +7,8 @@ import type { GroundQuery } from '../flight/ground';
 import type { Team } from '../types/team';
 import type { CarrierStatusMap } from '../world/carrierStatus';
 import { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './antiAircraft';
+import { createBaseControls, stepBaseControls, type BaseControl, type BaseEvent } from './baseControl';
+import type { BaseDefinition, BaseOwnerLookup } from '../config/world';
 import { stepGuns, type GunState } from './guns';
 import { airframeHitSpheres, placeHitSpheres, type PlacedSphere } from './hitShapes';
 import { ProjectilePool, teamCode, type ImpactListener, type SphereTarget } from './projectiles';
@@ -20,7 +22,8 @@ export type CombatEvent =
   | { readonly type: 'targetRespawned'; readonly targetId: number; readonly kind: TargetKind }
   | { readonly type: 'aircraftHit'; readonly victim: number; readonly x: number; readonly y: number; readonly z: number; readonly owner: number; readonly damage: number }
   | { readonly type: 'aircraftShotDown'; readonly victim: number; readonly x: number; readonly y: number; readonly z: number; readonly owner: number }
-  | { readonly type: 'aaFired'; readonly targetId: number; readonly x: number; readonly y: number; readonly z: number };
+  | { readonly type: 'aaFired'; readonly targetId: number; readonly x: number; readonly y: number; readonly z: number }
+  | BaseEvent;
 
 /** An aircraft in the fight this step: it can shoot, and be shot. */
 export interface Shooter {
@@ -52,6 +55,9 @@ export class CombatWorld implements ImpactListener {
   readonly projectiles: ProjectilePool;
   readonly targets: CombatTarget[];
   readonly aaGuns: AaGunState[];
+  /** Who holds each base, and captures under way. */
+  readonly bases: BaseControl[] = createBaseControls();
+  private readonly baseEvents: BaseEvent[] = [];
   private readonly pending: CombatEvent[] = [];
   /** Everything with a hit sphere this step: alive targets, then aircraft spheres. */
   private readonly hittable: (SphereTarget | null)[] = [];
@@ -101,7 +107,13 @@ export class CombatWorld implements ImpactListener {
     updateTargets(this.targets, dt, this.respawned);
     for (const target of this.respawned) this.pending.push({ type: 'targetRespawned', targetId: target.id, kind: target.kind });
     this.updateSinking();
+    this.baseEvents.length = 0;
+    stepBaseControls(this.bases, this.targets, shooters, dt, this.baseEvents);
+    this.pending.push(...this.baseEvents);
   }
+
+  /** Who holds a base now (captured bases have changed sides). Pass to services such as rearming. */
+  readonly ownerOf: BaseOwnerLookup = (base: BaseDefinition) => this.bases.find((b) => b.base.id === base.id)?.owner ?? base.team;
 
   /** Returns the events since the last call and clears them. */
   drainEvents(): CombatEvent[] {

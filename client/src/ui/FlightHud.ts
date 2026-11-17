@@ -1,6 +1,7 @@
 import { getAttitude, stallAngles, type AircraftClassSpec, type AircraftState, type Attitude, type FlightControls } from '@dogfight/shared';
 import { formatKeyCode } from './ControlsHint';
 import { KEY_BINDINGS } from '../config/controls';
+import type { TargetKind } from '@dogfight/shared';
 import { TOUCHDOWN_GRADES, TOUCHDOWN_MESSAGE_SECONDS } from '../config/landing';
 
 /** Numbers refresh this often (s): readable, and cheap on the DOM. Warnings update every frame. */
@@ -35,6 +36,8 @@ export interface HudFrame {
   readonly impactPoint: ScreenPoint | null;
   /** Approach guidance to a friendly base while on final with landing flaps, else null. */
   readonly approach: ApproachGuide | null;
+  /** The nearest enemy base you're attacking or capturing, or null. */
+  readonly baseStatus: BaseStatus | null;
   /** Practice balloons burst this session. */
   readonly targetsDestroyed: number;
 }
@@ -57,11 +60,22 @@ export interface ApproachGuide {
 export interface EnemyMarker {
   readonly x: number;
   readonly y: number;
-  readonly kind: 'aaGun' | 'parkedAircraft' | 'carrier' | 'balloon';
+  readonly kind: TargetKind;
   readonly distance: number;
 }
 
-const MARKER_LABELS: Readonly<Record<EnemyMarker['kind'], string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '' };
+const MARKER_LABELS: Readonly<Record<TargetKind, string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '', hangar: 'HANGAR', fuelDepot: 'FUEL', radar: 'RADAR' };
+
+/** The nearest enemy (or newly captured) base's state, for the status line. */
+export interface BaseStatus {
+  readonly name: string;
+  readonly distance: number;
+  readonly defencesLeft: number;
+  readonly defencesTotal: number;
+  /** Capture progress 0-1 while you're capturing it, else null. */
+  readonly capturing: number | null;
+  readonly captured: boolean;
+}
 const MAX_MARKERS = 16;
 
 export interface ScreenPoint {
@@ -100,6 +114,9 @@ export class FlightHud {
   private readonly approach: HTMLElement;
   private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string }> = [];
   private readonly impactPoint: HTMLElement;
+  private readonly baseStatus: HTMLElement;
+  private readonly baseStatusText: HTMLElement;
+  private readonly baseStatusBar: HTMLElement;
   private readonly serviceBar: HTMLElement;
   private hitMarkerTimer = 0;
   private readonly flightPathMarker: HTMLElement;
@@ -169,6 +186,15 @@ export class FlightHud {
     this.approach = element('div', 'hud-approach');
     this.approach.hidden = true;
 
+    // Enemy base status: defences left, then capture.
+    this.baseStatus = element('div', 'hud-base-status');
+    this.baseStatusText = element('div', 'hud-base-status-text');
+    this.baseStatusBar = element('div', 'hud-service-fill');
+    const baseTrack = element('div', 'hud-service-track');
+    baseTrack.append(this.baseStatusBar);
+    this.baseStatus.append(this.baseStatusText, baseTrack);
+    this.baseStatus.hidden = true;
+
     // Strafing aim: where the rounds will strike the ground.
     this.impactPoint = element('div', 'hud-impact');
     this.impactPoint.hidden = true;
@@ -206,7 +232,7 @@ export class FlightHud {
     this.aimReticle = element('div', 'hud-aim');
     this.aimReticle.hidden = true;
 
-    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.approach, markerLayer, this.impactPoint);
+    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.approach, this.baseStatus, markerLayer, this.impactPoint);
     parent.append(this.root);
   }
 
@@ -253,6 +279,7 @@ export class FlightHud {
     toggle(this.outOfAmmoWarning, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
     toggle(this.service, frame.serviceProgress !== null);
     this.updateApproach(frame.approach);
+    this.updateBaseStatus(frame.baseStatus);
     placeMarker(this.impactPoint, frame.impactPoint);
     this.markers.forEach((marker, i) => {
       const enemy = frame.enemyMarkers[i];
@@ -315,6 +342,29 @@ export class FlightHud {
 
   dispose(): void {
     this.root.remove();
+  }
+
+  private updateBaseStatus(status: BaseStatus | null): void {
+    toggle(this.baseStatus, status !== null);
+    if (!status) return;
+    let text: string;
+    let fill: number;
+    if (status.captured) {
+      text = `${status.name.toUpperCase()} · CAPTURED · yours: rearm here`;
+      fill = 1;
+    } else if (status.capturing !== null) {
+      text = `${status.name.toUpperCase()} · CAPTURING ${Math.round(status.capturing * 100)}% · stay stopped`;
+      fill = status.capturing;
+    } else if (status.defencesLeft === 0) {
+      text = `${status.name.toUpperCase()} · DEFENCELESS · land and stop on its runway to capture`;
+      fill = 0;
+    } else {
+      text = `${status.name.toUpperCase()} · ${formatDistance(status.distance)} · DEFENCES ${status.defencesLeft}/${status.defencesTotal} (AA, hangar, fuel, radar)`;
+      fill = 1 - status.defencesLeft / status.defencesTotal;
+    }
+    if (this.baseStatusText.textContent !== text) this.baseStatusText.textContent = text;
+    this.baseStatusBar.style.width = `${(fill * 100).toFixed(0)}%`;
+    this.baseStatus.dataset['state'] = status.captured ? 'captured' : status.defencesLeft === 0 ? 'open' : 'defended';
   }
 
   /**

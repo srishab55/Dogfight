@@ -388,6 +388,29 @@ and fire a 1-2 s burst; pull up before 250 m.
 burning wreck, AA GUN DESTROYED). Muzzle flashes show where fire is coming from.
 **Pass:** You can reliably knock guns out in one or two passes.
 
+## Card 31: Easy steering
+
+**Do:** Air start (**T**). Hold **D** for about four seconds, then let go.
+Tap **A** briefly. Press **K** and try the same (direct roll), then **K** again.
+**Expect:** Holding D, the aircraft banks steeply and comes round about 90
+degrees in 4 seconds, holding its height; above the best turning speed the
+air brakes ease out ("AIR BRAKES"). Let go and it rolls level and flies
+straight, stopping the turn close to where you released. A tap makes a
+small heading change. With K (direct roll) A/D only roll, as before.
+**Pass:** Turning feels like steering a car; the aircraft looks after itself when you let go.
+
+## Card 32: Capture Red's airfield
+
+**Do:** Fly to Red's airfield (north island). Destroy the AA gun (flak
+platform with the tall red flag), the hangar, the fuel depot and the radar.
+Then land on its runway and stop.
+**Expect:** The status line under the title counts "DEFENCES 4/4" down to
+"DEFENCELESS · land and stop on its runway to capture"; the fuel depot goes
+up in a big fireball. Stopped on the runway: "CAPTURING nn%", then "CAPTURED
+· yours: rearm here", and the base's flag turns blue. You can rearm there;
+its defences stay down.
+**Pass:** All of the above. Leave it defenceless for four minutes instead and its defences come back.
+
 ---
 
 ## Reporting a problem

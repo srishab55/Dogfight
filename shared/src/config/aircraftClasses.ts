@@ -191,7 +191,9 @@ function estimateInertia(mass: number, airframe: Airframe, scale: number): Aircr
 const COMMON_AERO = {
   zeroAngleLiftCoefficient: 0.15,
   liftCurveSlope: 4.6,
-  criticalAngleOfAttackDeg: 15,
+  // Generous for propeller-era wings (real ones stall nearer 15 degrees): more
+  // lift before the stall means quicker turns, which matter more here.
+  criticalAngleOfAttackDeg: 18,
   stallHysteresisDeg: 3,
   separatedLiftScale: 1.1,
   oswaldEfficiency: 0.8,
@@ -242,7 +244,7 @@ const INTERCEPTOR: AircraftClassSpec = {
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.55, travelTime: 2.5 },
   handling: {
     referenceSpeed: 100,
-    pitch: { frequency: 4.8, dampingRatio: 0.55, fullStickAngleOfAttackDeg: 18, trimAngleOfAttackDeg: 2.5 },
+    pitch: { frequency: 4.8, dampingRatio: 0.55, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 2.5 },
     roll: { maxRateDeg: 216, responseTime: 0.144 },
     yaw: { frequency: 2.8, dampingRatio: 0.5, fullRudderSideslipDeg: 9 },
     dihedralEffect: 5,
@@ -271,7 +273,7 @@ const FIGHTER_BOMBER: AircraftClassSpec = {
   flaps: COMMON_FLAPS,
   handling: {
     referenceSpeed: 105,
-    pitch: { frequency: 3.84, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 18, trimAngleOfAttackDeg: 2.5 },
+    pitch: { frequency: 3.84, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 2.5 },
     roll: { maxRateDeg: 162, responseTime: 0.2 },
     yaw: { frequency: 2.3, dampingRatio: 0.55, fullRudderSideslipDeg: 8 },
     dihedralEffect: 5,
@@ -305,7 +307,7 @@ const HEAVY_BOMBER: AircraftClassSpec = {
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.75, maxExtensionSpeed: 70, travelTime: 4 },
   handling: {
     referenceSpeed: 95,
-    pitch: { frequency: 1.8, dampingRatio: 0.7, fullStickAngleOfAttackDeg: 17, trimAngleOfAttackDeg: 3 },
+    pitch: { frequency: 1.8, dampingRatio: 0.7, fullStickAngleOfAttackDeg: 20, trimAngleOfAttackDeg: 3 },
     roll: { maxRateDeg: 55, responseTime: 0.5 },
     yaw: { frequency: 1.4, dampingRatio: 0.6, fullRudderSideslipDeg: 6 },
     dihedralEffect: 4,
@@ -339,7 +341,7 @@ const NAVAL_FIGHTER: AircraftClassSpec = {
   flaps: { ...COMMON_FLAPS, liftIncrement: 0.7, dragIncrement: 0.04, travelTime: 2.5 },
   handling: {
     referenceSpeed: 100,
-    pitch: { frequency: 4.08, dampingRatio: 0.68, fullStickAngleOfAttackDeg: 19, trimAngleOfAttackDeg: 2.5 },
+    pitch: { frequency: 4.08, dampingRatio: 0.68, fullStickAngleOfAttackDeg: 22, trimAngleOfAttackDeg: 2.5 },
     roll: { maxRateDeg: 182, responseTime: 0.176 },
     yaw: { frequency: 2.5, dampingRatio: 0.52, fullRudderSideslipDeg: 9 },
     dihedralEffect: 5,
@@ -373,7 +375,7 @@ const DIVE_BOMBER: AircraftClassSpec = {
   handling: {
     referenceSpeed: 95,
     // Full back stick commands a high angle of attack: a dive bomber must pull hard out of its dive at modest speeds.
-    pitch: { frequency: 3.6, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 2.5 },
+    pitch: { frequency: 3.6, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 24, trimAngleOfAttackDeg: 2.5 },
     roll: { maxRateDeg: 122, responseTime: 0.24 },
     yaw: { frequency: 2.1, dampingRatio: 0.56, fullRudderSideslipDeg: 8 },
     dihedralEffect: 5,

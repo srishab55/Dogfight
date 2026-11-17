@@ -71,7 +71,7 @@ can break each other (fix: stop both, run `npm run dev` again).
 | Key | Action |
 |---|---|
 | **W / S** | Pitch up / down |
-| **A / D** | Roll left / right |
+| **A / D** | Turn left / right: the aircraft banks into the turn and levels itself when you let go (**K** switches to direct roll) |
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
 | **↑ / ↓** | Throttle up / down |
 | **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air |
@@ -85,6 +85,7 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
 | **1 – 5** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber |
 | **[ / ]** | Mouse sensitivity down / up (remembered) |
+| **K** | Steering: easy turns (default) / direct roll |
 | **M** | Sound on / off (sound starts with your first key press or click) |
 | **H** | Hide / show the controls list |
 | **`** | Debug stats (shown by default in dev) |
@@ -105,15 +106,16 @@ low, come left or right, then CUT). Touch down anywhere in the first half of
 the deck and the hook stops you in about 50 m; miss every wire and the crash
 barrier stops you (with some damage). Throttle to idle to be released.
 
-**Attacking Red:** Red's airfield has four AA guns (sandbag rings with a tall
-red flag) and four parked aircraft; its carrier has four more guns. Red
-brackets on the HUD mark them with their distance. When you dive at the
-ground, an orange circle shows where your rounds will hit: put it on the
-target and fire (in mouse flight, put the aim circle on it: the nose is
-pointed so the rounds land there). The guns lead their target but slew
-slowly, so jink and cross their line of fire. Red tracers are incoming.
-A good burst knocks a gun out. The carrier takes two full loads of
-ammunition (rearm in between): it burns, then sinks by the stern.
+**Attacking and capturing Red's airfield:** it's defended by one big AA gun
+on a flak platform with a tall red flag, and has a hangar, a fuel depot and
+a radar station (plus parked aircraft). Red brackets on the HUD mark them,
+and the status line under the title counts the defences left. Destroy the
+AA gun, hangar, fuel depot and radar and the base is defenceless: land, stop
+on its runway for 5 seconds, and it's captured. Its flag turns blue and you
+can rearm and repair there. Left alone, a defenceless base rebuilds its
+defences after four minutes. When you dive at the ground, an orange circle
+shows where your rounds will hit; in mouse flight, the aim circle is where
+they land. The carrier has one big AA gun and can be sunk.
 
 **Ammunition:** the AMMO readout counts your rounds. When they run out, fly
 to a friendly base (the BASE readout gives distance and bearing), land, stop

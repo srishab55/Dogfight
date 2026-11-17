@@ -6,6 +6,7 @@ import {
   CombatWorld,
   PARKED_AIRCRAFT_CONFIG,
   RED_CARRIER,
+  RED_RUNWAY,
   WORLD_CONFIG,
   createAirborneState,
   createCarrierStatuses,
@@ -54,21 +55,24 @@ const firstOf = (targets: CombatTarget[], kind: CombatTarget['kind'], onCarrier 
 };
 
 describe("Red's defences", () => {
-  it('Red has AA guns at its airfield and on its carrier, parked aircraft, and the carrier itself; Blue has none', () => {
+  it("Red's airfield has one big AA gun, a hangar, a fuel depot, a radar and four parked aircraft; its carrier one AA gun; Blue has none", () => {
     const targets = createTargets();
     const red = targets.filter((t) => t.team === 'red');
-    expect(red.filter((t) => t.kind === 'aaGun' && !t.carrierId)).toHaveLength(4);
-    expect(red.filter((t) => t.kind === 'aaGun' && t.carrierId === RED_CARRIER.id)).toHaveLength(4);
-    expect(red.filter((t) => t.kind === 'parkedAircraft')).toHaveLength(4);
-    expect(red.filter((t) => t.kind === 'carrier')).toHaveLength(1);
+    const at = (kind: CombatTarget['kind'], onCarrier: boolean) => red.filter((t) => t.kind === kind && (t.carrierId !== null) === onCarrier);
+    expect(at('aaGun', false)).toHaveLength(1);
+    expect(at('aaGun', true)).toHaveLength(1);
+    for (const kind of ['hangar', 'fuelDepot', 'radar'] as const) expect(at(kind, false)).toHaveLength(1);
+    expect(at('parkedAircraft', false)).toHaveLength(4);
+    expect(at('carrier', true)).toHaveLength(1);
     expect(targets.some((t) => t.team === 'blue')).toBe(false);
-    // Everything stands on its island or deck, above the ground there.
+    // Everything stands on its island (on the flat airfield pad) or deck.
     const world = createWorldGround(terrain);
     for (const t of red.filter((t) => t.kind !== 'carrier')) {
       const ground = world.heightAt(t.position.x, t.position.z);
       expect(ground).toBeGreaterThan(WORLD_CONFIG.seaLevel);
       expect(t.position.y - ground).toBeGreaterThan(0.5);
-      expect(t.position.y - ground).toBeLessThan(3);
+      expect(t.position.y - ground).toBeLessThan(10);
+      if (!t.carrierId) expect(Math.abs(ground - RED_RUNWAY.center.y)).toBeLessThan(0.5);
     }
   });
 });

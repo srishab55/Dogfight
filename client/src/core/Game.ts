@@ -4,6 +4,7 @@ import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Axis } from '@babylonjs/core/Maths/math.axis';
 import {
   BASES,
+  BASE_DEFENCE_KINDS,
   CARRIERS,
   CombatWorld,
   RUNWAYS,
@@ -15,8 +16,10 @@ import {
   createGunState,
   createServiceStatus,
   createTerrain,
+  createSteeringAssistMemory,
   createWorldGround,
   fullAmmo,
+  steerWithTurnInput,
   groundClearance,
   stepService,
   steerTowards,
@@ -33,13 +36,14 @@ import { PlayerAircraft } from '../aircraft/PlayerAircraft';
 import { CameraManager } from '../camera/CameraManager';
 import { AudioSystem } from '../audio/AudioSystem';
 import { AUDIO_CONFIG } from '../config/audio';
+import { BaseStructures } from '../combat/BaseStructures';
 import { EnemyTargets } from '../combat/EnemyTargets';
 import { ImpactEffects } from '../combat/ImpactEffects';
 import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { FireAndSmoke } from '../effects/FireAndSmoke';
 import { TargetBalloons } from '../combat/TargetBalloons';
 import { TracerRenderer } from '../combat/TracerRenderer';
-import { KEY_BINDINGS, MOUSE_FLIGHT_CONFIG } from '../config/controls';
+import { KEY_BINDINGS, MOUSE_FLIGHT_CONFIG, STEERING_CONFIG } from '../config/controls';
 import { MouseFlight } from '../input/MouseFlight';
 import { RENDER_CONFIG } from '../config/graphics';
 import { FLIGHT_PATH_MARKER_MIN_SPEED, LANDING_PRACTICE } from '../config/landing';
@@ -49,7 +53,7 @@ import { applyPixelRatio, createEngine } from '../rendering/createEngine';
 import { createPostProcessing } from '../rendering/postProcessing';
 import { createControlsHint } from '../ui/ControlsHint';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
-import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
+import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
 import { createGameTitle } from '../ui/GameTitle';
 import { Environment } from '../world/Environment';
 import { FixedTimestepLoop } from './FixedTimestepLoop';
@@ -114,6 +118,7 @@ export class Game {
   private readonly carrierStatuses: CarrierStatusMap;
   private readonly fireAndSmoke: FireAndSmoke;
   private readonly enemyTargets: EnemyTargets;
+  private readonly baseStructures: BaseStructures;
   private targetsDestroyed = 0;
   /** Camera shake from being hit (m), decaying. */
   private impactShake = 0;
@@ -137,6 +142,10 @@ export class Game {
   private readonly listenerUp = new Vector3();
   private readonly mouseFlight: MouseFlight;
   private readonly mouseSticks: StickInputs = { pitch: 0, roll: 0, yaw: 0 };
+  /** Keyboard steering: "easy" (A/D turn, like a car) or "direct" (A/D roll). */
+  private steering = readSteeringMode();
+  private readonly steeringMemory = createSteeringAssistMemory();
+  private readonly steeringSticks: StickInputs = { pitch: 0, roll: 0, yaw: 0 };
   private readonly aimDirection = new Vector3(0, 0, 1);
   // Scratch vectors for screen projections.
   private readonly worldPoint = new Vector3();
@@ -171,6 +180,8 @@ export class Game {
     this.fireAndSmoke = new FireAndSmoke(this.scene);
     this.enemyTargets = new EnemyTargets(this.scene, this.combat, this.fireAndSmoke, this.carrierStatuses);
     this.environment.addShadowCasters(this.enemyTargets.shadowCasters);
+    this.baseStructures = new BaseStructures(this.scene, this.combat, this.fireAndSmoke);
+    this.environment.addShadowCasters(this.baseStructures.shadowCasters);
 
     this.cameras = new CameraManager(this.scene, this.ground);
     createPostProcessing(this.scene, this.cameras.allCameras());
@@ -222,16 +233,26 @@ export class Game {
       // Mouse flight: the direction pilot turns the aim into stick positions;
       // any flight key held overrides it on that axis.
       let assist: StickInputs | null = null;
+      let steering = false;
+      let assistAirbrake = 0;
       if (mouseFlying) {
         this.mouseFlight.aimDirection(this.aimDirection);
         this.compensateForDrop(this.aimDirection, this.gunAim);
         assist = steerTowards(this.aircraft.state, this.aircraft.spec, this.gunAim, this.mouseSticks);
+      } else if (this.steering === 'easy') {
+        // Car-like: A/D turn, the assist banks and pulls, and levels the aircraft when they're let go.
+        const { turn, pitchByHand } = this.flightInput.steeringInputs(dt);
+        assist = steerWithTurnInput(this.aircraft.state, this.aircraft.spec, turn, pitchByHand, this.steeringMemory, this.steeringSticks);
+        steering = true;
+        // Turning hard above the best turning speed: ease the air brakes out to tighten the turn.
+        const over = this.aircraft.state.telemetry.airspeed / this.aircraft.performance.cornerSpeed - STEERING_CONFIG.brakeAboveCornerSpeed;
+        if (Math.abs(turn) > 0.6 && over > 0) assistAirbrake = Math.min(1, over * STEERING_CONFIG.brakePerSpeedRatio);
       }
-      const controls = this.flightInput.update(dt, assist);
+      const controls = this.flightInput.update(dt, assist, steering, assistAirbrake);
       this.aircraft.step(controls, dt);
       const { state, spec } = this.aircraft;
       this.combat.step(dt, [{ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire }]);
-      this.serviceEvent = stepService(this.service, state, spec, this.playerGuns, PLAYER_TEAM, dt) ?? this.serviceEvent;
+      this.serviceEvent = stepService(this.service, state, spec, this.playerGuns, PLAYER_TEAM, dt, this.combat.ownerOf) ?? this.serviceEvent;
     });
     this.handleCombatEvents();
     this.handleServiceEvent();
@@ -259,6 +280,7 @@ export class Game {
     this.effects.update(deltaSeconds);
     this.balloons.update(deltaSeconds);
     this.enemyTargets.update(deltaSeconds);
+    this.baseStructures.update(deltaSeconds);
     this.updateAircraftFire(deltaSeconds);
     this.fireAndSmoke.update(deltaSeconds, this.scene.activeCamera?.globalPosition ?? renderPosition);
     this.updateAudio(deltaSeconds);
@@ -281,6 +303,7 @@ export class Game {
       serviceProgress: this.service.base ? this.service.progress : null,
       nearestBase: this.nearestBase(),
       approach: this.approachGuide(),
+      baseStatus: this.enemyBaseStatus(),
       enemyMarkers: this.enemyMarkers(),
       impactPoint: this.projectImpactPoint(),
       targetsDestroyed: this.targetsDestroyed,
@@ -328,7 +351,49 @@ export class Game {
         return;
       case 'targetDestroyed':
         this.targetDestroyed(event);
+        return;
+      case 'baseNeutralized':
+        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENCELESS · land and stop on its runway to capture it`, 'good', 6);
+        return;
+      case 'baseDefended':
+        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId)}'s defences have been rebuilt`, 'ok', 4);
+        return;
+      case 'baseCaptured':
+        if (event.owner === PLAYER_TEAM) {
+          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} CAPTURED · it's yours: rearm and repair here`, 'good', 7);
+          this.audio.play('cable', 0.4, 1.6);
+        }
     }
+  }
+
+  private baseName(baseId: string): string {
+    return BASES.find((b) => b.id === baseId)?.name ?? 'Base';
+  }
+
+  /**
+   * The enemy airfield you're nearest, within 6 km: its defences left, and
+   * capture progress. A base you've captured shows as yours while you're on it.
+   */
+  private enemyBaseStatus(): BaseStatus | null {
+    const p = this.aircraft.state.position;
+    let best: BaseStatus | null = null;
+    for (const control of this.combat.bases) {
+      if (control.base.kind !== 'airfield' || control.base.team === PLAYER_TEAM) continue;
+      const r = control.base.runway.center;
+      const distance = Math.hypot(r.x - p.x, r.z - p.z);
+      const captured = control.owner === PLAYER_TEAM;
+      if (distance > (captured ? 1_500 : 6_000) || (best && best.distance < distance)) continue;
+      const defences = this.combat.targets.filter((t) => t.baseId === control.base.id && BASE_DEFENCE_KINDS.includes(t.kind));
+      best = {
+        name: control.base.name,
+        distance,
+        defencesLeft: defences.filter((t) => t.health > 0).length,
+        defencesTotal: defences.length,
+        capturing: control.capturingTeam === PLAYER_TEAM ? control.captureProgress : null,
+        captured,
+      };
+    }
+    return best;
   }
 
   private targetDestroyed(event: Extract<CombatEvent, { type: 'targetDestroyed' }>): void {
@@ -346,6 +411,19 @@ export class Game {
       case 'parkedAircraft':
         this.fireAndSmoke.explosion(event.x, event.y, event.z, 2);
         if (byPlayer) this.hud.showMessage('PARKED AIRCRAFT DESTROYED', 'good', 2.5);
+        return;
+      case 'hangar':
+        this.fireAndSmoke.explosion(event.x, event.y, event.z, 3.5);
+        if (byPlayer) this.hud.showMessage('HANGAR DESTROYED', 'good', 2.5);
+        return;
+      case 'fuelDepot':
+        this.fireAndSmoke.explosion(event.x, event.y, event.z, 5);
+        this.fireAndSmoke.explosion(event.x + 8, event.y + 4, event.z - 6, 3);
+        if (byPlayer) this.hud.showMessage('FUEL DEPOT DESTROYED', 'good', 2.5);
+        return;
+      case 'radar':
+        this.fireAndSmoke.explosion(event.x, event.y, event.z, 2);
+        if (byPlayer) this.hud.showMessage('RADAR DESTROYED', 'good', 2.5);
         return;
       case 'carrier':
         this.fireAndSmoke.explosion(event.x, event.y + 6, event.z, 5);
@@ -368,7 +446,7 @@ export class Game {
         this.audio.playAt('explosion', event, ear, a.explosionVolume * 0.7, 1.1);
         return;
       case 'targetDestroyed': {
-        const size = { balloon: 0, aaGun: 1, parkedAircraft: 1.4, carrier: 2.5 }[event.kind];
+        const size = { balloon: 0, aaGun: 1.3, parkedAircraft: 1.4, carrier: 2.5, hangar: 2, fuelDepot: 3, radar: 1.2 }[event.kind];
         if (size === 0) this.audio.playAt('cannon', event, ear, 0.35, 1.8);
         else this.audio.playAt('explosion', event, ear, a.explosionVolume * Math.min(1, 0.6 + 0.2 * size), 1.15 / Math.sqrt(size));
         return;
@@ -481,11 +559,11 @@ export class Game {
   /** Distance and compass bearing from the aircraft to the nearest friendly base. */
   private nearestBase(): HudFrame['nearestBase'] {
     const p = this.aircraft.state.position;
-    const here = friendlyBaseAt(PLAYER_TEAM, p.x, p.z);
+    const here = friendlyBaseAt(PLAYER_TEAM, p.x, p.z, this.combat.ownerOf);
     if (here) return { kind: here.kind, distance: 0, bearingDeg: 0 };
     let best: HudFrame['nearestBase'] = null;
     for (const base of BASES) {
-      if (base.team !== PLAYER_TEAM) continue;
+      if (this.combat.ownerOf(base) !== PLAYER_TEAM) continue;
       const dx = base.runway.center.x - p.x;
       const dz = base.runway.center.z - p.z;
       const distance = Math.hypot(dx, dz);
@@ -507,7 +585,7 @@ export class Game {
     const wheelsY = state.position.y - groundClearance(spec);
     let best: ApproachGuide | null = null;
     for (const base of BASES) {
-      if (base.team !== PLAYER_TEAM) continue;
+      if (this.combat.ownerOf(base) !== PLAYER_TEAM) continue;
       const runway = base.runway;
       const aimPast = base.kind === 'carrier' ? LANDING_PRACTICE.carrier.aimPointPastThreshold : LANDING_PRACTICE.airfield.aimPointPastThreshold;
       const h = (runway.headingDegrees * Math.PI) / 180;
@@ -567,7 +645,7 @@ export class Game {
     for (const target of this.combat.targets) {
       if (target.team !== 'red' || target.health <= 0 || target.kind === 'balloon') continue;
       const sink = target.carrierId ? (this.carrierStatuses.get(target.carrierId)?.sink ?? 0) : 0;
-      const lift = target.kind === 'carrier' ? 14 : 2;
+      const lift = target.kind === 'carrier' ? 14 : target.kind === 'hangar' ? 10 : target.kind === 'radar' ? 12 : 3;
       this.markerPoint.set(target.position.x, target.position.y - sink + lift, target.position.z);
       const distance = Math.hypot(this.markerPoint.x - p.x, this.markerPoint.y - p.y, this.markerPoint.z - p.z);
       if (distance > (target.kind === 'carrier' ? 8_000 : 3_500)) continue;
@@ -702,6 +780,11 @@ export class Game {
       if (this.cameras.mode === 'orbit') this.mouseFlight.release();
     }
     if (input.wasPressed('toggleDebugOverlay')) this.debugOverlay.toggle();
+    if (input.wasPressed('toggleSteering')) {
+      this.steering = this.steering === 'easy' ? 'direct' : 'easy';
+      writeSteeringMode(this.steering);
+      this.hud.showMessage(this.steering === 'easy' ? 'EASY STEERING · A/D turn, the aircraft levels itself (K: direct roll)' : 'DIRECT ROLL · A/D roll, pull back (W) to turn (K: easy steering)', 'good', 3);
+    }
     if (input.wasPressed('toggleMute')) this.hud.showMessage(this.audio.toggleMute() ? 'SOUND OFF (M)' : 'SOUND ON (M)', 'good', 1.5);
     if (input.wasPressed('toggleControlsHelp')) this.controlsHint.hidden = !this.controlsHint.hidden;
     for (const [action, factor] of [['mouseSensitivityUp', MOUSE_FLIGHT_CONFIG.sensitivityStep], ['mouseSensitivityDown', 1 / MOUSE_FLIGHT_CONFIG.sensitivityStep]] as const) {
@@ -747,6 +830,7 @@ export class Game {
     Object.assign(this.playerGuns, createGunState(this.aircraft.spec));
     Object.assign(this.service, createServiceStatus());
     this.wasCrashed = this.aircraft.state.crashed;
+    Object.assign(this.steeringMemory, createSteeringAssistMemory());
     this.wasCrashedForAudio = this.aircraft.state.crashed;
     this.lastRoundsFired = this.playerGuns.roundsFired;
     this.lastTouchdowns = this.aircraft.state.touchdownCount;
@@ -779,4 +863,23 @@ export class Game {
     applyPixelRatio(this.engine);
     this.engine.resize();
   };
+}
+
+const STEERING_KEY = 'dogfight.steering';
+
+function readSteeringMode(): 'easy' | 'direct' {
+  try {
+    const saved = localStorage.getItem(STEERING_KEY);
+    return saved === 'easy' || saved === 'direct' ? saved : STEERING_CONFIG.defaultMode;
+  } catch {
+    return STEERING_CONFIG.defaultMode;
+  }
+}
+
+function writeSteeringMode(mode: 'easy' | 'direct'): void {
+  try {
+    localStorage.setItem(STEERING_KEY, mode);
+  } catch {
+    // Blocked storage: the choice just isn't remembered.
+  }
 }

@@ -36,6 +36,7 @@ export const KEY_BINDINGS = {
   mouseSensitivityDown: ['BracketLeft'],
   mouseSensitivityUp: ['BracketRight'],
   toggleMute: ['KeyM'],
+  toggleSteering: ['KeyK'],
   toggleControlsHelp: ['KeyH'],
   toggleDebugOverlay: ['Backquote'],
 } as const satisfies Record<string, readonly string[]>;
@@ -49,6 +50,19 @@ export type KeyBindings = Readonly<Record<InputAction, readonly string[]>>;
  * recentres when released, so a quick tap gives a small correction and a
  * hold gives full deflection.
  */
+/**
+ * Keyboard steering modes. "easy": A/D turn the aircraft like a car (it
+ * banks, pulls, then levels itself when you let go). "direct": A/D roll the
+ * aircraft and you pull to turn, as in a real aircraft. K switches.
+ */
+export const STEERING_CONFIG = {
+  defaultMode: 'easy' as 'easy' | 'direct',
+  /** In easy steering, hard turns above this multiple of the corner speed ease the air brakes out to turn tighter. */
+  brakeAboveCornerSpeed: 1.05,
+  /** Air brake per unit of speed ratio above that. */
+  brakePerSpeedRatio: 5,
+} as const;
+
 export const KEYBOARD_FLIGHT_CONFIG = {
   /** Deflection gained per second while a key is held (3.5 = full deflection in ~0.3 s). */
   axisRampPerSecond: 3.5,
@@ -97,7 +111,8 @@ export const MOUSE_FLIGHT_CONFIG = {
 /** Rows of the on-screen controls reference (H). Generated from the bindings, so it stays correct when keys change. */
 export const CONTROLS_HINT_ROWS: ReadonlyArray<{ readonly actions: readonly InputAction[]; readonly label: string }> = [
   { actions: ['pitchUp', 'pitchDown'], label: 'Pitch up / down' },
-  { actions: ['rollLeft', 'rollRight'], label: 'Roll left / right' },
+  { actions: ['rollLeft', 'rollRight'], label: 'Turn left / right (banks and levels itself)' },
+  { actions: ['toggleSteering'], label: 'Steering: easy turns / direct roll' },
   { actions: ['yawLeft', 'yawRight'], label: 'Rudder left / right (steers on the ground)' },
   { actions: ['throttleUp', 'throttleDown'], label: 'Throttle up / down' },
   { actions: ['brake'], label: 'Brakes (hold): wheel brakes on the ground, air brakes in the air' },

@@ -27,6 +27,7 @@ export {
   runwayLocal,
   teamBase,
   type BaseDefinition,
+  type BaseOwnerLookup,
   type CarrierDefinition,
   type CarrierPart,
   type RunwayDefinition,
@@ -82,14 +83,16 @@ export { getAttitude, type Attitude } from './flight/attitude';
 export { computePerformance, type AircraftPerformance } from './flight/performance';
 export { stallAngles, wingSpan } from './flight/aerodynamics';
 export { DEFAULT_DIRECTION_PILOT, steerTowards, type DirectionPilotTuning, type StickInputs } from './flight/directionPilot';
+export { STEERING_ASSIST_CONFIG, createSteeringAssistMemory, steerWithTurnInput, type SteeringAssistMemory } from './flight/steeringAssist';
 
 export { GUN_SPECS, PRACTICE_TARGET_CONFIG, SERVICE_CONFIG, type GunSpec } from './config/weapons';
 export { createGunState, fullAmmo, gunMounts, hashToUnit, stepGuns, type GunState } from './combat/guns';
-export { AA_GUN_CONFIG, AIRCRAFT_HIT_SHAPE_CONFIG, CARRIER_DAMAGE_CONFIG, ENEMY_LAYOUT, PARKED_AIRCRAFT_CONFIG } from './config/targets';
+export { AA_GUN_CONFIG, AIRCRAFT_HIT_SHAPE_CONFIG, BASE_STRUCTURE_CONFIG, CAPTURE_CONFIG, CARRIER_DAMAGE_CONFIG, ENEMY_LAYOUT, PARKED_AIRCRAFT_CONFIG } from './config/targets';
+export { createBaseControls, stepBaseControls, type BaseControl, type BaseEvent, type Capturer } from './combat/baseControl';
 export { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './combat/antiAircraft';
 export { airframeHitSpheres, placeHitSpheres, type HitSphere, type PlacedSphere } from './combat/hitShapes';
 export { createCarrierStatuses, type CarrierStatus, type CarrierStatusMap } from './world/carrierStatus';
 export { createServiceStatus, needsService, stepService, type ServiceEvent, type ServiceStatus } from './combat/service';
 export { ProjectilePool, segmentSphereIntersection, teamCode, type ImpactListener, type SphereTarget } from './combat/projectiles';
-export { createPracticeTargets, createTargets, damageTarget, isTargetAlive, updateTargets, type CombatTarget, type PracticeTarget, type TargetKind } from './combat/targets';
+export { BASE_DEFENCE_KINDS, createPracticeTargets, createTargets, damageTarget, isTargetAlive, updateTargets, type CombatTarget, type PracticeTarget, type TargetKind } from './combat/targets';
 export { CombatWorld, type CombatEvent, type Shooter } from './combat/CombatWorld';

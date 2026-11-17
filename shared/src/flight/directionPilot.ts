@@ -56,14 +56,15 @@ export interface DirectionPilotTuning {
 }
 
 /**
- * Tuned for quick direction changes (your feedback: mouse turns were too
- * slow): it pulls hard for even a modest aim error, uses the wing up to 2
- * degrees short of the stall, and rolls in fast.
+ * Tuned for quick but not twitchy direction changes: it pulls firmly for a
+ * modest aim error, uses the wing up to 2 degrees short of the stall, and
+ * rolls in briskly. (Your feedback went both ways: first too slow, then too
+ * sensitive; this sits between the two.)
  */
 export const DEFAULT_DIRECTION_PILOT: DirectionPilotTuning = {
-  turnAccelPerRadG: 16,
+  turnAccelPerRadG: 9,
   maxTurnAccelG: 8,
-  rollGain: 5,
+  rollGain: 4,
   rollRateDamping: 0.14,
   pitchRateDamping: 0.45,
   loadFeedback: 0.3,

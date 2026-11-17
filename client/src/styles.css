@@ -602,3 +602,41 @@ body {
 .hud-impact[hidden] {
   display: none;
 }
+
+/* Enemy base status: defences left, then capture progress. */
+.hud-base-status {
+  position: absolute;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 340px;
+  padding: 6px 14px 8px;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  white-space: nowrap;
+  background: var(--panel-bg);
+  border: 1px solid rgba(255, 86, 64, 0.45);
+  border-radius: 6px;
+}
+
+.hud-base-status[hidden] {
+  display: none;
+}
+
+.hud-base-status-text {
+  margin-bottom: 5px;
+}
+
+.hud-base-status[data-state='defended'] .hud-service-fill {
+  background: #ff7a5c;
+}
+
+.hud-base-status[data-state='open'] {
+  border-color: var(--warning-amber);
+  color: var(--warning-amber);
+}
+
+.hud-base-status[data-state='captured'] {
+  border-color: var(--hud-text);
+}

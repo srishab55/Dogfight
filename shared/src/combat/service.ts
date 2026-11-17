@@ -1,6 +1,6 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
 import { SERVICE_CONFIG } from '../config/weapons';
-import { friendlyBaseAt, type BaseDefinition } from '../config/world';
+import { friendlyBaseAt, type BaseDefinition, type BaseOwnerLookup } from '../config/world';
 import type { AircraftState } from '../flight/AircraftState';
 import type { Team } from '../types/team';
 import { createGunState, fullAmmo, type GunState } from './guns';
@@ -44,11 +44,12 @@ export function stepService(
   guns: GunState,
   team: Team,
   dt: number,
+  ownerOf?: BaseOwnerLookup,
 ): ServiceEvent {
   const groundSpeed = Math.hypot(state.velocity.x, state.velocity.z);
   const base =
     !state.crashed && state.onGround && groundSpeed < SERVICE_CONFIG.maxGroundSpeed && state.throttle <= SERVICE_CONFIG.maxThrottle
-      ? friendlyBaseAt(team, state.position.x, state.position.z)
+      ? friendlyBaseAt(team, state.position.x, state.position.z, ownerOf)
       : null;
 
   if (!base || !needsService(state, spec, guns)) {

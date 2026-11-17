@@ -49,6 +49,9 @@ None known.
 | L45 | The AA has light guns only; no heavy flak bursting at altitude | High bombers are safe above about 1.5 km | Later, if wanted |
 | L46 | Bombs now need a key other than B (B is the brake) | None yet | Phase 4 bombs |
 | L47 | Air brakes on every type are a gameplay addition (most WWII fighters had none); only the Dive Bomber shows brake plates | Other types slow down with nothing visibly opening | By design |
+| L50 | Wings stall at 18 degrees (real propeller-era wings: about 15) for quicker turns | Lower stall and landing speeds than history | By design (your request) |
+| L51 | Captured bases stay captured for the session; Red has no aircraft to take them back, and their defences don't rebuild for the new owner | One-way captures | Phase 6/7 (AI retakes, rebuilding) |
+| L52 | Only the Red airfield can be captured; carriers are sunk instead | By design | None |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
 | L49 | The strafing aim point and the mouse drop correction assume a round at muzzle velocity with no drag; the wing guns converge at 300 m | Small errors beyond about 800 m | Fine at strafing range |
 | L32 | Vercel hosts only the static client. Its free Hobby plan is for non-commercial use (about 100 GB transfer a month) and can't run the long-lived WebSocket game server | Fine for single-player; multiplayer needs another host | Phase 5 (self-host the Colyseus server; see README "Deploying") |
@@ -89,6 +92,9 @@ None known.
 | Landing too hard: no flaps, no glide-slope cues, firm arrivals destroyed the aircraft | User feedback, Phase 2 | Flaps, ground effect, rebound damping, PAPI, flight-path marker, landing practice, damage instead of a crash below 7.5 m/s |
 | Runway hidden behind the aircraft on short final in chase view | Phase 2 screenshot | Chase camera raised (5 m up, 17 m back) |
 | Key-tapping test pilot crashed the landing practice | Phase 2 browser test | Practice now starts at the derived hands-off speed and throttle, so it holds the glide slope by itself |
+| Left/right too slow and A/D rolls too twitchy (keyboard) | Your feedback | Easy car-like steering: A/D turn and the aircraft levels itself |
+| Mouse flight too sensitive after the last change | Your feedback | Calmer gains, between the original and the previous version |
+| Too many AA guns; wanted one big visible one, buildings, and capture | Your request | One flak-platform AA gun per base, hangar, fuel depot, radar; capture by landing |
 | Turns and rolls too slow; mouse direction changes sluggish | Your feedback | Faster handling; mouse pilot pulls harder and rolls in faster (90 degrees in 4-5 s, was 8) |
 | No way to slow down in the air | Your feedback | Air brakes on B for every type |
 | Enemy guns hard to see and to hit | Your feedback | Flags, bigger emplacements, muzzle flashes, HUD markers, ground aim point, larger hit areas |
