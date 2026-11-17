@@ -117,7 +117,7 @@ export class BaseStructures {
 
   /** Flames for a while, then smoke; a captured base's wrecks just smoulder. */
   private burn(target: CombatTarget, dt: number, smoulder = false): void {
-    const since = target.respawnSeconds - target.respawnTimer;
+    const since = target.destroyedSeconds;
     const flaming = !smoulder && since < BURN_CONFIG.wreckFlameSeconds * 1.5;
     const size = target.kind === 'hangar' ? 3 : target.kind === 'fuelDepot' ? 2.6 : 1.6;
     const spread = target.radius * 0.6;

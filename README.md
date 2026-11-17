@@ -111,12 +111,15 @@ barrier stops you (with some damage). Throttle to idle to be released.
 
 **Attacking and capturing Red's airfield:** it's defended by one big AA gun
 on a flak platform with a tall red flag, and has a hangar, a fuel depot and
-a radar station (plus parked aircraft). Red brackets on the HUD mark them,
-and the status line under the title counts the defences left. Destroy the
-AA gun, hangar, fuel depot and radar and the base is defenceless: land, stop
-on its runway for 5 seconds, and it's captured. Its flag turns blue and you
-can rearm and repair there. Left alone, a defenceless base rebuilds its
-defences after four minutes. When you dive at the ground, an orange circle
+a radar station beside the north end of the runway (plus parked aircraft).
+Red brackets on the HUD mark them, and the status line under the title
+counts the defences left. What you destroy stays destroyed. Destroy the AA
+gun, hangar, fuel depot and radar and the base is defenceless: land, stop on
+its runway for 5 seconds, and it's captured. (Landing heading north, the
+radar is a few hundred metres ahead: a touch of rudder and you can shoot it
+from the runway, then just stay stopped.) Its flag turns blue, you can
+rearm there, and 30 seconds later your crews have repaired its defences:
+its AA gun now defends it for you. When you dive at the ground, an orange circle
 shows where your rounds will hit; in mouse flight, the aim circle is where
 they land. The carrier has one big AA gun and can be sunk.
 

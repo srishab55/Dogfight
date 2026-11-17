@@ -45,12 +45,12 @@ None known.
 | L41 | Sea bed more than 1.5 m deep is drawn deeper than it is (hidden under the opaque sea), to stop depth-buffer flicker far away | None visible | By design |
 | L42 | Sound is synthesised: convincing in the main but simple; no Doppler shift, and your own engine doesn't change between cockpit and chase views | Fine on laptop speakers | Later, if wanted |
 | L43 | Sound starts only after your first key press or click (browser autoplay rules) | A silent title screen | By design |
-| L44 | Destroyed targets come back after 1.5 to 3 minutes; destroyed things have no debris, only fire and smoke | Practice rules | Phase 6 (base rules) |
+| L44 | Destroyed things have no debris, only fire and smoke. Practice balloons come back after 20 s and a sunk carrier (with its gun) after 3 minutes; nothing at a base comes back unless the base is captured | By design (your request) | None |
 | L45 | The AA has light guns only; no heavy flak bursting at altitude | High bombers are safe above about 1.5 km | Later, if wanted |
 | L46 | Bombs now need a key other than B (B is the brake) | None yet | Phase 4 bombs |
 | L47 | Air brakes on every type are a gameplay addition (most WWII fighters had none); only the Dive Bomber shows brake plates | Other types slow down with nothing visibly opening | By design |
 | L50 | Wings stall at 18 degrees (real propeller-era wings: about 15) for quicker turns | Lower stall and landing speeds than history | By design (your request) |
-| L51 | Captured bases stay captured for the session; Red has no aircraft to take them back, and their defences don't rebuild for the new owner | One-way captures | Phase 6/7 (AI retakes, rebuilding) |
+| L51 | Captured bases stay captured for the session: Red has no aircraft to take them back. A captured base's parked aircraft are captured as they are (still in Red paint), and wrecked ones stay wrecks | One-way captures | Phase 6/7 (AI retakes) |
 | L52 | Only the Red airfield can be captured; carriers are sunk instead | By design | None |
 | L53 | Auto-land doesn't avoid other aircraft or flak: at an enemy base their AA gun keeps firing at you | Land at defended enemy bases at your own risk | Phase 7 (traffic) |
 | L54 | Auto-land from high up or close in loops round to lose height or line up, so it can take 2-3 minutes; from a few km out on the approach side it takes about 90 s | Slower than flying it yourself | By design |

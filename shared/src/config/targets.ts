@@ -33,10 +33,8 @@ export const AA_GUN_CONFIG = {
   fireWithinDeg: 4,
   /** Won't fire lower than this above the horizon (deg): it would hit its own ground. */
   minElevationDeg: 3,
-  /** About 50 machine-gun hits: two good passes, or one long one. */
+  /** About 50 machine-gun hits: two good passes, or one long one. Once destroyed it stays destroyed (see CAPTURE_CONFIG). */
   maxHealth: 50,
-  /** Seconds after being destroyed before it's rebuilt (if the base hasn't been captured). */
-  respawnSeconds: 240,
   /** Hit sphere around the platform and gun (m). */
   hitRadius: 7,
   /** The guns sit on top of the platform (m above the ground or deck). */
@@ -45,26 +43,36 @@ export const AA_GUN_CONFIG = {
 
 /**
  * A base's buildings. Destroying them, with its AA gun, leaves the base
- * defenceless: land on it and it's yours. Size: the hit sphere's radius (m);
- * health in machine-gun hits; rebuilt after `respawnSeconds` unless captured.
+ * defenceless: land on it and it's yours. Size: the hit sphere's radius (m),
+ * centred `height` above the ground; health in machine-gun hits. Destroyed,
+ * they stay destroyed (see CAPTURE_CONFIG). The radar's sphere reaches down
+ * to the ground, so rounds fired from an aircraft on the runway hit it.
  */
 export const BASE_STRUCTURE_CONFIG = {
-  hangar: { hitRadius: 17, height: 7, maxHealth: 80, respawnSeconds: 240 },
-  fuelDepot: { hitRadius: 12, height: 4, maxHealth: 40, respawnSeconds: 240 },
-  radar: { hitRadius: 8, height: 9, maxHealth: 30, respawnSeconds: 240 },
+  hangar: { hitRadius: 17, height: 7, maxHealth: 80 },
+  fuelDepot: { hitRadius: 12, height: 4, maxHealth: 40 },
+  radar: { hitRadius: 9, height: 7, maxHealth: 30 },
 } as const;
 
-/** Capturing: stop on a defenceless enemy base's runway (or aprons) for this long. */
+/**
+ * Capturing: stop on a defenceless enemy base's runway (or aprons) for this
+ * long. Nothing at a base rebuilds itself: what's destroyed stays destroyed
+ * until the base is captured. Then everything there changes sides, and its
+ * destroyed defences (AA gun, hangar, fuel depot, radar) are repaired for
+ * the new owner after `repairSeconds`.
+ */
 export const CAPTURE_CONFIG = {
   seconds: 5,
   /** Counts as stopped below this ground speed (m/s). */
   maxGroundSpeed: 3,
+  /** After a capture, the new owner's crews rebuild the base's defences in this long (s). */
+  repairSeconds: 30,
 } as const;
 
 /** Aircraft parked on an airfield's apron: soft targets. */
 export const PARKED_AIRCRAFT_CONFIG = {
+  /** Destroyed, they stay wrecks; on a capture, any left intact are captured with the base. */
   maxHealth: 14,
-  respawnSeconds: 120,
   /** One sphere around the fuselage and wing roots (m). */
   hitRadius: 6,
 } as const;
@@ -101,7 +109,13 @@ export const ENEMY_LAYOUT = {
   airfieldAaGun: { along: -20, across: -98 },
   hangar: { along: -250, across: 100 },
   fuelDepot: { along: 160, across: 98 },
-  radar: { along: 400, across: -98 },
+  /**
+   * Beside the runway near its north end (Red's runway points south, so
+   * that's along -450), 25 m off its edge. An aircraft that lands heading
+   * north, the way in from Blue's side, stops a few hundred metres short of
+   * it, nearly in line: a touch of rudder and it can shoot it from the ground.
+   */
+  radar: { along: -450, across: -45 },
   /** Parked in front of the hangar, nose towards the runway. */
   parkedAircraft: [
     { along: -287, across: 66 },

@@ -347,7 +347,7 @@ you to hold B.
 **Expect:** The guns open up within about 1.8 km: red-orange tracers. Hits
 flash the screen edge red, kick the camera, clank, and cost hull. A good
 burst knocks a gun out (explosion, then a burning wreck); the parked aircraft
-burn the same way. Destroyed targets come back after 1.5 to 2 minutes.
+burn the same way. What you destroy stays destroyed (only capturing the base repairs it).
 **Pass:** The defences are dangerous but survivable for a pass or two; TGT counts what you destroy.
 
 ## Card 27: Sink the Red carrier
@@ -402,14 +402,17 @@ small heading change. With K (direct roll) A/D only roll, as before.
 ## Card 32: Capture Red's airfield
 
 **Do:** Fly to Red's airfield (north island). Destroy the AA gun (flak
-platform with the tall red flag), the hangar, the fuel depot and the radar.
-Then land on its runway and stop.
-**Expect:** The status line under the title counts "DEFENCES 4/4" down to
-"DEFENCELESS · land and stop on its runway to capture"; the fuel depot goes
-up in a big fireball. Stopped on the runway: "CAPTURING nn%", then "CAPTURED
-· yours: rearm here", and the base's flag turns blue. You can rearm there;
-its defences stay down.
-**Pass:** All of the above. Leave it defenceless for four minutes instead and its defences come back.
+platform with the tall red flag), the hangar and the fuel depot from the
+air. Land heading north and stop. Steer the nose onto the radar (beside the
+runway's north end, a few hundred metres ahead) and fire. Stay stopped.
+**Expect:** The status line under the title counts "DEFENCES 4/4" down; the
+fuel depot goes up in a big fireball. Nothing you destroy comes back, however
+long you wait. From the runway a short burst destroys the radar:
+"DEFENCELESS", then "CAPTURING nn%", then "CAPTURED · yours: rearm here ·
+crews repairing its defences"; the base's flag turns blue. 30 s later
+"REPAIRED · its AA gun now defends it for you": the gun, hangar, fuel depot
+and radar are back, with a blue flag on the gun, and no red markers over them.
+**Pass:** All of the above.
 
 ## Card 33: Auto-land
 
@@ -463,4 +466,5 @@ ALT, AoA, G), plus the debug overlay if possible.
 | 16b | `directionPilot.test.ts`: turns to 90°, turns round to 180°, climbs, can't stall, no wobble |
 | all | flies a complete sortie · determinism · reaches its top speed · thin air at 6 km |
 | 33 | `autoLand.test.ts`: base choice · every class from 6 km · U-turn · abeam · over the mountain · teardrop · enemy airfield · carrier traps from three directions |
+| 32 | `bases.test.ts`: capture rules · nothing rebuilds itself · repaired for the new owner · the repaired gun fires at Red only · the radar shot from the runway, then captured |
 | 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

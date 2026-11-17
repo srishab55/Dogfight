@@ -363,11 +363,13 @@ export class Game {
         if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENCELESS · land and stop on its runway to capture it`, 'good', 6);
         return;
       case 'baseDefended':
-        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId)}'s defences have been rebuilt`, 'ok', 4);
+        // Only a capture repairs a base: this is the new owner's crews finishing.
+        if (event.owner === PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} REPAIRED · its AA gun now defends it for you`, 'good', 5);
+        else this.hud.showMessage(`${this.baseName(event.baseId)}'s defences have been rebuilt`, 'ok', 4);
         return;
       case 'baseCaptured':
         if (event.owner === PLAYER_TEAM) {
-          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} CAPTURED · it's yours: rearm and repair here`, 'good', 7);
+          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} CAPTURED · it's yours: rearm here; your crews are repairing its defences`, 'good', 7);
           this.audio.play('cable', 0.4, 1.6);
         }
     }
@@ -413,7 +415,7 @@ export class Game {
         return;
       case 'aaGun':
         this.fireAndSmoke.explosion(event.x, event.y, event.z, 1.2);
-        if (byPlayer) this.hud.showMessage('AA GUN DESTROYED', 'good', 2.5);
+        if (byPlayer) this.hud.showMessage('AA GUN DESTROYED · it stays down', 'good', 2.5);
         return;
       case 'parkedAircraft':
         this.fireAndSmoke.explosion(event.x, event.y, event.z, 2);
@@ -766,7 +768,7 @@ export class Game {
     const markers: EnemyMarker[] = [];
     const p = this.aircraft.state.position;
     for (const target of this.combat.targets) {
-      if (target.team !== 'red' || target.health <= 0 || target.kind === 'balloon') continue;
+      if (target.team === null || target.team === PLAYER_TEAM || target.health <= 0) continue;
       const sink = target.carrierId ? (this.carrierStatuses.get(target.carrierId)?.sink ?? 0) : 0;
       const lift = target.kind === 'carrier' ? 14 : target.kind === 'hangar' ? 10 : target.kind === 'radar' ? 12 : 3;
       this.markerPoint.set(target.position.x, target.position.y - sink + lift, target.position.z);

@@ -373,8 +373,11 @@ export class FlightHud {
     let text: string;
     let fill: number;
     if (status.captured) {
-      text = `${status.name.toUpperCase()} · CAPTURED · yours: rearm here`;
-      fill = 1;
+      const repairing = status.defencesLeft < status.defencesTotal;
+      text = repairing
+        ? `${status.name.toUpperCase()} · CAPTURED · yours: rearm here · crews repairing its defences`
+        : `${status.name.toUpperCase()} · YOURS · repaired: its AA gun defends it for you`;
+      fill = status.defencesTotal > 0 ? status.defencesLeft / status.defencesTotal : 1;
     } else if (status.capturing !== null) {
       text = `${status.name.toUpperCase()} · CAPTURING ${Math.round(status.capturing * 100)}% · stay stopped`;
       fill = status.capturing;

@@ -4,6 +4,9 @@ import { BASES, CARRIERS, HOME_RUNWAY, type CarrierDefinition, type RunwayDefini
 import type { Team } from '../types/team';
 import type { Vec3 } from '../types/vector';
 
+/** respawnSeconds for things that never come back by themselves (a base's defences, buildings and aircraft; a carrier's gun). */
+const NEVER = Infinity;
+
 export type TargetKind = 'balloon' | 'aaGun' | 'parkedAircraft' | 'carrier' | 'hangar' | 'fuelDepot' | 'radar';
 
 /** The targets that defend a base: destroy them all and the base can be captured. */
@@ -11,15 +14,18 @@ export const BASE_DEFENCE_KINDS: readonly TargetKind[] = ['aaGun', 'hangar', 'fu
 
 /**
  * Something on the map that rounds can damage and destroy: a practice
- * balloon, an anti-aircraft gun, a parked aircraft or a carrier. After a
- * delay a destroyed target is replaced (practice rules until Phase 6 adds
- * base capture).
+ * balloon, an anti-aircraft gun, a building, a parked aircraft or a carrier.
+ *
+ * What comes back once destroyed: practice balloons after a short delay; a
+ * sunk carrier as a new ship (with its gun) after a few minutes. Nothing at
+ * a base comes back by itself: only capturing the base repairs it, for its
+ * new owner (baseControl.ts).
  */
 export interface CombatTarget {
   readonly id: number;
   readonly kind: TargetKind;
-  /** Owning team; null for practice balloons, which anyone may shoot. */
-  readonly team: Team | null;
+  /** Owning team; null for practice balloons, which anyone may shoot. Changes when its base is captured. */
+  team: Team | null;
   /** Centre of the target, or of a carrier's flight deck (m). */
   readonly position: Readonly<Vec3>;
   /** Hit sphere radius (m). 0 for carriers: rounds hit them through their hull and deck (the world ground). */
@@ -30,9 +36,12 @@ export interface CombatTarget {
   readonly maxHealth: number;
   /** Fraction of each round's damage that gets through (armour). */
   readonly vulnerability: number;
+  /** Seconds from destroyed to replaced; Infinity for things that never come back by themselves. */
   readonly respawnSeconds: number;
-  /** Seconds until a destroyed target is replaced (0 while it stands). */
+  /** Seconds until a destroyed target is replaced (0 while it stands; Infinity: not coming back). */
   respawnTimer: number;
+  /** Seconds since it was destroyed (0 while it stands): for fires, and for a carrier's sinking. */
+  destroyedSeconds: number;
   /** The carrier this target is part of or mounted on (it sinks with it), or null. */
   readonly carrierId: string | null;
   /** The base this target belongs to (its airfield), or null. */
@@ -49,7 +58,7 @@ export function isTargetAlive(target: Readonly<CombatTarget>): boolean {
 /** Every target on the map: practice balloons near Blue's airfield, then Red's defences, parked aircraft and carrier. */
 export function createTargets(): CombatTarget[] {
   const targets: CombatTarget[] = [];
-  const add = (target: Omit<CombatTarget, 'id' | 'health' | 'respawnTimer'>) => targets.push({ ...target, id: targets.length, health: target.maxHealth, respawnTimer: 0 });
+  const add = (target: Omit<CombatTarget, 'id' | 'health' | 'respawnTimer' | 'destroyedSeconds'>) => targets.push({ ...target, id: targets.length, health: target.maxHealth, respawnTimer: 0, destroyedSeconds: 0 });
 
   for (const balloon of createPracticeTargets()) add(balloon);
 
@@ -60,15 +69,15 @@ export function createTargets(): CombatTarget[] {
     const structure = (kind: 'hangar' | 'fuelDepot' | 'radar', spot: { along: number; across: number }) => {
       const c = BASE_STRUCTURE_CONFIG[kind];
       // Buildings face the runway: their fronts point back across it.
-      add({ kind, team, position: at(spot, c.height), radius: c.hitRadius, headingDegrees: runway.headingDegrees + (spot.across > 0 ? -90 : 90), maxHealth: c.maxHealth, vulnerability: 1, respawnSeconds: c.respawnSeconds, carrierId: null, baseId: base.id });
+      add({ kind, team, position: at(spot, c.height), radius: c.hitRadius, headingDegrees: runway.headingDegrees + (spot.across > 0 ? -90 : 90), maxHealth: c.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: null, baseId: base.id });
     };
-    add({ kind: 'aaGun', team, position: at(ENEMY_LAYOUT.airfieldAaGun, AA_GUN_CONFIG.mountHeight), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: runway.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: AA_GUN_CONFIG.respawnSeconds, carrierId: null, baseId: base.id });
+    add({ kind: 'aaGun', team, position: at(ENEMY_LAYOUT.airfieldAaGun, AA_GUN_CONFIG.mountHeight), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: runway.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: null, baseId: base.id });
     structure('hangar', ENEMY_LAYOUT.hangar);
     structure('fuelDepot', ENEMY_LAYOUT.fuelDepot);
     structure('radar', ENEMY_LAYOUT.radar);
     for (const parked of ENEMY_LAYOUT.parkedAircraft) {
       const facing = runway.headingDegrees + (parked.across > 0 ? -90 : 90);
-      add({ kind: 'parkedAircraft', team, position: at(parked, 1.5), radius: PARKED_AIRCRAFT_CONFIG.hitRadius, headingDegrees: facing, maxHealth: PARKED_AIRCRAFT_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: PARKED_AIRCRAFT_CONFIG.respawnSeconds, carrierId: null, baseId: base.id });
+      add({ kind: 'parkedAircraft', team, position: at(parked, 1.5), radius: PARKED_AIRCRAFT_CONFIG.hitRadius, headingDegrees: facing, maxHealth: PARKED_AIRCRAFT_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: null, baseId: base.id });
     }
   }
 
@@ -76,7 +85,7 @@ export function createTargets(): CombatTarget[] {
     const c = CARRIER_DAMAGE_CONFIG;
     add({ kind: 'carrier', team, position: carrier.center, radius: 0, headingDegrees: carrier.headingDegrees, maxHealth: c.maxHealth, vulnerability: c.gunVulnerability, respawnSeconds: c.respawnSeconds, carrierId: carrier.id, baseId: null });
     const gun = ENEMY_LAYOUT.carrierAaGun;
-    add({ kind: 'aaGun', team, position: onCarrier(carrier, gun.fromStern, gun.side * (carrier.deckWidth / 2 - 1), AA_GUN_CONFIG.mountHeight * 0.6), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: carrier.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: AA_GUN_CONFIG.respawnSeconds, carrierId: carrier.id, baseId: null });
+    add({ kind: 'aaGun', team, position: onCarrier(carrier, gun.fromStern, gun.side * (carrier.deckWidth / 2 - 1), AA_GUN_CONFIG.mountHeight * 0.6), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: carrier.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: carrier.id, baseId: null });
   }
   return targets;
 }
@@ -95,6 +104,7 @@ export function createPracticeTargets(runway: RunwayDefinition = HOME_RUNWAY): C
     vulnerability: 1,
     respawnSeconds: PRACTICE_TARGET_CONFIG.respawnSeconds,
     respawnTimer: 0,
+    destroyedSeconds: 0,
     carrierId: null,
     baseId: null,
   }));
@@ -106,6 +116,7 @@ export function damageTarget(target: CombatTarget, damage: number): boolean {
   target.health = Math.max(0, target.health - damage * target.vulnerability);
   if (target.health > 0) return false;
   target.respawnTimer = target.respawnSeconds;
+  target.destroyedSeconds = 0;
   return true;
 }
 
@@ -119,9 +130,11 @@ export const damagePracticeTarget = damageTarget;
 export function updateTargets(targets: CombatTarget[], dt: number, respawned: CombatTarget[] = []): CombatTarget[] {
   for (const target of targets) {
     if (isTargetAlive(target)) continue;
+    target.destroyedSeconds += dt;
     target.respawnTimer -= dt;
     if (target.respawnTimer <= 0) {
       target.respawnTimer = 0;
+      target.destroyedSeconds = 0;
       target.health = target.maxHealth;
       respawned.push(target);
     }

@@ -8,11 +8,12 @@ import { BASE_DEFENCE_KINDS, isTargetAlive, type CombatTarget } from './targets'
  * Who holds each base, and the capture rules.
  *
  * A base is defended while any of its defences (AA gun, hangar, fuel depot,
- * radar) stands. Destroy them all and it's neutralized. An enemy aircraft
- * that then lands and stops on its runway or aprons for a few seconds
- * captures it: the base changes sides (its defences stay wrecked; the new
- * owner can rearm there). Left alone, a neutralized base rebuilds its
- * defences after a few minutes and is defended again.
+ * radar) stands. Destroy them all and it's neutralized. Nothing there
+ * rebuilds itself, so it stays defenceless until an enemy aircraft lands
+ * and stops on its runway or aprons for a few seconds: that captures it.
+ * Then the base changes sides: the new owner can rearm there, everything
+ * left standing (parked aircraft) is theirs, and their crews repair its
+ * defences, which then defend it for them.
  *
  * Carriers can't be captured: they're sunk instead.
  */
@@ -65,11 +66,12 @@ export function stepBaseControls(controls: readonly BaseControl[], targets: Comb
     control.owner = capturer.team;
     control.captureProgress = 0;
     control.capturingTeam = null;
-    // The base's old defences and aircraft stay wrecked under new ownership.
+    // Everything at the base changes sides; its destroyed defences are
+    // repaired for the new owner (wrecked aircraft stay wrecked).
     for (const target of targets) {
       if (target.baseId !== control.base.id) continue;
-      target.health = 0;
-      target.respawnTimer = Infinity;
+      target.team = control.owner;
+      if (!isTargetAlive(target) && BASE_DEFENCE_KINDS.includes(target.kind)) target.respawnTimer = CAPTURE_CONFIG.repairSeconds;
     }
     events.push({ type: 'baseCaptured', baseId: control.base.id, owner: control.owner, previousOwner });
   }

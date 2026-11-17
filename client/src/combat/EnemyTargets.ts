@@ -6,7 +6,7 @@ import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder';
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
-import { AA_GUN_CONFIG, AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, type CombatWorld } from '@dogfight/shared';
+import { AA_GUN_CONFIG, AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, type CombatWorld, type Team } from '@dogfight/shared';
 import { createAircraftModel } from '../aircraft/aircraftModel';
 import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { degreesToRadians } from '../math/orientation';
@@ -39,8 +39,8 @@ const scratchPos = new Vector3();
 export class EnemyTargets {
   private readonly gunBases: InstancedLayer;
   private readonly gunBarrels: InstancedLayer;
-  /** A tall pole with a red flag at each gun: you can find them from a long way off. */
-  private readonly gunFlags: InstancedLayer;
+  /** A tall pole with a flag in its team's colour at each gun: you can find them from a long way off. */
+  private readonly gunFlags: Record<Team, InstancedLayer>;
   private readonly wrecks: InstancedLayer;
   private readonly parked: InstancedLayer;
   private readonly guns: readonly CombatTarget[];
@@ -66,10 +66,13 @@ export class EnemyTargets {
     this.gunBases = layer(mergeParts('aa-base', buildGunBase(scene), sandbags), this.guns.length);
     this.gunBarrels = layer(mergeParts('aa-barrels', buildGunBarrels(scene), steel), this.guns.length);
     // Unlit and bright, so the flags read against the ground even far away.
-    const flagMaterial = new StandardMaterial('aa-flag', scene);
-    flagMaterial.disableLighting = true;
-    flagMaterial.emissiveColor = Color3.FromHexString(TEAM_PAINT.red.accent);
-    this.gunFlags = layer(mergeParts('aa-flag', buildGunFlag(scene), flagMaterial), this.guns.length);
+    const flag = (team: Team) => {
+      const material = new StandardMaterial(`aa-flag-${team}`, scene);
+      material.disableLighting = true;
+      material.emissiveColor = Color3.FromHexString(TEAM_PAINT[team].accent);
+      return layer(mergeParts(`aa-flag-${team}`, buildGunFlag(scene), material), this.guns.length);
+    };
+    this.gunFlags = { red: flag('red'), blue: flag('blue') };
     this.wrecks = layer(mergeParts('wreck', buildWreck(scene), charred), this.guns.length + this.parkedTargets.length);
     this.parked = layer(bakeParkedAircraft(scene), this.parkedTargets.length);
     for (const l of [this.gunBases, this.gunBarrels, this.wrecks, this.parked]) l.mesh.receiveShadows = true;
@@ -77,7 +80,7 @@ export class EnemyTargets {
 
   /** Meshes that should cast shadows. */
   get shadowCasters(): Mesh[] {
-    return [this.gunBases.mesh, this.gunBarrels.mesh, this.gunFlags.mesh, this.parked.mesh];
+    return [this.gunBases.mesh, this.gunBarrels.mesh, this.gunFlags.red.mesh, this.gunFlags.blue.mesh, this.parked.mesh];
   }
 
   update(deltaSeconds: number): void {
@@ -93,7 +96,8 @@ export class EnemyTargets {
       const groundY = p.y - sink - mount;
       scratchPos.set(p.x, groundY, p.z);
       setMatrix(this.gunBases, i, alive ? scratchPos : null, 0, 0, (mount - 1.2) / PLATFORM_HEIGHT);
-      setMatrix(this.gunFlags, i, alive ? scratchPos : null, 0, 0);
+      setMatrix(this.gunFlags.red, i, alive && target.team !== 'blue' ? scratchPos : null, 0, 0);
+      setMatrix(this.gunFlags.blue, i, alive && target.team === 'blue' ? scratchPos : null, 0, 0);
       scratchPos.y = p.y - sink;
       setMatrix(this.gunBarrels, i, alive ? scratchPos : null, gun.yaw, gun.pitch);
       scratchPos.y = groundY;
@@ -112,13 +116,13 @@ export class EnemyTargets {
       setMatrix(this.wrecks, wreck++, alive ? null : scratchPos, degreesToRadians(target.headingDegrees), 0);
       if (!alive) this.burn(target, p.x, p.y, p.z, 1.6, deltaSeconds);
     });
-    for (const l of [this.gunBases, this.gunBarrels, this.gunFlags, this.wrecks, this.parked]) l.mesh.thinInstanceBufferUpdated('matrix');
+    for (const l of [this.gunBases, this.gunBarrels, this.gunFlags.red, this.gunFlags.blue, this.wrecks, this.parked]) l.mesh.thinInstanceBufferUpdated('matrix');
     for (const carrier of this.carriers) this.burnCarrier(carrier, deltaSeconds);
   }
 
   /** A wreck: flames for a while after it's destroyed, then a column of smoke until it's replaced. */
   private burn(target: CombatTarget, x: number, y: number, z: number, scale: number, dt: number): void {
-    const since = target.respawnSeconds - target.respawnTimer;
+    const since = target.destroyedSeconds;
     const flaming = since < BURN_CONFIG.wreckFlameSeconds;
     this.emit(target.id, flaming ? BURN_CONFIG.wreckFlamesPerSecond : 0, BURN_CONFIG.wreckSmokePerSecond, dt, (flame) => {
       if (flame) this.effects.flame(x + jitter(1.5 * scale), y + 0.5, z + jitter(1.5 * scale), scale);

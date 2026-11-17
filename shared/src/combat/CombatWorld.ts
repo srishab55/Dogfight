@@ -5,6 +5,7 @@ import { CARRIERS, carrierPartAt, type CarrierDefinition } from '../config/world
 import type { AircraftState } from '../flight/AircraftState';
 import type { GroundQuery } from '../flight/ground';
 import type { Team } from '../types/team';
+import type { Vec3 } from '../types/vector';
 import type { CarrierStatusMap } from '../world/carrierStatus';
 import { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './antiAircraft';
 import { createBaseControls, stepBaseControls, type BaseControl, type BaseEvent } from './baseControl';
@@ -64,8 +65,8 @@ export class CombatWorld implements ImpactListener {
   /** What each hittable sphere belongs to: a target index (>= 0) or -(shooter index + 1). */
   private readonly hittableOwner: number[] = [];
   private readonly aircraftSpheres: PlacedSphere[];
-  /** Each target's hit sphere, built once (targets don't move). */
-  private readonly targetSpheres: SphereTarget[];
+  /** Each target's hit sphere, built once (targets don't move; their team can change, with a captured base). */
+  private readonly targetSpheres: { position: Readonly<Vec3>; radius: number; team: number }[];
   private readonly aaTargets: AaTarget[] = [];
   private shooters: readonly Shooter[] = [];
   private readonly respawned: CombatTarget[] = [];
@@ -171,8 +172,12 @@ export class CombatWorld implements ImpactListener {
   private loseCarrierGuns(carrier: CombatTarget): void {
     for (const target of this.targets) {
       if (target.kind !== 'aaGun' || target.carrierId !== carrier.carrierId) continue;
-      if (isTargetAlive(target)) this.pending.push({ type: 'targetDestroyed', targetId: target.id, kind: target.kind, ...target.position, owner: -1 });
+      if (isTargetAlive(target)) {
+        this.pending.push({ type: 'targetDestroyed', targetId: target.id, kind: target.kind, ...target.position, owner: -1 });
+        target.destroyedSeconds = 0;
+      }
       target.health = 0;
+      // Even a gun shot off earlier (never coming back by itself) returns with the new ship.
       target.respawnTimer = carrier.respawnTimer;
     }
   }
@@ -185,7 +190,7 @@ export class CombatWorld implements ImpactListener {
       if (target.kind !== 'carrier' || !target.carrierId) continue;
       const status = this.carrierStatuses.get(target.carrierId);
       if (!status) continue;
-      const sinceDestroyed = isTargetAlive(target) ? 0 : target.respawnSeconds - target.respawnTimer;
+      const sinceDestroyed = isTargetAlive(target) ? 0 : target.destroyedSeconds;
       const progress = Math.min(1, sinceDestroyed / c.sinkSeconds);
       // Slow at first, then going faster as she fills: progress squared.
       status.sink = c.finalSinkDepth * progress * progress;
@@ -200,7 +205,10 @@ export class CombatWorld implements ImpactListener {
     for (let i = 0; i < this.targets.length; i++) {
       const target = this.targets[i];
       if (!target || target.radius <= 0 || !isTargetAlive(target)) continue;
-      this.setHittable(n++, this.targetSpheres[i] ?? null, i);
+      const sphere = this.targetSpheres[i];
+      // A captured base's targets change sides.
+      if (sphere) sphere.team = teamCode(target.team);
+      this.setHittable(n++, sphere ?? null, i);
     }
     let used = 0;
     for (let s = 0; s < shooters.length && s < MAX_AIRCRAFT; s++) {

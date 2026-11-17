@@ -7,11 +7,13 @@ import {
   RED_RUNWAY,
   baseSpawnPoint,
   createGunState,
+  createAirborneState,
   createParkedState,
   createServiceStatus,
   createTargets,
   createTerrain,
   createWorldGround,
+  runwayLocal,
   stepService,
   teamBase,
   type CombatEvent,
@@ -63,7 +65,7 @@ describe('capturing a base', () => {
     expect(world.ownerOf(teamBase('red', 'airfield'))).toBe('blue');
   });
 
-  it('a captured base rearms its new owner, and its old defences stay down', () => {
+  it('a captured base rearms its new owner, and is repaired for them: its defences come back on their side', () => {
     const world = new CombatWorld(ground, createTargets());
     destroyDefences(world);
     run(world, [landedOnRedRunway()], CAPTURE_CONFIG.seconds + 0.5);
@@ -73,18 +75,85 @@ describe('capturing a base', () => {
     const status = createServiceStatus();
     for (let t = 0; t < 8; t += STEP) stepService(status, shooter.state, spec, shooter.guns, 'blue', STEP, world.ownerOf);
     expect(shooter.guns.ammo).toBeGreaterThan(0);
-    // Its defences never come back.
-    run(world, [], 300);
-    for (const target of world.targets.filter((t) => t.baseId === 'red-airfield')) expect(target.health).toBe(0);
-    expect(world.aaGuns.some((g) => g.target.baseId === 'red-airfield' && g.target.health > 0)).toBe(false);
+    // Everything there is Blue's now.
+    for (const target of world.targets.filter((t) => t.baseId === 'red-airfield')) expect(target.team).toBe('blue');
+    // The crews repair its defences.
+    const events = run(world, [], CAPTURE_CONFIG.repairSeconds + 1);
+    for (const target of world.targets.filter((t) => t.baseId === 'red-airfield' && BASE_DEFENCE_KINDS.includes(t.kind))) expect(target.health).toBe(target.maxHealth);
+    expect(events.some((e) => e.type === 'baseDefended' && e.baseId === 'red-airfield' && e.owner === 'blue')).toBe(true);
+    expect(world.bases.find((b) => b.base.id === 'red-airfield')?.neutralized).toBe(false);
   });
 
-  it('left alone, a neutralized base rebuilds its defences and is defended again', () => {
+  it("the repaired AA gun defends it for its new owner: it holds fire at Blue and fires at Red", () => {
     const world = new CombatWorld(ground, createTargets());
     destroyDefences(world);
-    const events = run(world, [], 245);
-    expect(events.some((e) => e.type === 'baseDefended' && e.baseId === 'red-airfield')).toBe(true);
-    expect(world.bases.find((b) => b.base.id === 'red-airfield')?.neutralized).toBe(false);
+    run(world, [landedOnRedRunway()], CAPTURE_CONFIG.seconds + CAPTURE_CONFIG.repairSeconds + 1);
+    const gun = world.aaGuns.find((g) => g.target.baseId === 'red-airfield')!;
+    expect(gun.target.health).toBeGreaterThan(0);
+    const near = (team: 'blue' | 'red'): Shooter => ({ id: 2, team, state: createAirborneState(spec, { x: gun.target.position.x + 300, y: 300, z: gun.target.position.z + 600 }, 180, 100, 0.7), spec, guns: createGunState(spec), trigger: false });
+    const atBlue = run(world, [near('blue')], 6).filter((e) => e.type === 'aaFired');
+    const atRed = run(world, [near('red')], 6).filter((e) => e.type === 'aaFired');
+    expect(atBlue).toHaveLength(0);
+    expect(atRed.length).toBeGreaterThan(0);
+  });
+
+  it('left alone, a neutralized base stays defenceless: nothing rebuilds itself', () => {
+    const world = new CombatWorld(ground, createTargets());
+    destroyDefences(world);
+    const events = run(world, [], 600);
+    expect(events.some((e) => e.type === 'baseDefended')).toBe(false);
+    expect(world.bases.find((b) => b.base.id === 'red-airfield')?.neutralized).toBe(true);
+    for (const target of world.targets.filter((t) => t.baseId === 'red-airfield' && BASE_DEFENCE_KINDS.includes(t.kind))) expect(target.health).toBe(0);
+  });
+
+  it('a damaged (not destroyed) defence is not repaired either, until captured', () => {
+    const world = new CombatWorld(ground, createTargets());
+    const radar = world.targets.find((t) => t.kind === 'radar')!;
+    world.applyHit(radar, 10, 1);
+    run(world, [], 300);
+    expect(radar.health).toBe(radar.maxHealth - 10);
+  });
+
+  describe('the radar, beside the runway', () => {
+    const runway = teamBase('red', 'airfield').runway;
+    /** Where a Blue aircraft landing northbound (the way in from Blue's side) typically stops: on the centreline, past the middle. */
+    const stopAlong = -110;
+    const stopPoint = () => {
+      const h = (runway.headingDegrees * Math.PI) / 180;
+      return { x: runway.center.x + Math.sin(h) * stopAlong, z: runway.center.z + Math.cos(h) * stopAlong };
+    };
+
+    it('stands just off the runway, a few hundred metres ahead of where you stop, nearly in line', () => {
+      const radar = createTargets().find((t) => t.kind === 'radar')!;
+      const local = runwayLocal(runway, radar.position.x, radar.position.z);
+      expect(Math.abs(local.across)).toBeLessThan(60);
+      const stop = stopPoint();
+      const ahead = { x: radar.position.x - stop.x, z: radar.position.z - stop.z };
+      const bearing = (Math.atan2(ahead.x, ahead.z) * 180) / Math.PI; // the aircraft faces north (0)
+      expect(Math.hypot(ahead.x, ahead.z)).toBeLessThan(450);
+      expect(Math.abs(bearing)).toBeLessThan(10);
+    });
+
+    it('can be shot from an aircraft stopped on the runway, which then captures the base by staying put', () => {
+      const world = new CombatWorld(ground, createTargets());
+      // The AA gun, hangar and fuel depot already destroyed from the air.
+      for (const target of world.targets) if (target.baseId === 'red-airfield' && target.kind !== 'radar' && BASE_DEFENCE_KINDS.includes(target.kind)) while (target.health > 0) world.applyHit(target, 5, 1);
+      const radar = world.targets.find((t) => t.kind === 'radar')!;
+      const stop = stopPoint();
+      // A touch of rudder on the ground: nose pointed at the radar.
+      const heading = (Math.atan2(radar.position.x - stop.x, radar.position.z - stop.z) * 180) / Math.PI;
+      const state = createParkedState(spec, { position: { x: stop.x, y: runway.center.y, z: stop.z }, headingDegrees: heading });
+      const shooter: Shooter = { id: 1, team: 'blue', state, spec, guns: createGunState(spec), trigger: true };
+      let destroyedAfter = -1;
+      for (let t = 0; t < 6 && destroyedAfter < 0; t += STEP) {
+        world.step(STEP, [shooter]);
+        if (world.drainEvents().some((e) => e.type === 'targetDestroyed' && e.targetId === radar.id)) destroyedAfter = t;
+      }
+      expect(destroyedAfter).toBeGreaterThan(0);
+      expect(destroyedAfter).toBeLessThan(4);
+      const events = run(world, [{ ...shooter, trigger: false }], CAPTURE_CONFIG.seconds + 1);
+      expect(events.some((e) => e.type === 'baseCaptured' && e.owner === 'blue')).toBe(true);
+    });
   });
 
   it('rolling through without stopping, or flying over, does not capture', () => {

@@ -2,9 +2,9 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Auto-land (P) and automatic retractable landing gear
-are in (your request). Remaining in Phase 4: bombs. Waiting for your test
-(FLIGHT_TEST.md cards 33-34) and confirmation.
+**Current status:** Base rules changed (your request): destruction sticks,
+capture repairs, and the radar stands by the runway. Remaining in Phase 4:
+bombs. Waiting for your test (FLIGHT_TEST.md cards 32-34) and confirmation.
 
 ## Extras added along the way
 
@@ -27,6 +27,14 @@ are in (your request). Remaining in Phase 4: bombs. Waiting for your test
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Base rules: destruction sticks, capture repairs ✅ (your request, 2026-11-17)
+
+- ✅ Nothing at a base rebuilds itself: a destroyed AA gun, hangar, fuel depot, radar or parked aircraft stays destroyed (a defenceless base stays defenceless). The carrier's gun comes back only with a new carrier after a sinking
+- ✅ Capture repairs: everything at the base changes sides, and 30 s later its destroyed defences are rebuilt for the new owner; the AA gun then defends it for you (holds fire at Blue, fires at Red) and flies a blue flag. HUD: "crews repairing its defences", then "REPAIRED · its AA gun now defends it for you"; no red markers over your own base
+- ✅ The radar moved beside the runway's north end (25 m off its edge), with a hit sphere reaching the ground: landing heading north (the way in from Blue's side), you stop about 340 m short of it, 7.5 degrees off the nose, and a short burst from the runway destroys it; stay stopped and the base is captured
+- ✅ 6 new or changed tests: defences and parked aircraft stay destroyed for 10 minutes; a defenceless base stays so; a carrier gun returns only with a new carrier; capture repairs for the new owner; the repaired gun fires at Red, not Blue; the radar shot from the runway in under 4 s, then capture
+- Verified: 331 tests (1 skipped by design), typecheck, build, and headless Chrome: five game minutes after destroying three defences they were still down; from a stop on Red's runway the radar sat ahead on the gunsight at 340 m and fell to one burst; capture followed, and 30 s later all four defences were back on Blue's side with the repaired status; no console errors
 
 ## Auto-land and retractable gear ✅ (your request, 2026-11-17)
 

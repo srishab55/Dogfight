@@ -102,7 +102,7 @@ describe('anti-aircraft guns', () => {
     expect(events.filter((e) => e.type === 'aaFired')).toHaveLength(0);
   });
 
-  it('are destroyed by strafing, stop firing, and are replaced after their respawn time', () => {
+  it('are destroyed by strafing, stop firing, and stay destroyed (nothing at a base rebuilds itself)', () => {
     const targets = createTargets();
     const gun = firstOf(targets, 'aaGun');
     const world = new CombatWorld(flat, targets);
@@ -118,14 +118,15 @@ describe('anti-aircraft guns', () => {
     const state = createAirborneState(spec, { x: gun.position.x + 200, y: 300, z: gun.position.z + 300 }, 0, 100, 0.75);
     const events = run(world, flat, [blueShooter(state)], 5, 300);
     expect(events.filter((e) => e.type === 'aaFired' && e.targetId === gun.id)).toHaveLength(0);
-    // Respawns.
+    // Ten minutes later it is still a wreck.
     let back = false;
-    for (let t = 0; t < AA_GUN_CONFIG.respawnSeconds + 1 && !back; t += STEP) {
+    for (let t = 0; t < 600 && !back; t += STEP) {
       world.step(STEP, []);
       back = world.drainEvents().some((e) => e.type === 'targetRespawned' && e.targetId === gun.id);
     }
-    expect(back).toBe(true);
-    expect(gun.health).toBe(AA_GUN_CONFIG.maxHealth);
+    expect(back).toBe(false);
+    expect(gun.health).toBe(0);
+    expect(gun.destroyedSeconds).toBeGreaterThan(599);
   });
 
   it('do not hit their own side, and Blue rounds do not hit Blue aircraft', () => {
@@ -163,15 +164,15 @@ describe('anti-aircraft guns', () => {
 });
 
 describe('parked aircraft', () => {
-  it('are destroyed by gunfire and replaced later', () => {
+  it('are destroyed by gunfire and stay wrecks', () => {
     const targets = createTargets();
     const parked = firstOf(targets, 'parkedAircraft');
     const world = new CombatWorld(createFlatGround(), targets);
     for (let i = 0; i < PARKED_AIRCRAFT_CONFIG.maxHealth; i++) world.applyHit(parked, 1, 1);
     expect(world.drainEvents().some((e) => e.type === 'targetDestroyed' && e.targetId === parked.id)).toBe(true);
     expect(parked.health).toBe(0);
-    for (let t = 0; t < PARKED_AIRCRAFT_CONFIG.respawnSeconds + 1; t += STEP) world.step(STEP, []);
-    expect(parked.health).toBe(PARKED_AIRCRAFT_CONFIG.maxHealth);
+    for (let t = 0; t < 600; t += STEP) world.step(STEP, []);
+    expect(parked.health).toBe(0);
   });
 });
 
@@ -242,6 +243,24 @@ describe('the Red carrier', () => {
     expect(statuses.get(RED_CARRIER.id)?.sink).toBe(0);
     expect(ground.heightAt(p.x, p.z)).toBe(RED_CARRIER.center.y);
     for (const gun of guns) expect(gun.health).toBe(AA_GUN_CONFIG.maxHealth);
+  });
+
+  it('a carrier gun shot off stays down while the ship floats, and returns only with a new carrier', () => {
+    const statuses = createCarrierStatuses();
+    const ground = createWorldGround(terrain, undefined, undefined, statuses);
+    const targets = createTargets();
+    const carrier = firstOf(targets, 'carrier', true);
+    const gun = targets.find((t) => t.kind === 'aaGun' && t.carrierId === RED_CARRIER.id)!;
+    const world = new CombatWorld(ground, targets, statuses);
+    while (gun.health > 0) world.applyHit(gun, 5, 1);
+    for (let t = 0; t < 300; t += STEP) world.step(STEP, []);
+    expect(gun.health).toBe(0);
+    // Sink the ship; the replacement brings its gun back.
+    const p = deckPoint(180);
+    for (let i = 0; i < 2_000 && carrier.health > 0; i++) world.onGroundImpact(p.x, RED_CARRIER.center.y, p.z, 1, 0, 1);
+    for (let t = 0; t < CARRIER_DAMAGE_CONFIG.respawnSeconds + 1; t += STEP) world.step(STEP, []);
+    expect(carrier.health).toBe(carrier.maxHealth);
+    expect(gun.health).toBe(AA_GUN_CONFIG.maxHealth);
   });
 
   it('Red AA shells hitting its own carrier do no damage', () => {
