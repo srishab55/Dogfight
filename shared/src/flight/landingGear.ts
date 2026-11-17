@@ -56,10 +56,23 @@ export const LANDING_GEAR_CONFIG = {
 
 /** Moves the gear towards up or down by the automatic rules. Call once per physics step, before ground contact. */
 export function stepLandingGear(state: AircraftState, spec: AircraftClassSpec, ground: GroundQuery, dt: number, bases: readonly BaseDefinition[] = BASES): void {
+  // Old types' fixed gear never moves.
+  if (spec.airframe.fixedGear) {
+    state.gearPosition = 1;
+    return;
+  }
   const command = gearCommand(state, spec, ground, bases);
   if (command === null) return;
   const travel = dt / LANDING_GEAR_CONFIG.travelTime;
   state.gearPosition += Math.max(-travel, Math.min(travel, command - state.gearPosition));
+}
+
+/**
+ * How much gear drag to add for this gear position: none for fixed gear,
+ * whose drag is already in the airframe's zero-lift drag figure.
+ */
+export function gearDragFraction(spec: AircraftClassSpec, gearPosition: number): number {
+  return spec.airframe.fixedGear ? 0 : gearPosition;
 }
 
 /** Whether the wheels are down far enough to land on. */

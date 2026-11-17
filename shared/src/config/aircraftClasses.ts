@@ -12,7 +12,7 @@
 
 import { AIRFRAMES, REFERENCE_WING_SPAN, type Airframe } from './airframe';
 
-export type AircraftClassId = 'interceptor' | 'fighterBomber' | 'heavyBomber' | 'navalFighter' | 'diveBomber';
+export type AircraftClassId = 'interceptor' | 'fighterBomber' | 'heavyBomber' | 'navalFighter' | 'diveBomber' | 'triplane' | 'biplane';
 
 export interface AircraftClassSpec {
   readonly id: AircraftClassId;
@@ -233,11 +233,11 @@ const INTERCEPTOR: AircraftClassSpec = {
   id: 'interceptor',
   displayName: 'Interceptor',
   mass: 2_900,
-  airframe: AIRFRAMES.fighter,
-  airframeScale: 0.92,
+  airframe: AIRFRAMES.interceptor,
+  airframeScale: 1,
   homeBase: 'airfield',
   wingArea: 17.5,
-  momentOfInertia: estimateInertia(2_900, AIRFRAMES.fighter, 0.92),
+  momentOfInertia: estimateInertia(2_900, AIRFRAMES.interceptor, 1),
   engine: { staticThrust: 17_000, maxPower: 1_300_000, propellerEfficiency: 0.82, spoolTime: 0.7 },
   aero: { ...COMMON_AERO, zeroLiftDragCoefficient: 0.021 },
   airbrake: SPEED_BRAKES,
@@ -387,16 +387,90 @@ const DIVE_BOMBER: AircraftClassSpec = {
   combat: { maxHullHealth: 230, gunCount: 2, bombCapacity: 1 },
 };
 
+/**
+ * Old-school fighting triplane: 590 kg, a 110 kW rotary engine, three short
+ * wings. Its wing loading is a fifth of a WWII fighter's, so it stalls at
+ * about 70 km/h and turns inside anything, but it tops out near 190 km/h:
+ * fight it slow. Two light guns. Draggy (struts, wires, fixed gear).
+ */
+const TRIPLANE: AircraftClassSpec = {
+  id: 'triplane',
+  displayName: 'Triplane',
+  mass: 590,
+  airframe: AIRFRAMES.triplane,
+  airframeScale: 1,
+  homeBase: 'airfield',
+  // All three wings together.
+  wingArea: 18.7,
+  momentOfInertia: estimateInertia(590, AIRFRAMES.triplane, 1),
+  engine: { staticThrust: 2_200, maxPower: 120_000, propellerEfficiency: 0.72, spoolTime: 0.5 },
+  // Short, stacked wings: a gentler lift slope. Struts, wires and fixed gear: lots of drag. Three wings
+  // sharing the lift make less induced drag than one wing of the same span and total area (Munk's span factor).
+  aero: { ...COMMON_AERO, liftCurveSlope: 3.8, zeroLiftDragCoefficient: 0.042, oswaldEfficiency: 1 },
+  // A light aircraft with a lot of propeller thrust at low speed: bigger brakes to slow it.
+  airbrake: { ...SPEED_BRAKES, dragIncrement: 0.088 },
+  // Real triplanes had no flaps; the lever adds lift all the same (a gameplay assist, nothing to see).
+  // No re-trim with flap: it approaches faster relative to its stall (it bleeds speed fast in the flare).
+  flaps: { ...COMMON_FLAPS, liftIncrement: 0.5, dragIncrement: 0.015, criticalAngleReductionDeg: 1, trimShiftDeg: 0, maxExtensionSpeed: 42, travelTime: 1.5 },
+  handling: {
+    referenceSpeed: 50,
+    pitch: { frequency: 4.2, dampingRatio: 0.55, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 4 },
+    roll: { maxRateDeg: 150, responseTime: 0.2 },
+    yaw: { frequency: 3, dampingRatio: 0.45, fullRudderSideslipDeg: 10 },
+    dihedralEffect: 3,
+    stallPitchDown: 2,
+    // Their wings were famously fragile.
+    gLimit: 5.5,
+    negativeGLimit: 3,
+  },
+  // Light and short-coupled: nose-wheel steering fades early with speed, so a fast taxi turn can't tip it over.
+  landingGear: { ...COMMON_GEAR, steeringFadeSpeed: 8 },
+  combat: { maxHullHealth: 60, gunCount: 2, bombCapacity: 0 },
+};
+
+/**
+ * 1930s biplane fighter: 2.1 t, a 700 kW radial, two wings of 30 m^2.
+ * Nimble and gentle, with fixed gear; about 380 km/h flat out. Four guns.
+ */
+const BIPLANE: AircraftClassSpec = {
+  id: 'biplane',
+  displayName: 'Biplane',
+  mass: 2_100,
+  airframe: AIRFRAMES.biplane,
+  airframeScale: 1,
+  homeBase: 'airfield',
+  wingArea: 30,
+  momentOfInertia: estimateInertia(2_100, AIRFRAMES.biplane, 1),
+  engine: { staticThrust: 10_000, maxPower: 700_000, propellerEfficiency: 0.78, spoolTime: 0.8 },
+  aero: { ...COMMON_AERO, liftCurveSlope: 4.0, zeroLiftDragCoefficient: 0.026, oswaldEfficiency: 0.95 },
+  airbrake: SPEED_BRAKES,
+  flaps: { ...COMMON_FLAPS, liftIncrement: 0.5, dragIncrement: 0.015, criticalAngleReductionDeg: 1, trimShiftDeg: 1, maxExtensionSpeed: 60, travelTime: 2 },
+  handling: {
+    referenceSpeed: 75,
+    pitch: { frequency: 4.4, dampingRatio: 0.6, fullStickAngleOfAttackDeg: 21, trimAngleOfAttackDeg: 3 },
+    roll: { maxRateDeg: 190, responseTime: 0.16 },
+    yaw: { frequency: 2.6, dampingRatio: 0.5, fullRudderSideslipDeg: 9 },
+    dihedralEffect: 4,
+    stallPitchDown: 2.2,
+    gLimit: 7.5,
+    negativeGLimit: 3.5,
+  },
+  landingGear: { ...COMMON_GEAR, steeringFadeSpeed: 8 },
+  combat: { maxHullHealth: 110, gunCount: 4, bombCapacity: 0 },
+};
+
 export const AIRCRAFT_CLASSES: Readonly<Record<AircraftClassId, AircraftClassSpec>> = {
   interceptor: INTERCEPTOR,
   fighterBomber: FIGHTER_BOMBER,
   heavyBomber: HEAVY_BOMBER,
   navalFighter: NAVAL_FIGHTER,
   diveBomber: DIVE_BOMBER,
+  triplane: TRIPLANE,
+  biplane: BIPLANE,
 };
 
-/** In selection order (keys 1-5). */
-export const AIRCRAFT_CLASS_IDS: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'heavyBomber', 'navalFighter', 'diveBomber'];
+/** In selection order (keys 1-7). */
+export const AIRCRAFT_CLASS_IDS: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'heavyBomber', 'navalFighter', 'diveBomber', 'triplane', 'biplane'];
 
 /** True if the class has an arrestor hook, so it can land on a carrier. */
 export function hasTailhook(spec: AircraftClassSpec): boolean {

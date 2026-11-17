@@ -445,13 +445,33 @@ amber; capture it and both turn blue.
 **Do:** On the runway, press **J**. Capture Red's airfield (card 32), stop,
 press **J** again, choose it with **→** and press **Enter**. Then press **R**,
 then **4**. Then **J**, choose the Blue carrier, and launch.
-**Expect:** "J · TAKE OFF FROM ANOTHER OF YOUR BASES" when stopped. J lists
-Blue airfield and Blue carrier; after the capture, Red airfield (captured)
-as well. Enter puts you on its runway ready to go ("FIGHTER-BOMBER · RED
+**Expect:** "J · TAKE OFF FROM ANOTHER OF YOUR BASES" when stopped. J opens
+a map with your bases ringed: Blue airfield and Blue carrier; after the
+capture, Red airfield (captured) as well. Click a base to select it, and
+again (or TAKE OFF HERE) to go. Enter puts you on its runway ready to go ("FIGHTER-BOMBER · RED
 AIRFIELD"); R and a new aircraft type start there too. The Fighter-Bomber on
 the carrier is held on the catapult and launched at full throttle. A Heavy
 Bomber is offered only the airfields.
 **Pass:** You can start from any base you hold.
+
+## Card 37: Triplane and Biplane
+
+**Do:** Press **6**, take off, turn hard both ways, loop, and land. Then **7** and the same.
+**Expect:** The Triplane lifts off very slowly (about 80 km/h), climbs gently,
+turns extremely tightly, tops out near 200 km/h, and lands at about 90 km/h.
+The Biplane is quicker (about 370 km/h) and still nimble. Their gear stays
+down (GEAR DOWN). Both can be auto-landed (P), also on a carrier.
+**Pass:** They feel old-school: slow, light, very agile, and easy to land.
+
+## Card 38: Paint, and telling the types apart
+
+**Do:** Press 1 to 7 and look at each (orbit camera, **C**). Press **O** a few times.
+**Expect:** Each type has its own shape and paint: the silver, slim Interceptor
+with a four-blade propeller; the olive Fighter-Bomber with bombs under it; the
+black four-engined Heavy Bomber; the navy Naval Fighter; the grey Dive Bomber;
+the yellow Triplane; the green Biplane. **O** shows "PAINT · ..." and repaints
+the airframe; the blue markings stay. Switching away and back keeps your choice.
+**Pass:** The types are easy to tell apart, and the paint changes.
 
 ## Card 34: Retractable gear
 

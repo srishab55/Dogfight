@@ -25,7 +25,7 @@ const world = createWorldGround(createTerrain());
 const wheelHeight = (state: AircraftState, spec = AIRCRAFT_CLASSES.fighterBomber) => state.position.y - groundClearance(spec) - world.heightAt(state.position.x, state.position.z);
 
 describe('landing gear', () => {
-  it.each(AIRCRAFT_CLASS_IDS.filter((id) => AIRCRAFT_CLASSES[id].homeBase === 'airfield'))('%s: retracts within a few seconds of lifting off', (id) => {
+  it.each(AIRCRAFT_CLASS_IDS.filter((id) => AIRCRAFT_CLASSES[id].homeBase === 'airfield' && !AIRCRAFT_CLASSES[id].airframe.fixedGear))('%s: retracts within a few seconds of lifting off', (id) => {
     const spec = AIRCRAFT_CLASSES[id];
     const state = createParkedState(spec, baseSpawnPoint(teamBase('blue', 'airfield')));
     expect(state.gearPosition).toBe(1);
@@ -47,6 +47,14 @@ describe('landing gear', () => {
     expect(liftOff).toBeGreaterThan(0);
     expect(retracted - liftOff).toBeLessThan(LANDING_GEAR_CONFIG.travelTime + 8);
     expect(wheelHeight(state, spec)).toBeGreaterThan(LANDING_GEAR_CONFIG.retract.minHeight);
+  });
+
+  it.each(AIRCRAFT_CLASS_IDS.filter((id) => AIRCRAFT_CLASSES[id].airframe.fixedGear))("%s: fixed gear stays down in the air (its drag is part of the airframe's)", (id) => {
+    const spec = AIRCRAFT_CLASSES[id];
+    const state = createAirborneState(spec, { x: 0, y: 800, z: 0 }, 0, computePerformance(spec).stallSpeed * 1.8, 0.8);
+    expect(state.gearPosition).toBe(1);
+    fly(state, spec, 10, (v) => ({ throttle: 0.8, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, 3) }), undefined, world);
+    expect(state.gearPosition).toBe(1);
   });
 
   it('a catapult launch raises it once clear of the deck', () => {

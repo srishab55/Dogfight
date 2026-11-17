@@ -39,6 +39,11 @@ export const AUDIO_CONFIG = {
  */
 export const ENGINE_SOUND_CONFIG: Readonly<Record<AirframeId, { idleHz: number; fullHz: number; roughness: number; engines: number }>> = {
   fighter: { idleHz: 38, fullHz: 128, roughness: 0.35, engines: 1 },
+  // A smoother, higher-revving V12.
+  interceptor: { idleHz: 42, fullHz: 138, roughness: 0.3, engines: 1 },
+  // A rotary engine: a low, uneven buzz.
+  triplane: { idleHz: 22, fullHz: 74, roughness: 0.85, engines: 1 },
+  biplane: { idleHz: 30, fullHz: 104, roughness: 0.6, engines: 1 },
   navalFighter: { idleHz: 30, fullHz: 108, roughness: 0.6, engines: 1 },
   diveBomber: { idleHz: 28, fullHz: 96, roughness: 0.65, engines: 1 },
   fourEngineBomber: { idleHz: 26, fullHz: 88, roughness: 0.55, engines: 4 },

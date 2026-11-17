@@ -22,7 +22,7 @@ const world = createWorldGround(createTerrain());
 const deck = carrierDeckRunway(BLUE_CARRIER);
 const CARRIER_CLASSES: readonly AircraftClassId[] = ['navalFighter', 'diveBomber'];
 /** Everything with a hook can use a carrier: the carrier types, and the land fighters (they can start from one too). */
-const HOOKED_CLASSES: readonly AircraftClassId[] = [...CARRIER_CLASSES, 'interceptor', 'fighterBomber'];
+const HOOKED_CLASSES: readonly AircraftClassId[] = [...CARRIER_CLASSES, 'interceptor', 'fighterBomber', 'triplane', 'biplane'];
 /** Where the carrier glide slope meets the deck: early in the wire zone (the client's landing practice uses the same). */
 const CARRIER_AIM_POINT = BLUE_CARRIER.wires.from + 15;
 
@@ -39,6 +39,8 @@ describe('carrier operations', () => {
     for (const id of ['interceptor', 'fighterBomber', 'heavyBomber'] as const) expect(AIRCRAFT_CLASSES[id].homeBase).toBe('airfield');
     expect(hasTailhook(AIRCRAFT_CLASSES.interceptor)).toBe(true);
     expect(hasTailhook(AIRCRAFT_CLASSES.fighterBomber)).toBe(true);
+    expect(hasTailhook(AIRCRAFT_CLASSES.triplane)).toBe(true);
+    expect(hasTailhook(AIRCRAFT_CLASSES.biplane)).toBe(true);
     expect(hasTailhook(AIRCRAFT_CLASSES.heavyBomber)).toBe(false);
   });
 

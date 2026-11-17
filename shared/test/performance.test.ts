@@ -18,9 +18,11 @@ describe('aircraft classes match their brief', () => {
   it('every class has a realistic propeller-era envelope', () => {
     for (const id of AIRCRAFT_CLASS_IDS) {
       const p = perf[id];
-      expect(p.stallSpeed).toBeGreaterThan(35); // 126 km/h
+      // The old fixed-gear types (Triplane, Biplane) belong to earlier eras: slower all round.
+      const vintage = AIRCRAFT_CLASSES[id].airframe.fixedGear === true;
+      expect(p.stallSpeed).toBeGreaterThan(vintage ? 15 : 35); // 54 / 126 km/h
       expect(p.stallSpeed).toBeLessThan(60); // 216 km/h
-      expect(p.topSpeed).toBeGreaterThan(110); // 396 km/h
+      expect(p.topSpeed).toBeGreaterThan(vintage ? 45 : 110); // 162 / 396 km/h
       expect(p.topSpeed).toBeLessThan(200); // 720 km/h
       expect(p.bestClimbRate).toBeGreaterThan(5);
     }

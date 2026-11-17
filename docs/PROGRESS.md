@@ -2,9 +2,10 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** You can take off from any of your bases, captured
-ones included (J; your request). Remaining in Phase 4: bombs. Waiting for
-your test (FLIGHT_TEST.md card 36) and confirmation.
+**Current status:** Two old-school aircraft (Triplane, Biplane), a new
+look for the Interceptor, paint schemes, and base selection on a map are
+in (your request). Remaining in Phase 4: bombs. Waiting for your test
+(FLIGHT_TEST.md cards 36-38) and confirmation.
 
 ## Extras added along the way
 
@@ -27,6 +28,17 @@ your test (FLIGHT_TEST.md card 36) and confirmation.
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Old-school aircraft, paint, base selection on a map ✅ (your request, 2026-11-18)
+
+- ✅ **6 · Triplane**: three stacked wings with interplane and cabane struts, a rotary engine in a round cowling, a two-blade propeller, twin cowling guns, an open cockpit, fixed gear. 590 kg: stalls at 70 km/h, tops out near 200 km/h, turns inside anything; fragile (5.5 g)
+- ✅ **7 · Biplane**: two staggered wings with N-struts, a radial engine, four guns, fixed gear; about 370 km/h, stalls at about 100 km/h, nimble
+- ✅ Their physics: total wing area of all wings, a gentler lift slope for the short wings, Munk's span factor for the induced drag of stacked wings, lots of zero-lift drag (struts, wires, fixed gear), and approaches trimmed faster relative to the stall (they bleed speed quickly in the flare). Fixed gear never retracts. Nose-wheel steering fades early with speed (no tip-overs taxiing). Both have hooks, so they can use the carriers too. They pass the whole per-type test suite (take-off, loops, stalls, landings, carrier launch and trap, auto-land, steering, air brakes)
+- ✅ The Interceptor has its own airframe now (it shared the Fighter-Bomber's): slim, a long pointed nose, a four-blade propeller, a small tapered wing, a bubble canopy and a tall narrow fin. The Fighter-Bomber carries bombs under its wings and fuselage (to look at; bombing comes later in Phase 4)
+- ✅ Paint (**O**): ten schemes; each type starts in its own (Interceptor silver, Fighter-Bomber olive, Heavy Bomber black, Naval Fighter navy, Dive Bomber sky grey, Triplane yellow, Biplane green), so they're easy to tell apart. Your choice is remembered per type; the team colour stays on the spinner, fin, wingtips, band and roundels
+- ✅ Base selection (**J**) is a map now: your bases ringed (the selected one pulsing), the enemy's dimmed; click a base to select it, click again or press TAKE OFF HERE (or ← → and Enter). The mouse is freed while it's open
+- ✅ Test pilots fixed for slow aircraft (flare lower and always ease the sink); auto-land flares lower for slow aircraft and adds a little power if the speed sags towards the stall
+- Verified: 441 tests (1 skipped by design), typecheck, build, and headless Chrome: every type flown from an air start (the old types with their gear fixed down); the Triplane holding height in a hard 6 s turn; paint cycling; the map picker selecting the carrier with a mouse click and starting the Fighter-Bomber on its catapult; 60 FPS, no console errors
 
 ## Take off from any of your bases ✅ (your request, 2026-11-17)
 

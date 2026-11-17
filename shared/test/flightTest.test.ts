@@ -30,7 +30,7 @@ const RAD_TO_DEG = 180 / Math.PI;
 const SPAWN = getRunwaySpawnPoint(HOME_RUNWAY, 60);
 const THRESHOLD_Z = HOME_RUNWAY.center.z - HOME_RUNWAY.length / 2;
 const RUNWAY_END_Z = HOME_RUNWAY.center.z + HOME_RUNWAY.length / 2;
-const LOOP_CAPABLE: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'navalFighter', 'diveBomber'];
+const LOOP_CAPABLE: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'navalFighter', 'diveBomber', 'triplane', 'biplane'];
 
 const setup = (id: AircraftClassId) => ({ spec: AIRCRAFT_CLASSES[id], perf: computePerformance(AIRCRAFT_CLASSES[id]) });
 
@@ -240,6 +240,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
     });
 
     it('needs more speed at altitude: thin air at 6 km stalls at a speed that is fine at sea level', () => {
+      // Whether it stalls, or (an old type near its ceiling) can't hold its height and mushes down instead.
       const run = (altitude: number) => {
         const state = airborne(spec, altitude, perf.stallSpeed * 1.25, 0, 0, 1);
         let stalled = false;
@@ -247,10 +248,12 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
           stalled ||= v.state.telemetry.stalled;
           return false;
         });
-        return stalled;
+        return { stalled, sank: altitude - state.position.y > 30 };
       };
-      expect(run(300)).toBe(false);
-      expect(run(6000)).toBe(true);
+      expect(run(300).stalled).toBe(false);
+      const high = run(6000);
+      if (spec.airframe.fixedGear) expect(high.stalled || high.sank).toBe(true);
+      else expect(high.stalled).toBe(true);
     });
   });
 

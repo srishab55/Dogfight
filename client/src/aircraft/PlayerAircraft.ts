@@ -29,6 +29,7 @@ import { FLAP_STYLE_BY_CLASS, PROPELLER_VISUAL_CONFIG } from '../config/aircraft
 import { LANDING_PRACTICE } from '../config/landing';
 import type { AircraftVisual } from './AircraftVisual';
 import { createAircraftModel } from './aircraftModel';
+import { PaintChoices } from './paint';
 
 /** Landing flaps' position at which the arrestor hook is lowered (the landing notch). */
 const HOOK_DOWN_FLAPS = 0.75;
@@ -74,13 +75,23 @@ export class PlayerAircraft {
     classId: AircraftClassId,
   ) {
     const build = (id: AirframeId) => createAircraftModel(scene, AIRFRAMES[id], team, `player-${id}`);
-    this.models = { fighter: build('fighter'), navalFighter: build('navalFighter'), diveBomber: build('diveBomber'), fourEngineBomber: build('fourEngineBomber') };
+    this.models = Object.fromEntries((Object.keys(AIRFRAMES) as AirframeId[]).map((id) => [id, build(id)])) as Record<AirframeId, AircraftVisual>;
     this.spec = AIRCRAFT_CLASSES[classId];
     this.performance = computePerformance(this.spec);
     this.state = createParkedState(this.spec, baseSpawnPoint(this.homeBase));
     this.previous = cloneAircraftState(this.state);
     this.applyClass(classId);
     this.resetTo(this.parkedAtHome());
+  }
+
+  /** Your paint for each type (O). */
+  readonly paint = new PaintChoices();
+
+  /** Repaints the aircraft being flown with the next scheme; returns its name. */
+  cyclePaint(): string {
+    const scheme = this.paint.next(this.spec.id);
+    this.visual.setPaint(scheme.body);
+    return scheme.name;
   }
 
   /** The model of the aircraft being flown. */
@@ -212,6 +223,7 @@ export class PlayerAircraft {
     this.spec = AIRCRAFT_CLASSES[classId];
     this.performance = computePerformance(this.spec);
     for (const [id, model] of Object.entries(this.models)) model.setEnabled(id === this.spec.airframe.id);
+    this.visual.setPaint(this.paint.schemeFor(classId).body);
     this.visual.setScale(this.spec.airframeScale);
     this.visual.setFlapStyle(FLAP_STYLE_BY_CLASS[classId]);
   }

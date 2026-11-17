@@ -64,7 +64,7 @@ import { createControlsHint } from '../ui/ControlsHint';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
 import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
 import { createGameTitle } from '../ui/GameTitle';
-import { MiniMap } from '../ui/MiniMap';
+import { MiniMap, renderMapBackground, type MapFrame } from '../ui/MiniMap';
 import { BasePicker, type BaseChoice } from '../ui/BasePicker';
 import { describeBases, type BaseView } from '../combat/baseViews';
 import { BASE_COLORS, BEACON_CONFIG } from '../config/map';
@@ -82,6 +82,8 @@ const CLASS_KEYS = [
   ['selectHeavyBomber', 'heavyBomber'],
   ['selectNavalFighter', 'navalFighter'],
   ['selectDiveBomber', 'diveBomber'],
+  ['selectTriplane', 'triplane'],
+  ['selectBiplane', 'biplane'],
 ] as const;
 /** Mouse aim is corrected for the rounds' drop out to this range (m). */
 const DROP_COMPENSATION_RANGE = 1_500;
@@ -221,8 +223,10 @@ export class Game {
     this.debugOverlay = new DebugOverlay(uiRoot, this.engine, this.scene, import.meta.env.DEV);
     this.controlsHint = createControlsHint(uiRoot, KEY_BINDINGS);
     createGameTitle(uiRoot);
-    this.miniMap = new MiniMap(uiRoot, terrain);
-    this.basePicker = new BasePicker(uiRoot);
+    const mapBackground = renderMapBackground(terrain);
+    this.miniMap = new MiniMap(uiRoot, mapBackground);
+    this.basePicker = new BasePicker(uiRoot, mapBackground);
+    this.basePicker.onTakeOff = (base) => this.takeOffFrom(base);
     this.beacons = new BaseBeacons(this.scene);
     this.afterTeleport(0);
     this.briefSpawn();
@@ -302,12 +306,9 @@ export class Game {
     this.environment.update(deltaSeconds, renderPosition, this.wheelHeightPoint, this.scene.activeCamera?.globalPosition ?? renderPosition);
     const baseViews = describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM);
     this.beacons.update(baseViews, this.scene.activeCamera?.globalPosition ?? renderPosition, this.clock);
-    const flying = this.aircraft.state;
-    this.miniMap.update(deltaSeconds, {
-      player: flying.crashed ? null : { x: renderPosition.x, z: renderPosition.z, headingDeg: (Math.atan2(flying.velocity.x, flying.velocity.z) * RAD_TO_DEG + 360) % 360 },
-      bases: baseViews,
-      playerTeam: PLAYER_TEAM,
-    });
+    const mapFrame = this.mapFrame(baseViews);
+    this.miniMap.update(deltaSeconds, mapFrame);
+    this.basePicker.update(deltaSeconds, mapFrame);
     if (this.scene.activeCamera) this.tracers.update(this.scene.activeCamera.globalPosition);
     this.effects.update(deltaSeconds);
     this.balloons.update(deltaSeconds);
@@ -861,6 +862,21 @@ export class Game {
     else this.hud.showMessage(`${spec.displayName.toUpperCase()} · ${this.aircraft.homeBase.name.toUpperCase()} · throttle up (↑) to take off`, 'good', 4);
   }
 
+  /** What the maps show: the bases, and you (heading from your velocity, or your nose when stopped). */
+  private mapFrame(baseViews: readonly BaseView[]): MapFrame {
+    const state = this.aircraft.state;
+    const p = this.aircraft.renderPosition;
+    const moving = Math.hypot(state.velocity.x, state.velocity.z) > 1;
+    const heading = moving ? Math.atan2(state.velocity.x, state.velocity.z) : this.aircraftHeading();
+    return { player: state.crashed ? null : { x: p.x, z: p.z, headingDeg: ((heading * RAD_TO_DEG) % 360 + 360) % 360 }, bases: baseViews, playerTeam: PLAYER_TEAM };
+  }
+
+  /** Which way the nose points, clockwise from north (rad). */
+  private aircraftHeading(): number {
+    Vector3.Forward().rotateByQuaternionToRef(this.aircraft.renderOrientation, this.toPoint);
+    return Math.atan2(this.toPoint.x, this.toPoint.z);
+  }
+
   /** Your bases this aircraft could take off from now: your own and any you've captured (carriers need a hook). */
   private myStartingBases() {
     return startingBases(PLAYER_TEAM, this.aircraft.spec, this.combat.ownerOf, this.carrierStatuses);
@@ -896,7 +912,9 @@ export class Game {
       ].filter(Boolean);
       return { base, name: base.name, detail: parts.join(' · '), color: BASE_COLORS[owner] };
     });
-    this.basePicker.open(choices, current.id);
+    this.basePicker.open(choices, current.id, this.mapFrame(describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM)));
+    // Free the mouse, so you can click a base on the map.
+    if (this.mouseFlight.active) this.mouseFlight.release();
   }
 
   /** Start again, rearmed, ready to take off from `base`; it stays your base for respawns (R) until you choose another. */
@@ -1040,6 +1058,7 @@ export class Game {
     }
     if (input.wasPressed('autoLand')) this.toggleAutoLand();
     if (input.wasPressed('toggleMap')) this.miniMap.cycle();
+    if (input.wasPressed('cyclePaint')) this.hud.showMessage(`PAINT · ${this.aircraft.cyclePaint().toUpperCase()} (O: next colour)`, 'good', 2.5);
     this.forgetLostStartBase();
     if (input.wasPressed('chooseBase')) this.toggleBasePicker();
     if (this.basePicker.isOpen) {
@@ -1047,10 +1066,7 @@ export class Game {
       else {
         if (input.wasPressed('pickerPrevious')) this.basePicker.move(-1);
         if (input.wasPressed('pickerNext')) this.basePicker.move(1);
-        if (input.wasPressed('pickerConfirm')) {
-          const base = this.basePicker.selected;
-          if (base) this.takeOffFrom(base);
-        }
+        if (input.wasPressed('pickerConfirm')) this.basePicker.confirm();
       }
     }
     if (input.wasPressed('toggleMute')) this.hud.showMessage(this.audio.toggleMute() ? 'SOUND OFF (M)' : 'SOUND ON (M)', 'good', 1.5);

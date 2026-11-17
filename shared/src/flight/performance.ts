@@ -46,7 +46,7 @@ export function computePerformance(spec: AircraftClassSpec): AircraftPerformance
 
   // Level flight: lift = weight  =>  1/2 rho V^2 S CL = W  =>  V = sqrt(2W / (rho S CL)).
   const stallSpeed = Math.sqrt((2 * weight) / (rho * spec.wingArea * clMax));
-  const landingAero = applyFlaps({ ...spec.aero }, spec, 1, 0, 1); // landing: full flap, gear down
+  const landingAero = applyFlaps({ ...spec.aero }, spec, 1, 0, spec.airframe.fixedGear ? 0 : 1); // landing: full flap, gear down
   const clMaxLanding = maxLiftCoefficient(landingAero);
   const landingStallSpeed = Math.sqrt((2 * weight) / (rho * spec.wingArea * clMaxLanding));
 

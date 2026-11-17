@@ -48,6 +48,9 @@ export const GUN_SPECS: Readonly<Record<AircraftClassId, GunSpec>> = {
   navalFighter: { ...STANDARD_GUNS, roundsPerGun: 400 },
   // Two cowling guns, synchronised to fire through the propeller (a slower rate).
   diveBomber: { ...STANDARD_GUNS, roundsPerSecondPerGun: 11, damagePerRound: 1.2, roundsPerGun: 360 },
+  // WWI-style machine guns: a little slower firing and lighter.
+  triplane: { ...STANDARD_GUNS, roundsPerSecondPerGun: 10, damagePerRound: 0.9, roundsPerGun: 500 },
+  biplane: { ...STANDARD_GUNS, roundsPerGun: 450 },
 };
 
 /**

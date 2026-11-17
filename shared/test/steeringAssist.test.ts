@@ -11,7 +11,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
   const perf = computePerformance(spec);
   const fighter = id !== 'heavyBomber';
   /** Seconds to come round 90 degrees: fighters quickest, the dive bomber a little slower, the heavy bomber slowest. */
-  const quarterTurnSeconds = { interceptor: 4.5, fighterBomber: 4.5, navalFighter: 4.5, diveBomber: 5.5, heavyBomber: 10 }[id];
+  const quarterTurnSeconds = { interceptor: 4.5, fighterBomber: 4.5, navalFighter: 4.5, diveBomber: 5.5, heavyBomber: 10, triplane: 4, biplane: 4.5 }[id];
 
   it('holding "right" turns it round quickly without losing height; letting go levels the wings and holds height', () => {
     const state = createAirborneState(spec, { x: 0, y: 1500, z: 0 }, 0, perf.cornerSpeed * 0.9, 1);

@@ -173,8 +173,8 @@ export function createAirborneState(spec: AircraftClassSpec, position: Vec3, hea
   state.velocity = vec3(Math.sin(heading) * speed, 0, Math.cos(heading) * speed);
   quatFromHeading(state.orientation, heading);
   state.throttle = throttle;
-  // Cruising: gear up. The automatic gear lowers it when coming in to land.
-  state.gearPosition = 0;
+  // Cruising: gear up (unless it's fixed). The automatic gear lowers it when coming in to land.
+  state.gearPosition = spec.airframe.fixedGear ? 1 : 0;
   return state;
 }
 

@@ -3,6 +3,8 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { CONTROL_SURFACE_VISUAL_CONFIG, FLAP_STYLES, PROPELLER_VISUAL_CONFIG } from '../config/aircraftVisuals';
 import { degreesToRadians, smoothingFactor } from '../math/orientation';
+import type { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { srgbHexToLinear } from '../rendering/materials';
 import type { GearLeg, HingedSurface } from './aircraftModel';
 
 type FlapStyle = (typeof FLAP_STYLES)[keyof typeof FLAP_STYLES];
@@ -42,6 +44,8 @@ export class AircraftVisual {
     private readonly tailhook: TransformNode | null = null,
     /** Retractable landing gear legs. */
     private readonly gearLegs: readonly GearLeg[] = [],
+    /** The airframe's paint (fuselage, wings and moving surfaces), which can be changed. */
+    private readonly paint: PBRMaterial | null = null,
   ) {
     root.rotationQuaternion ??= Quaternion.Identity();
   }
@@ -101,6 +105,11 @@ export class AircraftVisual {
     if (!this.tailhook) return;
     const { tailhookStowedDeg, tailhookLoweredDeg } = CONTROL_SURFACE_VISUAL_CONFIG;
     this.tailhook.rotation.x = -degreesToRadians(tailhookStowedDeg + (tailhookLoweredDeg - tailhookStowedDeg) * fraction);
+  }
+
+  /** Repaint the airframe (an sRGB hex colour); team markings keep their colour. */
+  setPaint(color: string): void {
+    if (this.paint) this.paint.albedoColor = srgbHexToLinear(color);
   }
 
   /** Landing gear from retracted (0) to down (1), mirroring the flight model's gear position. */

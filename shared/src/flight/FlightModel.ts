@@ -21,7 +21,7 @@ import type { AircraftState } from './AircraftState';
 import type { FlightControls } from './FlightControls';
 import type { GroundQuery } from './ground';
 import { computeGroundContact, createGroundContactResult } from './groundContact';
-import { stepLandingGear } from './landingGear';
+import { gearDragFraction, stepLandingGear } from './landingGear';
 
 /*
  * ─── The flight model ──────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ export function stepAircraft(state: AircraftState, pilotControls: Readonly<Fligh
   // Landing gear: raised and lowered automatically (up after take-off, down coming in to land).
   stepLandingGear(state, spec, ground, dt);
   // The wing as the flaps currently shape it: more camber, more drag, earlier stall (plus brake and gear drag).
-  const aero = applyFlaps(effectiveAero, spec, state.flapPosition, state.airbrakePosition, state.gearPosition);
+  const aero = applyFlaps(effectiveAero, spec, state.flapPosition, state.airbrakePosition, gearDragFraction(spec, state.gearPosition));
 
   // ── Ground effect: the cushion of air under a wing close to the ground ──
   const groundHeight = ground.groundEffectHeightAt ? ground.groundEffectHeightAt(state.position.x, state.position.z) : ground.heightAt(state.position.x, state.position.z);

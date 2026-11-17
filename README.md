@@ -81,12 +81,13 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** releases. |
 | **C** | Camera: chase → cockpit → orbit |
 | **R** | Respawn at your base: the one you chose with **J**, at first your airfield (or the carrier's catapult) |
-| **J** | Stopped on the ground, or crashed: take off from any of your bases, captured ones too (**← →** choose, **Enter** go). Every type but the Heavy Bomber can start on a carrier's catapult |
+| **J** | Stopped on the ground, or crashed: a map of your bases, captured ones too. Click one (or **← →**), then click it again, **TAKE OFF HERE** or **Enter**. Every type but the Heavy Bomber can start on a carrier's catapult |
 | **T** | Air start at 800 m (for testing manoeuvres) |
 | **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
 | **P** | Auto-land at the nearest base within 10 km (any team; every type but the Heavy Bomber can land on a carrier). The HUD offers it within 5 km. **P** or any flight key takes over |
 | **N** | Map: corner → big → off (remembered) |
-| **1 – 5** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber |
+| **1 – 7** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber / Triplane / Biplane |
+| **O** | Paint: the next colour scheme for the aircraft you're flying (remembered for each type; your team colour stays on the markings) |
 | **[ / ]** | Mouse sensitivity down / up (remembered) |
 | **K** | Steering: easy turns (default) / direct roll |
 | **M** | Sound on / off (sound starts with your first key press or click) |

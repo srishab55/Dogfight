@@ -84,7 +84,11 @@ export const AUTO_LAND_CONFIG = {
   terrainClearance: 180,
   /** Runway landings flare from this wheel height, aiming for this sink rate (m, m/s). */
   flareHeight: 6,
+  /** ...but no higher than this many metres per m/s of airspeed (slow aircraft flare lower). */
+  flareHeightPerSpeed: 0.12,
   flareSinkRate: 1.2,
+  /** In the flare, power comes back in below this multiple of the landing stall speed. */
+  flarePowerBelowStallFactor: 1.18,
   /** ...or earlier if sinking fast: this many seconds of sink before touchdown (s). */
   flareLeadSeconds: 1.6,
   /** Intercept speed as a multiple of the clean stall speed: fast while far from the next point, slowing near it. */
@@ -272,8 +276,9 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
       break;
     }
     case 'final': {
-      // Flare in time to take the sink rate off: higher when sinking faster.
-      if (auto.kind === 'airfield' && wheelHeight < Math.max(c.flareHeight, -state.velocity.y * c.flareLeadSeconds) && toGo < 600) {
+      // Flare in time to take the sink rate off: higher when sinking faster, lower for slow, light aircraft.
+      const flareHeight = Math.min(c.flareHeight, speed * c.flareHeightPerSpeed);
+      if (auto.kind === 'airfield' && wheelHeight < Math.max(flareHeight, -state.velocity.y * c.flareLeadSeconds) && toGo < 600) {
         auto.phase = 'flare';
         break;
       }
@@ -309,7 +314,8 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
       centrelineAhead(target, aimX, aimZ, fx, fz, -toGo + 250, p);
       setDirection(target, Math.atan2(target.x, target.z), Math.atan2(-c.flareSinkRate, Math.max(speed, 20)));
       steerTowards(state, spec, target, sticks, FLARE_TUNING);
-      out.throttle = 0;
+      // Power off, unless the speed is sagging towards the stall (draggy old types bleed speed fast).
+      out.throttle = Math.max(0, Math.min(perf.approachThrottle, (perf.landingStallSpeed * c.flarePowerBelowStallFactor - speed) * 0.25));
       out.airbrake = 0;
       out.flaps = 1;
       break;

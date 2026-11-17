@@ -145,10 +145,12 @@ describe('auto-land: choosing the base', { timeout: 20_000 }, () => {
 });
 
 describe('auto-land: runways', { timeout: 20_000 }, () => {
-  it.each(AIRCRAFT_CLASS_IDS)('%s: from 6 km out, lands and stops undamaged on the centreline, in under two minutes', (id) => {
-    const outcome = autoLand(id, blueAirfield, { x: 1_200, y: 800, z: -10_000 }, 20, 120);
+  it.each(AIRCRAFT_CLASS_IDS)('%s: from 6 km out, lands and stops undamaged on the centreline, in under two minutes (longer for the slow old types)', (id) => {
+    const spec = AIRCRAFT_CLASSES[id];
+    const outcome = autoLand(id, blueAirfield, { x: 1_200, y: 800, z: -10_000 }, 20, Math.min(120, computePerformance(spec).topSpeed * 0.9));
     expectCleanLanding(outcome, 3);
-    expect(outcome.seconds).toBeLessThan(120);
+    // Two minutes at fighter speeds; slower aircraft take proportionally longer.
+    expect(outcome.seconds).toBeLessThan(120 * Math.max(1, 40 / computePerformance(spec).stallSpeed));
   });
 
   it('just after take-off, over the runway, it flies out, turns back (a teardrop) and lands', () => {

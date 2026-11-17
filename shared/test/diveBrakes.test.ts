@@ -49,7 +49,8 @@ describe('dive brakes', () => {
       return state.telemetry.airspeed;
     };
     const start = perf.topSpeed * 0.9;
-    expect(run(1)).toBeLessThan(start - 15);
+    // 15 m/s slower (a fifth of its speed for the slow Triplane).
+    expect(run(1)).toBeLessThan(start - Math.min(15, start * 0.2));
     expect(run(0)).toBeGreaterThan(start - 3);
   });
 

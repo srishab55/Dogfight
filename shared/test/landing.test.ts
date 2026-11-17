@@ -34,10 +34,17 @@ function lowerNoseWheel(v: PilotView): number {
   return Math.max(-0.6, Math.min(0.3, -v.attitude.pitchDeg / 4 - v.pitchRateDeg / 12));
 }
 
-/** Glide-slope tracking to a 4 m flare, then a gentle hold-off, then brakes. */
+/**
+ * Glide-slope tracking to the flare (4 m up; lower for slow, light aircraft,
+ * which lose speed quickly once the power is off), then a gentle hold-off,
+ * then brakes.
+ */
 function land(spec: AircraftClassSpec, state: AircraftState, speed: number, flaps: number) {
   const clearance = groundClearance(spec);
   const glide = 3 / RAD_TO_DEG;
+  const flareHeight = Math.min(4, speed * 0.12);
+  // A flare always eases the sink: to 1.5 m/s, or 60% of the approach's sink for a slow aircraft (whose 3-degree approach sinks less than that).
+  const flareSink = Math.min(1.5, speed * Math.sin(glide) * 0.6);
   let touchdownZ = Number.NaN;
   let flaring = false;
   fly(
@@ -47,8 +54,8 @@ function land(spec: AircraftClassSpec, state: AircraftState, speed: number, flap
     (v) => {
       const s = v.state;
       if (Number.isNaN(touchdownZ) && !s.onGround) {
-        flaring ||= s.position.y - clearance < 4;
-        if (flaring) return { throttle: 0, flaps, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, -1.5) };
+        flaring ||= s.position.y - clearance < flareHeight;
+        if (flaring) return { throttle: 0, flaps, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, -flareSink) };
         const pathHeight = (THRESHOLD_Z + AIM_POINT - s.position.z) * Math.tan(glide) + clearance;
         const targetVs = -speed * Math.sin(glide) + (pathHeight - s.position.y) * 0.15;
         const throttle = Math.max(0, Math.min(1, 0.25 + (speed - s.telemetry.airspeed) * 0.08));

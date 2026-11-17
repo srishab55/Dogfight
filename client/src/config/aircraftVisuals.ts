@@ -10,6 +10,37 @@ export const TEAM_PAINT: Readonly<Record<Team, { body: string; accent: string }>
   red: { body: '#80605a', accent: '#d63a2f' },
 };
 
+/**
+ * Paint for your aircraft's airframe (O cycles it; remembered for each type).
+ * Only the body changes: the team colour stays on the spinner, fin, wingtips,
+ * band and roundels, so you can still be told apart from the enemy.
+ */
+export const PAINT_SCHEMES = [
+  { id: 'skyGrey', name: 'Sky grey', body: '#5d7087' },
+  { id: 'silver', name: 'Polished silver', body: '#a9b0b8' },
+  { id: 'olive', name: 'Olive drab', body: '#5c603b' },
+  { id: 'navy', name: 'Navy blue', body: '#2e4166' },
+  { id: 'forest', name: 'Forest green', body: '#3f5d3d' },
+  { id: 'sand', name: 'Desert sand', body: '#b49b6b' },
+  { id: 'white', name: 'Arctic white', body: '#d8dde2' },
+  { id: 'yellow', name: 'Racing yellow', body: '#d4a82e' },
+  { id: 'crimson', name: 'Crimson', body: '#8f2c2c' },
+  { id: 'black', name: 'Night black', body: '#25282d' },
+] as const;
+
+export type PaintId = (typeof PAINT_SCHEMES)[number]['id'];
+
+/** Each type's own paint until you choose another, so they're easy to tell apart. */
+export const DEFAULT_PAINT: Readonly<Record<AircraftClassId, PaintId>> = {
+  interceptor: 'silver',
+  fighterBomber: 'olive',
+  heavyBomber: 'black',
+  navalFighter: 'navy',
+  diveBomber: 'skyGrey',
+  triplane: 'yellow',
+  biplane: 'forest',
+};
+
 export const AIRCRAFT_MATERIAL_CONFIG = {
   paintRoughness: 0.45,
   canopyColor: '#1b2733',
@@ -81,6 +112,8 @@ export const FLAP_STYLE_BY_CLASS: Readonly<Record<AircraftClassId, keyof typeof 
   interceptor: 'slotted',
   fighterBomber: 'slotted',
   heavyBomber: 'fowler',
+  triplane: 'slotted',
+  biplane: 'slotted',
   navalFighter: 'slotted',
   diveBomber: 'slotted',
 };

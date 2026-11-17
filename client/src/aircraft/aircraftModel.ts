@@ -11,7 +11,7 @@ import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
 import type { Material } from '@babylonjs/core/Materials/material';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
-import type { Airframe, EngineDesign, FinDesign, GlazingDesign, LatheProfile, TailplaneDesign, Team, WingDesign } from '@dogfight/shared';
+import type { Airframe, EngineDesign, FinDesign, GlazingDesign, LatheProfile, PlainWingDesign, StoreDesign, StrutDesign, TailplaneDesign, Team, WingDesign } from '@dogfight/shared';
 import { AIRCRAFT_MATERIAL_CONFIG, ROUNDEL_CONFIG, TEAM_PAINT } from '../config/aircraftVisuals';
 import { createPanelMesh, ensureOutwardFacing, type PanelSection } from '../rendering/geometry';
 import { createPbrSurface } from '../rendering/materials';
@@ -55,16 +55,20 @@ export interface HingedSurface {
 }
 
 interface Materials {
-  readonly body: Material;
+  readonly body: PBRMaterial;
   readonly accent: Material;
   readonly glass: Material;
   readonly dark: Material;
 }
 
-export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team, name = `${airframe.id}-${team}`): AircraftVisual {
+/**
+ * @param bodyColor the paint on the airframe (the player can choose it); the
+ *   team colour stays on the spinner, fin, wingtips, band and roundels.
+ */
+export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team, name = `${airframe.id}-${team}`, bodyColor: string = TEAM_PAINT[team].body): AircraftVisual {
   const paint = TEAM_PAINT[team];
   const materials: Materials = {
-    body: createPbrSurface(scene, `${name}-body`, { color: paint.body, roughness: AIRCRAFT_MATERIAL_CONFIG.paintRoughness }),
+    body: createPbrSurface(scene, `${name}-body`, { color: bodyColor, roughness: AIRCRAFT_MATERIAL_CONFIG.paintRoughness }),
     accent: createPbrSurface(scene, `${name}-accent`, { color: paint.accent, roughness: AIRCRAFT_MATERIAL_CONFIG.paintRoughness }),
     glass: createPbrSurface(scene, `${name}-glass`, { color: AIRCRAFT_MATERIAL_CONFIG.canopyColor, roughness: AIRCRAFT_MATERIAL_CONFIG.canopyRoughness }),
     dark: createPbrSurface(scene, `${name}-dark`, { color: AIRCRAFT_MATERIAL_CONFIG.darkMetalColor, roughness: AIRCRAFT_MATERIAL_CONFIG.darkMetalRoughness }),
@@ -72,9 +76,12 @@ export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team
   const wing = new WingGeometry(airframe.wing);
   const root = new TransformNode(name, scene);
 
+  // A biplane's or triplane's other wings: plain panels, with team-coloured tips.
+  const extraWings = (airframe.extraWings ?? []).map((design) => new WingGeometry(plainWing(design)));
   const bodyParts = [
     buildLatheAlongZ('fuselage', scene, airframe.fuselage, 28),
     ...buildFixedWing(scene, wing),
+    ...extraWings.flatMap((extra) => buildFixedWing(scene, extra)),
     ...buildFixedTailplane(scene, airframe.tailplane),
     ...airframe.engines.flatMap((engine) => (engine.nacelle ? [buildNacelle(scene, engine)] : [])),
   ];
@@ -88,6 +95,7 @@ export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team
     ...airframe.engines.map((engine) => buildSpinner(scene, engine)),
     ...buildFixedFin(scene, airframe.fin),
     ...buildWingTips(scene, wing),
+    ...extraWings.flatMap((extra) => buildWingTips(scene, extra)),
     buildFuselageBand(scene, airframe.fuselage, airframe.bandZ),
   ];
   const glassParts = [buildGlazing('canopy', scene, airframe.canopy), ...airframe.turrets.map((turret, i) => buildGlazing(`turret-${i}`, scene, turret))];
@@ -96,6 +104,8 @@ export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team
     ...buildRadialFaces(scene, airframe),
     ...buildGunBarrels(scene, airframe),
     ...buildFlapHingeBrackets(scene, wing),
+    ...buildStruts(scene, airframe.struts ?? []),
+    ...buildStores(scene, airframe.stores ?? []),
   ];
   if (airframe.exhaustStacks) darkParts.push(...buildExhaustStacks(scene, airframe.exhaustStacks));
   if (airframe.rearGun) darkParts.push(...buildRearGun(scene, airframe.rearGun));
@@ -130,7 +140,7 @@ export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team
   for (const leg of gearLegs) leg.pivot.parent = root;
   for (const mesh of [...shadowCasters, roundels, ...propellers.map((p) => p.disc)]) mesh.isPickable = false;
 
-  return new AircraftVisual(root, propellers, surfaces, shadowCasters, [roundels], tailhook?.pivot ?? null, gearLegs);
+  return new AircraftVisual(root, propellers, surfaces, shadowCasters, [roundels], tailhook?.pivot ?? null, gearLegs, materials.body);
 }
 
 function mergeParts(name: string, parts: Mesh[], material: Material): Mesh {
@@ -356,7 +366,8 @@ class WingGeometry {
       { from: w.flapStart, to: w.flapEnd, hingeChord: w.flapHingeChord },
       ...(w.diveBrakes ? [{ from: w.diveBrakes.start, to: w.diveBrakes.end, hingeChord: w.diveBrakes.hingeChord }] : []),
       { from: w.aileronStart, to: w.aileronEnd, hingeChord: w.aileronHingeChord },
-    ];
+      // A wing without flaps (the triplane) or without ailerons (a biplane's lower wing) has zero-width cuts.
+    ].filter((cut) => cut.to - cut.from > 1e-3);
     const segments: Array<{ from: number; to: number; hingeChord: number | null }> = [];
     let x = 0;
     for (const cut of cuts) {
@@ -364,6 +375,8 @@ class WingGeometry {
       segments.push(cut);
       x = cut.to;
     }
+    // Plain wing out to the coloured tip (all of it, for a wing with nothing that moves).
+    if (w.aileronEnd - x > 1e-3) segments.push({ from: x, to: w.aileronEnd, hingeChord: null });
     return segments;
   }
 }
@@ -479,6 +492,7 @@ function wingSurface(kind: SurfaceKind, wing: WingGeometry, side: 1 | -1, name: 
  */
 function buildFlaps(scene: Scene, name: string, wing: WingGeometry, material: Material): HingedSurface[] {
   const w = wing.design;
+  if (w.flapEnd - w.flapStart < 1e-3) return [];
   return ([1, -1] as const).map((side) => {
     const inner = wing.section(w.flapStart, side);
     const drop = (inner.thickness * wing.thicknessAtChord(w.flapHingeChord)) / 2 + w.flapHingeDrop;
@@ -524,6 +538,7 @@ function buildDiveBrakes(scene: Scene, name: string, wing: WingGeometry, materia
 function buildFlapHingeBrackets(scene: Scene, wing: WingGeometry): Mesh[] {
   const w = wing.design;
   const brackets: Mesh[] = [];
+  if (w.flapEnd - w.flapStart < 1e-3) return brackets;
   for (const side of [1, -1] as const) {
     for (const f of [0.15, 0.5, 0.85]) {
       const section = wing.section(w.flapStart + (w.flapEnd - w.flapStart) * f, side);
@@ -732,4 +747,55 @@ function buildLandingGear(scene: Scene, name: string, airframe: Airframe, materi
   );
   legs.push(buildLeg('nose-gear', 0, g.noseZ, g.noseStrutTopY, noseWheelCenterY, g.noseWheelRadius, 'x', Math.PI / 2));
   return legs;
+}
+
+// ── Biplanes and triplanes: extra wings, struts; bombs ─────────────────────
+
+/** A plain wing as a wing with no moving surfaces: one fixed panel to `tipStart`, then the coloured tip. */
+function plainWing(design: PlainWingDesign): WingDesign {
+  return {
+    ...design,
+    flapStart: 0,
+    flapEnd: 0,
+    flapHingeChord: 0.75,
+    flapHingeDrop: 0,
+    aileronStart: design.tipStart,
+    aileronEnd: design.tipStart,
+    aileronHingeChord: 0.75,
+  };
+}
+
+/** Struts and bracing posts: thin cylinders, mirrored to the left when off the centreline. */
+function buildStruts(scene: Scene, struts: readonly StrutDesign[]): Mesh[] {
+  const parts: Mesh[] = [];
+  const up = new Vector3(0, 1, 0);
+  for (const strut of struts) {
+    const mirrored = strut.from.x !== 0 || strut.to.x !== 0;
+    for (const side of mirrored ? [1, -1] : [1]) {
+      const a = new Vector3(strut.from.x * side, strut.from.y, strut.from.z);
+      const b = new Vector3(strut.to.x * side, strut.to.y, strut.to.z);
+      const along = b.subtract(a);
+      const length = along.length();
+      const mesh = CreateCylinder('strut', { height: length, diameter: strut.diameter, tessellation: 6 }, scene);
+      mesh.position.copyFrom(a.add(b).scale(0.5));
+      // A cylinder stands along Y: turn it onto the strut's direction.
+      mesh.rotationQuaternion = Quaternion.FromUnitVectorsToRef(up, along.normalize(), new Quaternion());
+      parts.push(mesh);
+    }
+  }
+  return parts;
+}
+
+/** Bombs (or tanks): a stretched sphere for the body plus a small fin ring at the tail. */
+function buildStores(scene: Scene, stores: readonly StoreDesign[]): Mesh[] {
+  const parts: Mesh[] = [];
+  for (const store of stores) {
+    const body = CreateSphere('store', { diameterX: store.radius * 2, diameterY: store.radius * 2, diameterZ: store.length, segments: 12 }, scene);
+    body.position.set(store.center.x, store.center.y, store.center.z);
+    const fins = CreateCylinder('store-fins', { height: store.length * 0.12, diameter: store.radius * 1.9, tessellation: 4 }, scene);
+    fins.rotation.x = Math.PI / 2;
+    fins.position.set(store.center.x, store.center.y, store.center.z - store.length * 0.45);
+    parts.push(body, fins);
+  }
+  return parts;
 }

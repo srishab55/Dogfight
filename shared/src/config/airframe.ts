@@ -18,7 +18,7 @@ import type { Vec3 } from '../types/vector';
  * over or ground-loop.
  */
 
-export type AirframeId = 'fighter' | 'navalFighter' | 'diveBomber' | 'fourEngineBomber';
+export type AirframeId = 'fighter' | 'interceptor' | 'navalFighter' | 'diveBomber' | 'fourEngineBomber' | 'triplane' | 'biplane';
 
 /** A [radius, z] profile from tail to nose, spun around the Z axis. */
 export type LatheProfile = ReadonlyArray<readonly [number, number]>;
@@ -112,6 +112,39 @@ export interface LandingGearDesign {
   readonly strutDiameter: number;
 }
 
+/**
+ * A biplane's or triplane's other wings: plain (no moving surfaces), mirrored
+ * left and right, team-coloured from `tipStart` out. The main `wing` carries
+ * the ailerons and flaps, and is the one the physics uses for span.
+ */
+export interface PlainWingDesign {
+  readonly y: number;
+  readonly halfSpan: number;
+  readonly rootLeadingZ: number;
+  readonly rootTrailingZ: number;
+  readonly tipLeadingZ: number;
+  readonly tipTrailingZ: number;
+  readonly rootThickness: number;
+  readonly tipThickness: number;
+  readonly dihedralDeg: number;
+  readonly trailingEdgeRatio: number;
+  readonly tipStart: number;
+}
+
+/** A strut or bracing post between two points (m), mirrored to the left side when it's off the centreline. */
+export interface StrutDesign {
+  readonly from: Vec3;
+  readonly to: Vec3;
+  readonly diameter: number;
+}
+
+/** A bomb (or drop tank) hanging under the aircraft: visual only (bombs arrive later in Phase 4). */
+export interface StoreDesign {
+  readonly center: Vec3;
+  readonly length: number;
+  readonly radius: number;
+}
+
 /** An ellipsoid of glass: cockpit canopy or gun turret. */
 export interface GlazingDesign {
   readonly center: Vec3;
@@ -149,6 +182,13 @@ export interface AirframeDesign {
   readonly tailhook?: { readonly pivot: Vec3; readonly length: number };
   /** Rear gunner's twin gun, pointing aft from the back of the canopy. */
   readonly rearGun?: { readonly pivot: Vec3; readonly length: number };
+  /** Biplanes and triplanes: the other wings, and the struts between them. */
+  readonly extraWings?: readonly PlainWingDesign[];
+  readonly struts?: readonly StrutDesign[];
+  /** Fixed landing gear (old types): it never retracts, and its drag is part of the airframe's. */
+  readonly fixedGear?: boolean;
+  /** Bombs or tanks under the wings or fuselage (visual). */
+  readonly stores?: readonly StoreDesign[];
 }
 
 export interface WheelDefinition {
@@ -239,6 +279,13 @@ function deriveCrashPoints(design: AirframeDesign): CrashPoint[] {
   const tipZ = (wing.tipLeadingZ + wing.tipTrailingZ) / 2;
   add(wing.halfSpan, tipY, tipZ, 'right wingtip strike');
   add(-wing.halfSpan, tipY, tipZ, 'left wingtip strike');
+  // A biplane's lower wing reaches the ground first in a bank.
+  for (const extra of design.extraWings ?? []) {
+    const y = extra.y + extra.halfSpan * Math.tan((extra.dihedralDeg * Math.PI) / 180);
+    const z = (extra.tipLeadingZ + extra.tipTrailingZ) / 2;
+    add(extra.halfSpan, y, z, 'right wingtip strike');
+    add(-extra.halfSpan, y, z, 'left wingtip strike');
+  }
   const tailTipZ = (tailplane.tipLeadingZ + tailplane.tipTrailingZ) / 2;
   add(tailplane.halfSpan, tailplane.y, tailTipZ, 'tailplane strike');
   add(-tailplane.halfSpan, tailplane.y, tailTipZ, 'tailplane strike');
@@ -352,6 +399,12 @@ export const FIGHTER_AIRFRAME = defineAirframe({
   roundel: { span: 3.55, diameter: 0.92, chord: 0.38 },
   radiatorScoop: { center: { x: 0, y: -0.66, z: -0.2 }, width: 0.55, height: 0.32, depth: 1.3 },
   exhaustStacks: { x: 0.6, y: 0.22, firstZ: 2.45, count: 3, spacing: 0.32 },
+  // The Fighter-Bomber's load: a bomb under each wing and one on the centreline.
+  stores: [
+    { center: { x: 2.05, y: -0.78, z: 0.25 }, length: 1.7, radius: 0.19 },
+    { center: { x: -2.05, y: -0.78, z: 0.25 }, length: 1.7, radius: 0.19 },
+    { center: { x: 0, y: -0.92, z: 0.1 }, length: 2.0, radius: 0.23 },
+  ],
   // An arrestor hook, as on the naval versions of land fighters (a gameplay
   // assist: any fighter can land on a carrier). Its lowered tip reaches just
   // above the main wheels, like the Naval Fighter's.
@@ -690,8 +743,347 @@ export const FOUR_ENGINE_BOMBER_AIRFRAME = defineAirframe({
   roundel: { span: 9.6, diameter: 1.7, chord: 0.36 },
 });
 
+/**
+ * Slim, fast interceptor: a long pointed nose over an inline engine, a
+ * small, sharply tapered wing, a bubble canopy and a tall narrow fin.
+ * 9.6 m long, 10.4 m span.
+ */
+export const INTERCEPTOR_AIRFRAME = defineAirframe({
+  id: 'interceptor',
+  fuselage: [
+    [0.0, -5.2],
+    [0.09, -5.15],
+    [0.2, -4.7],
+    [0.31, -3.7],
+    [0.42, -2.4],
+    [0.5, -1.1],
+    [0.55, 0.0],
+    [0.56, 1.2],
+    [0.53, 2.4],
+    [0.46, 3.4],
+    [0.36, 4.05],
+    [0.0, 4.1],
+  ],
+  canopy: { center: { x: 0, y: 0.5, z: -0.35 }, width: 0.58, height: 0.6, length: 1.6 },
+  turrets: [],
+  wing: {
+    y: -0.36,
+    halfSpan: 5.2,
+    rootLeadingZ: 1.45,
+    rootTrailingZ: -1.1,
+    tipLeadingZ: 0.45,
+    tipTrailingZ: -0.32,
+    rootThickness: 0.28,
+    tipThickness: 0.07,
+    dihedralDeg: 6,
+    trailingEdgeRatio: 0.28,
+    flapStart: 0.65,
+    flapEnd: 2.8,
+    flapHingeChord: 0.74,
+    flapHingeDrop: 0.05,
+    aileronStart: 3.0,
+    aileronEnd: 4.55,
+    aileronHingeChord: 0.74,
+  },
+  tailplane: {
+    y: 0.1,
+    halfSpan: 1.75,
+    rootLeadingZ: -4.05,
+    rootTrailingZ: -5.15,
+    tipLeadingZ: -4.55,
+    tipTrailingZ: -5.0,
+    rootThickness: 0.11,
+    tipThickness: 0.04,
+    elevatorStart: 0.2,
+    hingeChord: 0.62,
+  },
+  fin: {
+    rootY: 0.22,
+    tipY: 2.05,
+    rootLeadingZ: -3.75,
+    rootTrailingZ: -5.18,
+    tipLeadingZ: -4.75,
+    tipTrailingZ: -5.1,
+    rootThickness: 0.13,
+    tipThickness: 0.04,
+    rudderBottomY: 0.4,
+    hingeChord: 0.6,
+  },
+  engines: [
+    {
+      hub: { x: 0, y: 0, z: 4.3 },
+      bladeCount: 4,
+      bladeLength: 1.2,
+      bladeChord: 0.2,
+      bladeRootRadius: 0.18,
+      bladePitchDeg: 24,
+      spinner: { baseZ: 4.02, radius: 0.27, length: 0.85 },
+      nacelle: null,
+      radialFaceRadius: 0,
+    },
+  ],
+  landingGear: {
+    mainTrackHalfWidth: 1.1,
+    mainZ: -0.35,
+    mainWheelCenterY: -1.45,
+    mainWheelRadius: 0.33,
+    noseZ: 3.05,
+    noseWheelRadius: 0.25,
+    mainStrutTopY: -0.3,
+    noseStrutTopY: -0.5,
+    wheelWidth: 0.18,
+    strutDiameter: 0.1,
+  },
+  cockpitEye: { x: 0, y: 0.9, z: -0.45 },
+  gunMounts: [
+    { x: -2.1, y: -0.2, z: 1.0 },
+    { x: 2.1, y: -0.2, z: 1.0 },
+    { x: -2.7, y: -0.17, z: 0.85 },
+    { x: 2.7, y: -0.17, z: 0.85 },
+  ],
+  bellyPoint: { x: 0, y: -0.72, z: -0.2 },
+  bandZ: [-3.0, -3.35],
+  roundel: { span: 3.4, diameter: 0.8, chord: 0.4 },
+  // Radiators under each wing root.
+  radiatorScoop: { center: { x: 0, y: -0.62, z: -0.5 }, width: 0.5, height: 0.26, depth: 1.1 },
+  exhaustStacks: { x: 0.5, y: 0.2, firstZ: 2.9, count: 4, spacing: 0.28 },
+  tailhook: { pivot: { x: 0, y: -0.18, z: -4.7 }, length: 1.7 },
+});
+
+/**
+ * Old-school fighting triplane: three short stacked wings joined by struts,
+ * a rotary engine in a round cowling, a two-blade wooden propeller, twin
+ * guns on the cowling, an open cockpit and fixed gear. 5.8 m long, 7.2 m
+ * span. Slow, but it turns on a sixpence. The top wing carries the ailerons
+ * and the national markings.
+ */
+export const TRIPLANE_AIRFRAME = defineAirframe({
+  id: 'triplane',
+  fuselage: [
+    [0.0, -3.6],
+    [0.08, -3.55],
+    [0.2, -2.9],
+    [0.33, -1.8],
+    [0.44, -0.6],
+    [0.5, 0.4],
+    [0.53, 1.2],
+    [0.56, 1.75],
+    [0.5, 1.98],
+    [0.0, 2.0],
+  ],
+  canopy: { center: { x: 0, y: 0.52, z: -0.2 }, width: 0.42, height: 0.24, length: 0.36 },
+  turrets: [],
+  wing: {
+    y: 1.15,
+    halfSpan: 3.6,
+    rootLeadingZ: 0.95,
+    rootTrailingZ: -0.15,
+    tipLeadingZ: 0.85,
+    tipTrailingZ: -0.05,
+    rootThickness: 0.13,
+    tipThickness: 0.09,
+    dihedralDeg: 0,
+    trailingEdgeRatio: 0.35,
+    // No flaps to see (the lever still adds a little lift: a gameplay assist).
+    flapStart: 0.4,
+    flapEnd: 0.4,
+    flapHingeChord: 0.75,
+    flapHingeDrop: 0,
+    aileronStart: 2.3,
+    aileronEnd: 3.4,
+    aileronHingeChord: 0.72,
+  },
+  extraWings: [
+    { y: 0.28, halfSpan: 3.15, rootLeadingZ: 0.75, rootTrailingZ: -0.35, tipLeadingZ: 0.65, tipTrailingZ: -0.25, rootThickness: 0.12, tipThickness: 0.08, dihedralDeg: 0, trailingEdgeRatio: 0.35, tipStart: 2.95 },
+    { y: -0.55, halfSpan: 2.85, rootLeadingZ: 0.6, rootTrailingZ: -0.5, tipLeadingZ: 0.5, tipTrailingZ: -0.4, rootThickness: 0.12, tipThickness: 0.08, dihedralDeg: 1, trailingEdgeRatio: 0.35, tipStart: 2.65 },
+  ],
+  struts: [
+    // Interplane struts, through all three wings.
+    { from: { x: 2.35, y: -0.53, z: 0.05 }, to: { x: 2.35, y: 1.15, z: 0.4 }, diameter: 0.07 },
+    // Cabane struts from the fuselage to the top wing.
+    { from: { x: 0.3, y: 0.45, z: 0.75 }, to: { x: 0.45, y: 1.15, z: 0.75 }, diameter: 0.05 },
+    { from: { x: 0.3, y: 0.45, z: 0.05 }, to: { x: 0.45, y: 1.15, z: 0.05 }, diameter: 0.05 },
+  ],
+  tailplane: {
+    y: 0.05,
+    halfSpan: 1.25,
+    rootLeadingZ: -2.85,
+    rootTrailingZ: -3.55,
+    tipLeadingZ: -3.1,
+    tipTrailingZ: -3.5,
+    rootThickness: 0.08,
+    tipThickness: 0.04,
+    elevatorStart: 0.15,
+    hingeChord: 0.5,
+  },
+  fin: {
+    rootY: 0.1,
+    tipY: 1.0,
+    rootLeadingZ: -3.0,
+    rootTrailingZ: -3.6,
+    tipLeadingZ: -3.45,
+    tipTrailingZ: -3.62,
+    rootThickness: 0.08,
+    tipThickness: 0.04,
+    rudderBottomY: 0.16,
+    hingeChord: 0.45,
+  },
+  engines: [
+    {
+      hub: { x: 0, y: 0, z: 2.08 },
+      bladeCount: 2,
+      bladeLength: 1.0,
+      bladeChord: 0.17,
+      bladeRootRadius: 0.12,
+      bladePitchDeg: 20,
+      spinner: { baseZ: 1.99, radius: 0.12, length: 0.16 },
+      nacelle: null,
+      radialFaceRadius: 0.45,
+    },
+  ],
+  landingGear: {
+    mainTrackHalfWidth: 1.1,
+    mainZ: -0.3,
+    mainWheelCenterY: -1.05,
+    mainWheelRadius: 0.33,
+    noseZ: 1.8,
+    noseWheelRadius: 0.22,
+    mainStrutTopY: -0.45,
+    noseStrutTopY: -0.42,
+    wheelWidth: 0.12,
+    strutDiameter: 0.07,
+  },
+  fixedGear: true,
+  cockpitEye: { x: 0, y: 0.78, z: -0.5 },
+  // Twin guns on top of the cowling, firing through the propeller.
+  gunMounts: [
+    { x: -0.13, y: 0.5, z: 1.55 },
+    { x: 0.13, y: 0.5, z: 1.55 },
+  ],
+  bellyPoint: { x: 0, y: -0.5, z: 0.0 },
+  bandZ: [-2.0, -2.25],
+  roundel: { span: 2.7, diameter: 0.75, chord: 0.42 },
+  tailhook: { pivot: { x: 0, y: -0.12, z: -3.0 }, length: 1.3 },
+});
+
+/**
+ * 1930s biplane fighter: two staggered wings with N-struts, a radial engine
+ * in a cowling, an enclosed cockpit, four guns and fixed gear. 8.3 m long,
+ * 9.8 m span. Light and nimble; not fast.
+ */
+export const BIPLANE_AIRFRAME = defineAirframe({
+  id: 'biplane',
+  fuselage: [
+    [0.0, -4.6],
+    [0.08, -4.55],
+    [0.22, -4.0],
+    [0.37, -2.8],
+    [0.5, -1.4],
+    [0.58, 0.0],
+    [0.62, 1.4],
+    [0.67, 2.4],
+    [0.63, 2.88],
+    [0.0, 2.92],
+  ],
+  canopy: { center: { x: 0, y: 0.6, z: -0.55 }, width: 0.55, height: 0.36, length: 0.85 },
+  turrets: [],
+  wing: {
+    y: 1.25,
+    halfSpan: 4.9,
+    rootLeadingZ: 1.15,
+    rootTrailingZ: -0.45,
+    tipLeadingZ: 1.0,
+    tipTrailingZ: -0.3,
+    rootThickness: 0.16,
+    tipThickness: 0.1,
+    dihedralDeg: 2,
+    trailingEdgeRatio: 0.3,
+    flapStart: 0.75,
+    flapEnd: 2.3,
+    flapHingeChord: 0.75,
+    flapHingeDrop: 0.03,
+    aileronStart: 3.0,
+    aileronEnd: 4.65,
+    aileronHingeChord: 0.74,
+  },
+  extraWings: [{ y: -0.5, halfSpan: 4.5, rootLeadingZ: 0.7, rootTrailingZ: -0.85, tipLeadingZ: 0.55, tipTrailingZ: -0.7, rootThickness: 0.15, tipThickness: 0.09, dihedralDeg: 4, trailingEdgeRatio: 0.3, tipStart: 4.25 }],
+  struts: [
+    // N-struts between the wings, front and rear.
+    { from: { x: 3.0, y: -0.29, z: 0.42 }, to: { x: 3.0, y: 1.36, z: 0.82 }, diameter: 0.07 },
+    { from: { x: 3.0, y: -0.29, z: -0.48 }, to: { x: 3.0, y: 1.36, z: -0.08 }, diameter: 0.07 },
+    // Cabane struts.
+    { from: { x: 0.38, y: 0.55, z: 0.95 }, to: { x: 0.45, y: 1.25, z: 0.95 }, diameter: 0.05 },
+    { from: { x: 0.38, y: 0.55, z: 0.0 }, to: { x: 0.45, y: 1.25, z: 0.05 }, diameter: 0.05 },
+  ],
+  tailplane: {
+    y: 0.15,
+    halfSpan: 1.7,
+    rootLeadingZ: -3.6,
+    rootTrailingZ: -4.5,
+    tipLeadingZ: -3.95,
+    tipTrailingZ: -4.4,
+    rootThickness: 0.1,
+    tipThickness: 0.04,
+    elevatorStart: 0.18,
+    hingeChord: 0.55,
+  },
+  fin: {
+    rootY: 0.15,
+    tipY: 1.45,
+    rootLeadingZ: -3.75,
+    rootTrailingZ: -4.6,
+    tipLeadingZ: -4.25,
+    tipTrailingZ: -4.6,
+    rootThickness: 0.1,
+    tipThickness: 0.04,
+    rudderBottomY: 0.2,
+    hingeChord: 0.5,
+  },
+  engines: [
+    {
+      hub: { x: 0, y: 0, z: 3.02 },
+      bladeCount: 3,
+      bladeLength: 1.22,
+      bladeChord: 0.2,
+      bladeRootRadius: 0.18,
+      bladePitchDeg: 24,
+      spinner: { baseZ: 2.9, radius: 0.18, length: 0.3 },
+      nacelle: null,
+      radialFaceRadius: 0.58,
+    },
+  ],
+  landingGear: {
+    mainTrackHalfWidth: 1.3,
+    mainZ: -0.3,
+    mainWheelCenterY: -1.4,
+    mainWheelRadius: 0.32,
+    noseZ: 2.3,
+    noseWheelRadius: 0.24,
+    mainStrutTopY: -0.45,
+    noseStrutTopY: -0.55,
+    wheelWidth: 0.16,
+    strutDiameter: 0.09,
+  },
+  fixedGear: true,
+  cockpitEye: { x: 0, y: 0.95, z: -0.75 },
+  gunMounts: [
+    { x: -0.2, y: 0.55, z: 2.2 },
+    { x: 0.2, y: 0.55, z: 2.2 },
+    { x: -2.0, y: -0.48, z: 0.72 },
+    { x: 2.0, y: -0.48, z: 0.72 },
+  ],
+  bellyPoint: { x: 0, y: -0.62, z: 0.3 },
+  bandZ: [-2.6, -2.95],
+  roundel: { span: 3.5, diameter: 0.92, chord: 0.42 },
+  exhaustStacks: { x: 0.62, y: -0.2, firstZ: 2.3, count: 2, spacing: 0.3 },
+  tailhook: { pivot: { x: 0, y: -0.2, z: -3.9 }, length: 1.6 },
+});
+
 export const AIRFRAMES: Readonly<Record<AirframeId, Airframe>> = {
   fighter: FIGHTER_AIRFRAME,
+  interceptor: INTERCEPTOR_AIRFRAME,
+  triplane: TRIPLANE_AIRFRAME,
+  biplane: BIPLANE_AIRFRAME,
   navalFighter: NAVAL_FIGHTER_AIRFRAME,
   diveBomber: DIVE_BOMBER_AIRFRAME,
   fourEngineBomber: FOUR_ENGINE_BOMBER_AIRFRAME,
