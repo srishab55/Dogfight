@@ -83,6 +83,7 @@ can break each other (fix: stop both, run `npm run dev` again).
 | **R** | Respawn at your home base (airfield, or the carrier's catapult) |
 | **T** | Air start at 800 m (for testing manoeuvres) |
 | **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
+| **P** | Auto-land at the nearest base within 10 km (any team; carriers need a hook). The HUD offers it within 5 km. **P** or any flight key takes over |
 | **1 – 5** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber |
 | **[ / ]** | Mouse sensitivity down / up (remembered) |
 | **K** | Steering: easy turns (default) / direct roll |
@@ -93,7 +94,9 @@ can break each other (fix: stop both, run `npm run dev` again).
 
 Keys ramp the control surfaces smoothly: tap for small corrections, hold for
 full deflection. In mouse flight, holding any flight key overrides the mouse
-on that axis. Bombs (B) arrive later in Phase 4. Bindings and mouse
+on that axis. The landing gear is automatic: it comes up soon after take-off and
+down as you come in to land (the HUD's GEAR line shows it); touching down with it up
+is a belly landing. Bombs arrive later in Phase 4 (on a key other than B). Bindings and mouse
 sensitivity live in [client/src/config/controls.ts](client/src/config/controls.ts).
 
 Watch the airframe: ailerons, elevators, rudder and flaps all move with your inputs.

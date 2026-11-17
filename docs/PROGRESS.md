@@ -2,9 +2,9 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Easy car-like steering, calmer mouse flight, and
-capturable enemy bases are in (your request). Remaining in Phase 4: bombs.
-Waiting for your test (FLIGHT_TEST.md cards 31-32) and confirmation.
+**Current status:** Auto-land (P) and automatic retractable landing gear
+are in (your request). Remaining in Phase 4: bombs. Waiting for your test
+(FLIGHT_TEST.md cards 33-34) and confirmation.
 
 ## Extras added along the way
 
@@ -27,6 +27,15 @@ Waiting for your test (FLIGHT_TEST.md cards 31-32) and confirmation.
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## Auto-land and retractable gear ✅ (your request, 2026-11-17)
+
+- ✅ Auto-land (**P**): an autopilot in shared (`autoLand.ts`) that lands at the nearest base within 10 km, friendly or enemy (carriers only with a hook, never a sinking one). It picks the nearer runway end, joins the extended centreline like an ILS localizer (or flies out and turns back in a teardrop when too close or too high), stays 180 m above terrain on the way, slows down, lowers the flaps, flies the 3° glide slope, flares, touches down and brakes to a stop on the centreline. On a carrier it flies the slope into the deck (no flare) and catches a wire. Goes around if badly placed close in. P or any flight key takes over
+- ✅ Landing at an enemy base works under the usual rules: no rearming there, and capture only once its defences are destroyed
+- ✅ HUD: "P · AUTO-LAND at …" within 5 km of a base; while it flies, what it is doing (flying out, joining the approach, on final, flare, braking, wire caught); a message when it hands back control
+- ✅ Retractable landing gear, automatic (`landingGear.ts`, in the flight model): up soon after take-off (or catapult launch), down when descending at landing speed low over the ground or near a base; stays down through a small climb on an approach; up when too fast for it. 3 s to travel. Down adds drag; up, there are no wheels, so touching down is a belly landing. The legs fold on the models (inward under the wing; aft into the nacelles on the Heavy Bomber; nose leg aft), and the HUD has a GEAR line
+- ✅ 30 new tests: every class lands from 6 km out in under two minutes; U-turn onto the reverse runway; from abeam, low and fast; over the central mountain; teardrop after take-off; heavy bomber; enemy airfield; both carrier types onto the Blue carrier from three directions; the enemy carrier; base choice (range, hook, sinking); gear up after take-off and catapult launch, down before touchdown, stays up when fast and in cruise, drag, belly landing
+- Verified: 326 tests (1 skipped by design), typecheck, build, and headless Chrome: take-off with the gear coming up at ~30 m (and never retracting on an approach); air start, P, auto-land to a 1.3 m/s "SMOOTH" touchdown and a stop with the rearm message; taking over with W; Naval Fighter auto-land onto the carrier, wire caught. 57-60 FPS, no console errors
 
 ## Easy steering and capturable bases ✅ (your request, 2026-11-17)
 

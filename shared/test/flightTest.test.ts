@@ -432,6 +432,8 @@ describe('crashes and collisions (Fighter-Bomber)', () => {
     state.position.z = runwayPoint.z;
     state.position.y = groundClearance(spec) + wheelHeight;
     state.velocity.y = -sinkRate;
+    // Coming in to land: gear down (an air start begins with it up, and it's too low here to come down in time).
+    state.gearPosition = 1;
     return state;
   };
 

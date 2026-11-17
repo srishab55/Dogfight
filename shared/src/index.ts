@@ -84,6 +84,8 @@ export { computePerformance, type AircraftPerformance } from './flight/performan
 export { stallAngles, wingSpan } from './flight/aerodynamics';
 export { DEFAULT_DIRECTION_PILOT, steerTowards, type DirectionPilotTuning, type StickInputs } from './flight/directionPilot';
 export { STEERING_ASSIST_CONFIG, createSteeringAssistMemory, steerWithTurnInput, type SteeringAssistMemory } from './flight/steeringAssist';
+export { AUTO_LAND_CONFIG, autoLandBaseFor, planAutoLand, stepAutoLand, type AutoLand, type AutoLandPhase } from './flight/autoLand';
+export { LANDING_GEAR_CONFIG, gearLocked, stepLandingGear } from './flight/landingGear';
 
 export { GUN_SPECS, PRACTICE_TARGET_CONFIG, SERVICE_CONFIG, type GunSpec } from './config/weapons';
 export { createGunState, fullAmmo, gunMounts, hashToUnit, stepGuns, type GunState } from './combat/guns';

@@ -3,6 +3,7 @@ import type { Engine } from '@babylonjs/core/Engines/engine';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Axis } from '@babylonjs/core/Maths/math.axis';
 import {
+  AUTO_LAND_CONFIG,
   BASES,
   BASE_DEFENCE_KINDS,
   CARRIERS,
@@ -23,7 +24,14 @@ import {
   groundClearance,
   stepService,
   steerTowards,
+  autoLandBaseFor,
+  neutralControls,
+  planAutoLand,
+  stepAutoLand,
   type AircraftClassId,
+  type AutoLand,
+  type BaseDefinition,
+  type FlightControls,
   type CarrierStatusMap,
   type CombatEvent,
   type GroundQuery,
@@ -46,7 +54,7 @@ import { TracerRenderer } from '../combat/TracerRenderer';
 import { KEY_BINDINGS, MOUSE_FLIGHT_CONFIG, STEERING_CONFIG } from '../config/controls';
 import { MouseFlight } from '../input/MouseFlight';
 import { RENDER_CONFIG } from '../config/graphics';
-import { FLIGHT_PATH_MARKER_MIN_SPEED, LANDING_PRACTICE } from '../config/landing';
+import { AUTO_LAND_HUD, FLIGHT_PATH_MARKER_MIN_SPEED, LANDING_PRACTICE } from '../config/landing';
 import { FlightInputController } from '../input/FlightInputController';
 import { InputManager } from '../input/InputManager';
 import { applyPixelRatio, createEngine } from '../rendering/createEngine';
@@ -156,6 +164,12 @@ export class Game {
   private readonly markerPoint = new Vector3();
   /** The mouse aim, raised to allow for the rounds' drop: what the nose is actually pointed at. */
   private readonly gunAim = new Vector3();
+  /** Auto-land (P): the autopilot flying a landing at `autoLandBase`, or null. */
+  private autoLand: AutoLand | null = null;
+  private autoLandBase: BaseDefinition | null = null;
+  private readonly autoLandControls: FlightControls = neutralControls();
+  /** Set during the physics steps, acted on after them: why auto-land should stop this frame. */
+  private autoLandEnd: 'landed' | 'takenOver' | 'crashed' | null = null;
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     this.engine = createEngine(canvas);
@@ -230,25 +244,16 @@ export class Game {
 
     const mouseFlying = this.isMouseFlying();
     const alpha = this.loop.advance(deltaSeconds, (dt) => {
-      // Mouse flight: the direction pilot turns the aim into stick positions;
-      // any flight key held overrides it on that axis.
-      let assist: StickInputs | null = null;
-      let steering = false;
-      let assistAirbrake = 0;
-      if (mouseFlying) {
-        this.mouseFlight.aimDirection(this.aimDirection);
-        this.compensateForDrop(this.aimDirection, this.gunAim);
-        assist = steerTowards(this.aircraft.state, this.aircraft.spec, this.gunAim, this.mouseSticks);
-      } else if (this.steering === 'easy') {
-        // Car-like: A/D turn, the assist banks and pulls, and levels the aircraft when they're let go.
-        const { turn, pitchByHand } = this.flightInput.steeringInputs(dt);
-        assist = steerWithTurnInput(this.aircraft.state, this.aircraft.spec, turn, pitchByHand, this.steeringMemory, this.steeringSticks);
-        steering = true;
-        // Turning hard above the best turning speed: ease the air brakes out to tighten the turn.
-        const over = this.aircraft.state.telemetry.airspeed / this.aircraft.performance.cornerSpeed - STEERING_CONFIG.brakeAboveCornerSpeed;
-        if (Math.abs(turn) > 0.6 && over > 0) assistAirbrake = Math.min(1, over * STEERING_CONFIG.brakePerSpeedRatio);
+      let controls: Readonly<FlightControls>;
+      if (this.autoLand && this.autoLandEnd === null && !this.flightInput.flyingByHand()) {
+        // Auto-land flies; touching any flight key takes over (handled after the steps).
+        const phase = stepAutoLand(this.autoLand, this.aircraft.state, this.aircraft.spec, this.ground, this.autoLandControls, dt);
+        controls = this.flightInput.autopilot(this.autoLandControls);
+        if (phase === 'done') this.autoLandEnd = this.aircraft.state.crashed ? 'crashed' : 'landed';
+      } else {
+        if (this.autoLand) this.autoLandEnd ??= 'takenOver';
+        controls = this.pilotControls(dt, mouseFlying);
       }
-      const controls = this.flightInput.update(dt, assist, steering, assistAirbrake);
       this.aircraft.step(controls, dt);
       const { state, spec } = this.aircraft;
       this.combat.step(dt, [{ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire }]);
@@ -256,6 +261,7 @@ export class Game {
     });
     this.handleCombatEvents();
     this.handleServiceEvent();
+    this.updateAutoLand();
     if (this.catapultBriefing && this.aircraft.state.catapult !== 'held') {
       this.catapultBriefing = false;
       this.hud.clearMessage();
@@ -307,6 +313,7 @@ export class Game {
       enemyMarkers: this.enemyMarkers(),
       impactPoint: this.projectImpactPoint(),
       targetsDestroyed: this.targetsDestroyed,
+      autoLand: this.autoLandHud(),
     });
     this.debugOverlay.update(deltaSeconds, this.debugLines);
     this.input.endFrame();
@@ -556,6 +563,122 @@ export class Game {
     else if (event === 'interrupted') this.hud.showMessage('SERVICE INTERRUPTED · stop and idle on a friendly base to rearm', 'ok', 3);
   }
 
+  /**
+   * The pilot's controls for one physics step. Mouse flight: the direction
+   * pilot turns the aim into stick positions; easy steering: A/D turn like a
+   * car. Either way, any flight key held overrides the assist on its axis.
+   */
+  private pilotControls(dt: number, mouseFlying: boolean): Readonly<FlightControls> {
+    let assist: StickInputs | null = null;
+    let steering = false;
+    let assistAirbrake = 0;
+    if (mouseFlying) {
+      this.mouseFlight.aimDirection(this.aimDirection);
+      this.compensateForDrop(this.aimDirection, this.gunAim);
+      assist = steerTowards(this.aircraft.state, this.aircraft.spec, this.gunAim, this.mouseSticks);
+    } else if (this.steering === 'easy') {
+      // Car-like: A/D turn, the assist banks and pulls, and levels the aircraft when they're let go.
+      const { turn, pitchByHand } = this.flightInput.steeringInputs(dt);
+      assist = steerWithTurnInput(this.aircraft.state, this.aircraft.spec, turn, pitchByHand, this.steeringMemory, this.steeringSticks);
+      steering = true;
+      // Turning hard above the best turning speed: ease the air brakes out to tighten the turn.
+      const over = this.aircraft.state.telemetry.airspeed / this.aircraft.performance.cornerSpeed - STEERING_CONFIG.brakeAboveCornerSpeed;
+      if (Math.abs(turn) > 0.6 && over > 0) assistAirbrake = Math.min(1, over * STEERING_CONFIG.brakePerSpeedRatio);
+    }
+    return this.flightInput.update(dt, assist, steering, assistAirbrake);
+  }
+
+  /** P: start auto-land at the nearest base in range (friendly or enemy), or hand control back. */
+  private toggleAutoLand(): void {
+    if (this.autoLand) {
+      this.stopAutoLand('YOU HAVE CONTROL · auto-land off', 'ok');
+      return;
+    }
+    const { state, spec } = this.aircraft;
+    if (state.crashed || state.shotDown) return;
+    if (state.onGround) {
+      this.hud.showMessage('AUTO-LAND is for landing: take off first', 'ok', 2.5);
+      return;
+    }
+    const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
+    if (!base) {
+      this.hud.showMessage(`AUTO-LAND · no base within ${AUTO_LAND_CONFIG.offerRange / 1000} km${spec.airframe.tailhook ? '' : ' (carriers need a tailhook)'}`, 'ok', 3);
+      return;
+    }
+    this.autoLand = planAutoLand(base, state);
+    this.autoLandBase = base;
+    this.autoLandEnd = null;
+    const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
+    this.hud.showMessage(`AUTO-LAND · ${base.name.toUpperCase()}${enemy ? ' · ENEMY BASE: no rearming there' : ''} · P or any flight key takes over`, enemy ? 'ok' : 'good', 4);
+  }
+
+  /** After the physics steps: hand control back if auto-land finished, was overridden, or can't go on. */
+  private updateAutoLand(): void {
+    if (!this.autoLand || !this.autoLandBase) return;
+    const base = this.autoLandBase;
+    const { state } = this.aircraft;
+    if (state.crashed || state.shotDown) this.autoLandEnd = 'crashed';
+    else if (base.kind === 'carrier' && (this.carrierStatuses.get(base.id)?.sink ?? 0) > 0) {
+      this.stopAutoLand(`AUTO-LAND OFF · ${base.name} is sinking`, 'bad');
+      return;
+    }
+    const end = this.autoLandEnd;
+    if (end === 'takenOver') this.stopAutoLand('YOU HAVE CONTROL · auto-land off', 'ok');
+    else if (end === 'crashed') this.stopAutoLand(null, 'ok');
+    else if (end === 'landed') {
+      const owner = this.combat.ownerOf(base);
+      const control = this.combat.bases.find((b) => b.base.id === base.id);
+      const message =
+        owner === PLAYER_TEAM
+          ? `LANDED · ${base.name.toUpperCase()} · stay stopped at idle: the ground crew rearms and repairs you`
+          : control?.neutralized
+            ? `LANDED · ${base.name.toUpperCase()} · it's defenceless: stay stopped to capture it`
+            : `LANDED · ${base.name.toUpperCase()} · enemy base: no rearming here, and it can't be captured while defended`;
+      this.stopAutoLand(message, owner === PLAYER_TEAM || control?.neutralized ? 'good' : 'ok');
+    }
+  }
+
+  private stopAutoLand(message: string | null, tone: 'good' | 'ok' | 'bad'): void {
+    this.autoLand = null;
+    this.autoLandBase = null;
+    this.autoLandEnd = null;
+    // Carry on smoothly by hand: the steering assist starts afresh, and the mouse aims where the aircraft is going.
+    Object.assign(this.steeringMemory, createSteeringAssistMemory());
+    if (this.mouseFlight.active) this.mouseFlight.aimAlong(this.aircraft.state.velocity);
+    if (message) this.hud.showMessage(message, tone, 5);
+  }
+
+  /** The auto-land line on the HUD: what it's doing, or the offer when near a base. */
+  private autoLandHud(): HudFrame['autoLand'] {
+    const { state, spec } = this.aircraft;
+    if (state.crashed || state.shotDown) return null;
+    const auto = this.autoLand;
+    if (auto && this.autoLandBase) {
+      const step =
+        auto.phase === 'intercept'
+          ? auto.goArounds > 0 && auto.leg === 'outside'
+            ? 'GOING AROUND'
+            : auto.leg === 'outside'
+              ? 'FLYING OUT TO TURN IN'
+              : 'JOINING THE APPROACH'
+          : auto.phase === 'final'
+            ? 'ON FINAL'
+            : auto.phase === 'flare'
+              ? 'FLARE'
+              : state.hookEngaged
+                ? 'WIRE CAUGHT'
+                : 'BRAKING';
+      return { active: true, text: `AUTO-LAND · ${this.autoLandBase.name.toUpperCase()} · ${step} · P: take over` };
+    }
+    if (state.onGround) return null;
+    const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
+    if (!base) return null;
+    const distance = Math.hypot(base.runway.center.x - state.position.x, base.runway.center.z - state.position.z);
+    if (distance > AUTO_LAND_HUD.promptDistance) return null;
+    const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
+    return { active: false, text: `P · AUTO-LAND at ${base.name}${enemy ? ' (enemy)' : ''} · ${(distance / 1000).toFixed(1)} km` };
+  }
+
   /** Distance and compass bearing from the aircraft to the nearest friendly base. */
   private nearestBase(): HudFrame['nearestBase'] {
     const p = this.aircraft.state.position;
@@ -785,6 +908,7 @@ export class Game {
       writeSteeringMode(this.steering);
       this.hud.showMessage(this.steering === 'easy' ? 'EASY STEERING · A/D turn, the aircraft levels itself (K: direct roll)' : 'DIRECT ROLL · A/D roll, pull back (W) to turn (K: easy steering)', 'good', 3);
     }
+    if (input.wasPressed('autoLand')) this.toggleAutoLand();
     if (input.wasPressed('toggleMute')) this.hud.showMessage(this.audio.toggleMute() ? 'SOUND OFF (M)' : 'SOUND ON (M)', 'good', 1.5);
     if (input.wasPressed('toggleControlsHelp')) this.controlsHint.hidden = !this.controlsHint.hidden;
     for (const [action, factor] of [['mouseSensitivityUp', MOUSE_FLIGHT_CONFIG.sensitivityStep], ['mouseSensitivityDown', 1 / MOUSE_FLIGHT_CONFIG.sensitivityStep]] as const) {
@@ -825,6 +949,9 @@ export class Game {
 
   /** After the aircraft jumps somewhere new: reset controls and loop, and snap the cameras instead of sweeping across the map. */
   private afterTeleport(throttle: number, flaps = this.aircraft.state.flapPosition): void {
+    this.autoLand = null;
+    this.autoLandBase = null;
+    this.autoLandEnd = null;
     this.flightInput.reset(throttle, flaps);
     // A fresh aircraft has cold guns and a full load of ammunition.
     Object.assign(this.playerGuns, createGunState(this.aircraft.spec));

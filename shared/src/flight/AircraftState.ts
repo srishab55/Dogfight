@@ -56,6 +56,8 @@ export interface AircraftState {
   flapPosition: number;
   /** Actual dive-brake opening, 0-1 (always 0 without dive brakes). */
   airbrakePosition: number;
+  /** Landing gear: 0 = retracted, 1 = down and locked. Moved automatically (see landingGear.ts). */
+  gearPosition: number;
   /**
    * Arrestor hook. `hookArmed`: ready to catch a wire, which needs a second
    * in the air first, so a take-off roll across the wires doesn't catch one.
@@ -124,6 +126,8 @@ function baseState(spec: AircraftClassSpec): AircraftState {
     flowSeparation: 0,
     flapPosition: 0,
     airbrakePosition: 0,
+    // Down: parked and approach states land on it; air starts raise it (below).
+    gearPosition: 1,
     hookArmed: false,
     hookEngaged: false,
     barrierEngaged: false,
@@ -169,6 +173,8 @@ export function createAirborneState(spec: AircraftClassSpec, position: Vec3, hea
   state.velocity = vec3(Math.sin(heading) * speed, 0, Math.cos(heading) * speed);
   quatFromHeading(state.orientation, heading);
   state.throttle = throttle;
+  // Cruising: gear up. The automatic gear lowers it when coming in to land.
+  state.gearPosition = 0;
   return state;
 }
 
@@ -224,6 +230,7 @@ export function copyAircraftState(target: AircraftState, source: Readonly<Aircra
   target.flowSeparation = source.flowSeparation;
   target.flapPosition = source.flapPosition;
   target.airbrakePosition = source.airbrakePosition;
+  target.gearPosition = source.gearPosition;
   target.hookArmed = source.hookArmed;
   target.hookEngaged = source.hookEngaged;
   target.barrierEngaged = source.barrierEngaged;

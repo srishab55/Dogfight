@@ -1,4 +1,4 @@
-import type { AircraftClassSpec } from '../config/aircraftClasses';
+import { groundClearance, type AircraftClassSpec } from '../config/aircraftClasses';
 import { PHYSICS_CONSTANTS } from '../config/simulation';
 import { SURFACE_FRICTION } from '../config/world';
 import { rotateVec3 } from '../math/quat';
@@ -7,6 +7,7 @@ import type { Vec3 } from '../types/vector';
 import type { AircraftState } from './AircraftState';
 import type { FlightControls } from './FlightControls';
 import type { GroundQuery } from './ground';
+import { gearLocked } from './landingGear';
 
 export interface GroundContactResult {
   /** Total ground force on the aircraft, world frame (N). */
@@ -44,6 +45,8 @@ const HOOK_LOWERED_DEG = 65;
 const HOOK_SIN = Math.sin((HOOK_LOWERED_DEG * Math.PI) / 180);
 const HOOK_COS = Math.cos((HOOK_LOWERED_DEG * Math.PI) / 180);
 const HOOK_REACH = 0.35;
+/** With the gear up, the belly sits this fraction of the wheels' ground clearance below the centre of mass. */
+const GEAR_UP_BELLY_FRACTION = 0.55;
 
 // Scratch vectors, reused every call.
 const offset = vec3();
@@ -94,10 +97,12 @@ export function computeGroundContact(
   rotateVec3(noseAxis, state.orientation, bodyForward);
   const horizontalSpeed = Math.hypot(state.velocity.x, state.velocity.z);
 
+  // Gear retracted (or still on its way down): no wheels to land on.
+  const wheelsDown = gearLocked(state);
   for (let i = 0; i < wheels.length; i++) {
     const wheel = wheels[i];
     const share = staticLoadShare[i];
-    if (!wheel || share === undefined) continue;
+    if (!wheel || share === undefined || !wheelsDown) continue;
     // Spring stiffness: this leg's share of the weight compresses it by the static deflection.
     const legMass = spec.mass * share;
     const stiffness = (legMass * PHYSICS_CONSTANTS.gravity) / (gear.staticDeflection * scale);
@@ -183,9 +188,14 @@ export function computeGroundContact(
     rotateVec3(offset, state.orientation, scaledPoint);
     addVec3(contactPoint, state.position, offset);
     if (contactPoint.y < ground.heightAt(contactPoint.x, contactPoint.z)) {
-      out.crashReason ??= ground.surfaceAt(contactPoint.x, contactPoint.z) === 'water' ? 'crashed into the sea' : crash.description;
+      out.crashReason ??= ground.surfaceAt(contactPoint.x, contactPoint.z) === 'water' ? 'crashed into the sea' : wheelsDown ? crash.description : 'belly landing (gear up)';
       break;
     }
+  }
+  // Gear up: the belly itself is the lowest part, a little above where the wheels would be.
+  if (!wheelsDown && out.crashReason === null) {
+    const bellyDrop = groundClearance(spec) * GEAR_UP_BELLY_FRACTION;
+    if (state.position.y - bellyDrop < ground.heightAt(state.position.x, state.position.z)) out.crashReason = ground.surfaceAt(state.position.x, state.position.z) === 'water' ? 'crashed into the sea' : 'belly landing (gear up)';
   }
 
   return out;

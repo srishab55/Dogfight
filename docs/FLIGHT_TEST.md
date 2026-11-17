@@ -411,6 +411,29 @@ up in a big fireball. Stopped on the runway: "CAPTURING nn%", then "CAPTURED
 its defences stay down.
 **Pass:** All of the above. Leave it defenceless for four minutes instead and its defences come back.
 
+## Card 33: Auto-land
+
+**Do:** Air start (**T**). Press **P**. Watch it land. Then air start again,
+press **P**, and after a few seconds press **W**. Then select the Naval
+Fighter (**4**), air start, and press **P**.
+**Expect:** "P · AUTO-LAND at Blue airfield" shows while within 5 km. After P
+the status line says what it is doing: flying out, joining the approach, on
+final (flaps and gear come down), flare, braking. It touches down gently on
+the centreline, stops, and tells you the ground crew is rearming you. W
+hands control straight back ("YOU HAVE CONTROL"). The Naval Fighter lands on
+the carrier and catches a wire. Near Red's airfield it lands there too, but
+you aren't rearmed (and their gun fires at you while it's defended).
+**Pass:** It lands every time without damage, and taking over is instant and smooth.
+
+## Card 34: Retractable gear
+
+**Do:** Take off from the airfield. Fly around, then come back and land by hand.
+**Expect:** About a second after lift-off, climbing past ~10 m, the GEAR line
+goes "▲ nn%" to "UP" and the wheels fold away (orbit camera, **C**). Coming
+in to land, descending slowly near the base or low down, it goes "▼" to
+"DOWN" well before touchdown. A fast low pass leaves it up.
+**Pass:** You never have to think about the gear, and it's always down for landing.
+
 ---
 
 ## Reporting a problem
@@ -439,3 +462,5 @@ ALT, AoA, G), plus the debug overlay if possible.
 | 16 | `combat.test.ts`: rate of fire, overheating, ballistics, convergence, hit detection, ground impacts, respawn, determinism |
 | 16b | `directionPilot.test.ts`: turns to 90°, turns round to 180°, climbs, can't stall, no wobble |
 | all | flies a complete sortie · determinism · reaches its top speed · thin air at 6 km |
+| 33 | `autoLand.test.ts`: base choice · every class from 6 km · U-turn · abeam · over the mountain · teardrop · enemy airfield · carrier traps from three directions |
+| 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

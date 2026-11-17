@@ -210,6 +210,50 @@ them out; without them the aircraft keeps accelerating far past that. A
 steady, slow dive is what makes aiming a bomb possible (bombs arrive later
 in Phase 4).
 
+## Landing gear
+
+The gear retracts and extends by itself (`landingGear.ts`, run inside
+`stepAircraft`, so it's deterministic):
+
+- **Up** once airborne for a second, more than 10 m up and climbing, within
+  30 s of leaving the ground (or after a catapult launch). Later in a
+  flight it only comes up when climbing more than 300 m above the ground,
+  or when flying faster than it may be down (the flaps' limit + 35 m/s).
+- **Down** when descending at no more than the flaps' limit + 25 m/s and
+  either below 60 m above the ground or sea, or within 3 km of a base
+  (and below 300 m above it). Always down on the ground, on the catapult
+  and on a wire.
+
+It takes 3 s to travel. Down adds 0.008 to the zero-lift drag (included in
+the derived approach speed and throttle). The wheels carry weight only once
+it is 90% down. Below that there are no wheels, so the belly or propeller
+touching the ground is a crash ("belly landing (gear up)").
+
+## Auto-land
+
+`autoLand.ts` is an autopilot that only sets control positions (stick,
+throttle, flaps, brakes), using a gentle tuning of the direction pilot:
+
+1. **Intercept.** On the approach side, it steers a heading that closes on
+   the extended centreline at up to 75° (like following an ILS localizer),
+   at the glide slope's height for where it is. From too close or the wrong
+   side, it flies out to a point 3.2 km out and 1 km to the side, then turns
+   in (a teardrop). It keeps 180 m above any terrain within 3 km ahead,
+   except under the approach corridor, which the terrain generator keeps
+   below the slope. It cruises at about 2.4× its stall speed, slowing to
+   about 1.55× over the last few kilometres (half flap).
+2. **Final** starts inside a 25° cone, heading within 40°, low enough to
+   reach the slope at 7°. It chases a point on the 3° slope ahead (320 m,
+   closing to 60 m), with landing flaps, holding the hands-off approach
+   speed on the throttle (with lead and anti-windup) and the air brakes if
+   much too fast. It goes around if, inside 450 m, it is more than 15 m
+   high, off the runway's width or 40% fast.
+3. **Flare** (runways): from 6 m, or 1.6 s of sink, it pulls to a 1.2 m/s
+   sink with the power off. **Carriers:** no flare. The slope carries on
+   into the deck, so it reaches the wires descending, and the hook catches.
+4. **Roll-out:** brakes and air brakes on, nose wheel steering for the
+   centreline, until it stops.
+
 ## Mapping to the brief's force list
 
 | Brief | Where |

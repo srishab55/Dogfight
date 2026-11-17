@@ -52,6 +52,9 @@ None known.
 | L50 | Wings stall at 18 degrees (real propeller-era wings: about 15) for quicker turns | Lower stall and landing speeds than history | By design (your request) |
 | L51 | Captured bases stay captured for the session; Red has no aircraft to take them back, and their defences don't rebuild for the new owner | One-way captures | Phase 6/7 (AI retakes, rebuilding) |
 | L52 | Only the Red airfield can be captured; carriers are sunk instead | By design | None |
+| L53 | Auto-land doesn't avoid other aircraft or flak: at an enemy base their AA gun keeps firing at you | Land at defended enemy bases at your own risk | Phase 7 (traffic) |
+| L54 | Auto-land from high up or close in loops round to lose height or line up, so it can take 2-3 minutes; from a few km out on the approach side it takes about 90 s | Slower than flying it yourself | By design |
+| L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
 | L49 | The strafing aim point and the mouse drop correction assume a round at muzzle velocity with no drag; the wing guns converge at 300 m | Small errors beyond about 800 m | Fine at strafing range |
 | L32 | Vercel hosts only the static client. Its free Hobby plan is for non-commercial use (about 100 GB transfer a month) and can't run the long-lived WebSocket game server | Fine for single-player; multiplayer needs another host | Phase 5 (self-host the Colyseus server; see README "Deploying") |

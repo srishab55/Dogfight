@@ -93,7 +93,6 @@ export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team
   const glassParts = [buildGlazing('canopy', scene, airframe.canopy), ...airframe.turrets.map((turret, i) => buildGlazing(`turret-${i}`, scene, turret))];
   if (airframe.glazedNose) glassParts.push(buildLatheAlongZ('glazed-nose', scene, airframe.glazedNose, 24));
   const darkParts = [
-    ...buildLandingGear(scene, airframe),
     ...buildRadialFaces(scene, airframe),
     ...buildGunBarrels(scene, airframe),
     ...buildFlapHingeBrackets(scene, wing),
@@ -122,14 +121,16 @@ export function createAircraftModel(scene: Scene, airframe: Airframe, team: Team
   });
 
   const tailhook = airframe.tailhook ? buildTailhook(scene, name, airframe.tailhook, materials.dark) : null;
+  const gearLegs = buildLandingGear(scene, name, airframe, materials.dark);
 
-  const shadowCasters = [body, accent, glass, dark, ...propellers.map((p) => p.blades), ...surfaces.map((surface) => surface.mesh), ...(tailhook ? [tailhook.mesh] : [])];
+  const shadowCasters = [body, accent, glass, dark, ...propellers.map((p) => p.blades), ...surfaces.map((surface) => surface.mesh), ...(tailhook ? [tailhook.mesh] : []), ...gearLegs.map((leg) => leg.mesh)];
   for (const mesh of [body, accent, glass, dark, roundels, ...propellers.flatMap((p) => [p.blades, p.disc])]) mesh.parent = root;
   for (const surface of surfaces) surface.pivot.parent = root;
   if (tailhook) tailhook.pivot.parent = root;
+  for (const leg of gearLegs) leg.pivot.parent = root;
   for (const mesh of [...shadowCasters, roundels, ...propellers.map((p) => p.disc)]) mesh.isPickable = false;
 
-  return new AircraftVisual(root, propellers, surfaces, shadowCasters, [roundels], tailhook?.pivot ?? null);
+  return new AircraftVisual(root, propellers, surfaces, shadowCasters, [roundels], tailhook?.pivot ?? null, gearLegs);
 }
 
 function mergeParts(name: string, parts: Mesh[], material: Material): Mesh {
@@ -690,30 +691,45 @@ function buildTailhook(scene: Scene, name: string, hook: NonNullable<Airframe['t
 
 // ── Landing gear ───────────────────────────────────────────────────────────
 
-function buildLandingGear(scene: Scene, airframe: Airframe): Mesh[] {
-  const g = airframe.landingGear;
-  const parts: Mesh[] = [];
-  const noseWheelCenterY = -airframe.groundClearance + g.noseWheelRadius;
+/**
+ * One retractable gear leg (strut + wheel) hanging from a pivot at the top of
+ * its strut. Rotating the pivot about `axis` by `foldAngle` folds it away:
+ * the nose leg swings aft into the fuselage, main legs inward under the wing
+ * (or aft into the engine nacelles on multi-engine aircraft).
+ */
+export interface GearLeg {
+  readonly pivot: TransformNode;
+  readonly mesh: Mesh;
+  readonly axis: 'x' | 'z';
+  readonly foldAngle: number;
+}
 
-  const addStrut = (name: string, x: number, z: number, topY: number, bottomY: number) => {
-    const strut = CreateCylinder(name, { height: topY - bottomY, diameter: g.strutDiameter, tessellation: 8 }, scene);
-    strut.position.set(x, (topY + bottomY) / 2, z);
-    parts.push(strut);
-  };
-  const addWheel = (name: string, x: number, y: number, z: number, radius: number) => {
-    const wheel = CreateCylinder(name, { height: g.wheelWidth, diameter: radius * 2, tessellation: 18 }, scene);
+function buildLandingGear(scene: Scene, name: string, airframe: Airframe, material: Material): GearLeg[] {
+  const g = airframe.landingGear;
+  const noseWheelCenterY = -airframe.groundClearance + g.noseWheelRadius;
+  const nacelleMounted = airframe.engines.some((engine) => engine.nacelle);
+
+  const buildLeg = (legName: string, x: number, z: number, topY: number, wheelY: number, radius: number, axis: 'x' | 'z', foldAngle: number): GearLeg => {
+    // Built relative to the pivot at the strut's top.
+    const strut = CreateCylinder(`${legName}-strut`, { height: topY - wheelY, diameter: g.strutDiameter, tessellation: 8 }, scene);
+    strut.position.set(0, (wheelY - topY) / 2, 0);
+    const wheel = CreateCylinder(`${legName}-wheel`, { height: g.wheelWidth, diameter: radius * 2, tessellation: 18 }, scene);
     // A cylinder's axis is Y; roll it 90 degrees so the axle runs along X.
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(x, y, z);
-    parts.push(wheel);
+    wheel.position.set(0, wheelY - topY, 0);
+    const mesh = mergeParts(`${name}-${legName}`, [strut, wheel], material);
+    const pivot = new TransformNode(`${name}-${legName}-pivot`, scene);
+    pivot.position.set(x, topY, z);
+    mesh.parent = pivot;
+    return { pivot, mesh, axis, foldAngle };
   };
 
-  for (const side of [1, -1]) {
-    const x = side * g.mainTrackHalfWidth;
-    addStrut(`main-strut-${side}`, x, g.mainZ, g.mainStrutTopY, g.mainWheelCenterY);
-    addWheel(`main-wheel-${side}`, x, g.mainWheelCenterY, g.mainZ, g.mainWheelRadius);
-  }
-  addStrut('nose-strut', 0, g.noseZ, g.noseStrutTopY, noseWheelCenterY);
-  addWheel('nose-wheel', 0, noseWheelCenterY, g.noseZ, g.noseWheelRadius);
-  return parts;
+  // Babylon's rotations: +x swings a leg hanging below the pivot aft; +z swings it out to the right.
+  const legs = [1, -1].map((side) =>
+    nacelleMounted
+      ? buildLeg(`main-gear-${side}`, side * g.mainTrackHalfWidth, g.mainZ, g.mainStrutTopY, g.mainWheelCenterY, g.mainWheelRadius, 'x', Math.PI / 2)
+      : buildLeg(`main-gear-${side}`, side * g.mainTrackHalfWidth, g.mainZ, g.mainStrutTopY, g.mainWheelCenterY, g.mainWheelRadius, 'z', -side * (Math.PI / 2)),
+  );
+  legs.push(buildLeg('nose-gear', 0, g.noseZ, g.noseStrutTopY, noseWheelCenterY, g.noseWheelRadius, 'x', Math.PI / 2));
+  return legs;
 }

@@ -640,3 +640,31 @@ body {
 .hud-base-status[data-state='captured'] {
   border-color: var(--hud-text);
 }
+
+/* Auto-land: the offer near a base (press P), then the autopilot's status. */
+.hud-autoland {
+  position: absolute;
+  left: 50%;
+  bottom: 30%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.hud-autoland[hidden] {
+  display: none;
+}
+
+.hud-autoland[data-state='offer'] {
+  opacity: 0.8;
+}
+
+.hud-autoland[data-state='active'] {
+  color: #9fd3ff;
+  border-color: rgba(159, 211, 255, 0.6);
+}

@@ -1,4 +1,5 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
+import { LANDING_GEAR_CONFIG } from './landingGear';
 
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -29,12 +30,13 @@ export function aspectRatio(spec: AircraftClassSpec): number {
  * Flaps add camber, which shifts the whole lift line up (more lift at every
  * angle of attack), adds drag, and makes the wing stall at a slightly lower
  * angle. CLmax still rises overall, so stall speed drops.
- * Dive brakes (`airbrakePosition`, 0-1) add drag only.
+ * Dive brakes (`airbrakePosition`, 0-1) and lowered landing gear
+ * (`gearPosition`, 0 up - 1 down) add drag only.
  */
-export function applyFlaps(out: MutableAero, spec: AircraftClassSpec, flapPosition: number, airbrakePosition = 0): MutableAero {
+export function applyFlaps(out: MutableAero, spec: AircraftClassSpec, flapPosition: number, airbrakePosition = 0, gearPosition = 0): MutableAero {
   Object.assign(out, spec.aero);
   out.zeroAngleLiftCoefficient += spec.flaps.liftIncrement * flapPosition;
-  out.zeroLiftDragCoefficient += spec.flaps.dragIncrement * flapPosition + (spec.airbrake?.dragIncrement ?? 0) * airbrakePosition;
+  out.zeroLiftDragCoefficient += spec.flaps.dragIncrement * flapPosition + (spec.airbrake?.dragIncrement ?? 0) * airbrakePosition + LANDING_GEAR_CONFIG.dragIncrement * gearPosition;
   out.criticalAngleOfAttackDeg -= spec.flaps.criticalAngleReductionDeg * flapPosition;
   return out;
 }

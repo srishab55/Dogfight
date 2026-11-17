@@ -2,6 +2,9 @@ import { neutralControls, type FlightControls, type StickInputs } from '@dogfigh
 import { KEYBOARD_FLIGHT_CONFIG, type InputAction } from '../config/controls';
 import type { InputManager } from './InputManager';
 
+/** The keys that fly the aircraft: pressing any of them takes over from an autopilot. */
+const FLIGHT_ACTIONS: readonly InputAction[] = ['pitchUp', 'pitchDown', 'rollLeft', 'rollRight', 'yawLeft', 'yawRight', 'throttleUp', 'throttleDown', 'flapsDown', 'flapsUp', 'brake', 'toggleDiveBrakes'];
+
 /**
  * Turns held keys into smooth, absolute flight controls (see FlightControls).
  * Runs once per *physics step*, not per rendered frame, so the result is the
@@ -70,15 +73,45 @@ export class FlightInputController {
     return c;
   }
 
-  /** Centre the stick and set the throttle and flap levers, e.g. on respawn. */
-  reset(throttle = 0, flaps = 0): void {
-    const notches: readonly number[] = KEYBOARD_FLIGHT_CONFIG.flapNotches;
-    // Snap the flap lever to the nearest notch.
-    this.flapNotch = notches.reduce((best, value, index) => (Math.abs(value - flaps) < Math.abs((notches[best] ?? 0) - flaps) ? index : best), 0);
+  /**
+   * An autopilot (auto-land) flies: its stick, throttle, flaps and brakes
+   * become the controls. The levers are left where it put them, so taking
+   * over carries on smoothly. The guns stay yours.
+   */
+  autopilot(controls: Readonly<FlightControls>): Readonly<FlightControls> {
+    const c = this.current;
+    c.pitch = controls.pitch;
+    c.roll = controls.roll;
+    c.yaw = controls.yaw;
+    c.throttle = controls.throttle;
+    c.brake = controls.brake;
+    c.airbrake = controls.airbrake;
     this.diveBrakesOpen = false;
     this.turn = 0;
-    Object.assign(this.current, neutralControls(), { throttle, flaps: notches[this.flapNotch] ?? 0 });
+    if (c.flaps !== controls.flaps) this.setFlapLever(controls.flaps);
+    c.fire = this.input.isHeld('fireGuns');
+    return c;
+  }
+
+  /** Whether the pilot is touching any flight control (stick, rudder, throttle, flaps or brakes): that takes over from an autopilot. */
+  flyingByHand(): boolean {
+    return FLIGHT_ACTIONS.some((action) => this.input.isHeld(action));
+  }
+
+  /** Centre the stick and set the throttle and flap levers, e.g. on respawn. */
+  reset(throttle = 0, flaps = 0): void {
+    this.diveBrakesOpen = false;
+    this.turn = 0;
+    Object.assign(this.current, neutralControls(), { throttle });
+    this.setFlapLever(flaps);
     this.current.brake = KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && throttle === 0 ? 1 : 0;
+  }
+
+  /** Snaps the flap lever to the notch nearest `flaps`. */
+  private setFlapLever(flaps: number): void {
+    const notches: readonly number[] = KEYBOARD_FLIGHT_CONFIG.flapNotches;
+    this.flapNotch = notches.reduce((best, value, index) => (Math.abs(value - flaps) < Math.abs((notches[best] ?? 0) - flaps) ? index : best), 0);
+    this.current.flaps = notches[this.flapNotch] ?? 0;
   }
 
   private axis(current: number, positive: InputAction, negative: InputAction, assist: number | undefined, dt: number): number {

@@ -154,6 +154,7 @@ export class PlayerAircraft {
     const flaps = a.flapPosition + (b.flapPosition - a.flapPosition) * alpha;
     visual.setFlapDeflection(flaps);
     visual.setAirbrake(a.airbrakePosition + (b.airbrakePosition - a.airbrakePosition) * alpha);
+    visual.setGear(a.gearPosition + (b.gearPosition - a.gearPosition) * alpha);
     // The hook comes down with landing flaps, and stays down while it holds a wire.
     visual.setTailhook(b.hookEngaged || flaps >= HOOK_DOWN_FLAPS ? 1 : 0);
     if (controls && !b.crashed) visual.updateControlSurfaces(frameSeconds, controls.pitch, controls.roll, controls.yaw);

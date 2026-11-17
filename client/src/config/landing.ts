@@ -29,6 +29,15 @@ export const LANDING_PRACTICE = {
 } as const;
 
 /**
+ * Auto-land (P). It can be started up to AUTO_LAND_CONFIG.offerRange (10 km)
+ * from a base; the HUD only offers it (shows "P · AUTO-LAND") when closer,
+ * so it doesn't sit on screen all game.
+ */
+export const AUTO_LAND_HUD = {
+  promptDistance: 5_000,
+} as const;
+
+/**
  * PAPI (precision approach path indicator): four lights beside the runway at
  * the aim point. Each shows white if you're above its angle and red if below.
  * On the glide slope you see two white, two red. All white is too high, all

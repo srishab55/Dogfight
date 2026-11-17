@@ -3,7 +3,7 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { CONTROL_SURFACE_VISUAL_CONFIG, FLAP_STYLES, PROPELLER_VISUAL_CONFIG } from '../config/aircraftVisuals';
 import { degreesToRadians, smoothingFactor } from '../math/orientation';
-import type { HingedSurface } from './aircraftModel';
+import type { GearLeg, HingedSurface } from './aircraftModel';
 
 type FlapStyle = (typeof FLAP_STYLES)[keyof typeof FLAP_STYLES];
 
@@ -40,6 +40,8 @@ export class AircraftVisual {
     private readonly decals: readonly Mesh[],
     /** Arrestor hook pivot, if fitted: rotating it about X lowers the hook. */
     private readonly tailhook: TransformNode | null = null,
+    /** Retractable landing gear legs. */
+    private readonly gearLegs: readonly GearLeg[] = [],
   ) {
     root.rotationQuaternion ??= Quaternion.Identity();
   }
@@ -99,6 +101,17 @@ export class AircraftVisual {
     if (!this.tailhook) return;
     const { tailhookStowedDeg, tailhookLoweredDeg } = CONTROL_SURFACE_VISUAL_CONFIG;
     this.tailhook.rotation.x = -degreesToRadians(tailhookStowedDeg + (tailhookLoweredDeg - tailhookStowedDeg) * fraction);
+  }
+
+  /** Landing gear from retracted (0) to down (1), mirroring the flight model's gear position. */
+  setGear(fraction: number): void {
+    // Eased, so each leg swings out quickly and settles into place.
+    const t = Math.max(0, Math.min(1, fraction));
+    const folded = 1 - t * t * (3 - 2 * t);
+    for (const leg of this.gearLegs) {
+      if (leg.axis === 'x') leg.pivot.rotation.x = leg.foldAngle * folded;
+      else leg.pivot.rotation.z = leg.foldAngle * folded;
+    }
   }
 
   /**

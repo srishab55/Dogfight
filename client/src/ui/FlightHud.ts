@@ -40,6 +40,8 @@ export interface HudFrame {
   readonly baseStatus: BaseStatus | null;
   /** Practice balloons burst this session. */
   readonly targetsDestroyed: number;
+  /** Auto-land: flying a landing (`active`), or on offer (press P), with its status line; null when unavailable. */
+  readonly autoLand: { readonly active: boolean; readonly text: string } | null;
 }
 
 /**
@@ -86,7 +88,7 @@ export interface ScreenPoint {
 /** How long the gunsight glows red after a hit (s). */
 const HIT_MARKER_SECONDS = 0.15;
 
-type Field = 'speed' | 'altitude' | 'vertical' | 'throttle' | 'flaps' | 'heading' | 'aoa' | 'g' | 'hull' | 'guns' | 'ammo' | 'base' | 'baseKind' | 'targets' | 'aircraft' | 'status';
+type Field = 'speed' | 'altitude' | 'vertical' | 'throttle' | 'flaps' | 'gear' | 'heading' | 'aoa' | 'g' | 'hull' | 'guns' | 'ammo' | 'base' | 'baseKind' | 'targets' | 'aircraft' | 'status';
 
 /**
  * Flight instruments, drawn in HTML/CSS over the 3D view. Phase 4 adds gun
@@ -118,6 +120,7 @@ export class FlightHud {
   private readonly baseStatusText: HTMLElement;
   private readonly baseStatusBar: HTMLElement;
   private readonly serviceBar: HTMLElement;
+  private readonly autoLand: HTMLElement;
   private hitMarkerTimer = 0;
   private readonly flightPathMarker: HTMLElement;
   private readonly touchdownMessage: HTMLElement;
@@ -125,6 +128,9 @@ export class FlightHud {
   private sinceRefresh = READOUT_INTERVAL;
   private lastSeenTouchdown = 0;
   private touchdownMessageTimer = 0;
+  /** Gear position at the last readout refresh, to show which way it is moving. */
+  private lastGear = 1;
+  private gearWasLowering = false;
 
   constructor(parent: HTMLElement) {
     this.root = element('div', 'flight-hud');
@@ -145,6 +151,7 @@ export class FlightHud {
     throttleTrack.append(this.throttleBar);
     panel.append(throttleTrack);
     const flaps = readout('FLAP', '');
+    const gear = readout('GEAR', '');
     const heading = readout('HDG', '°');
     const aoa = readout('AoA', '°');
     const g = readout('G', '');
@@ -166,7 +173,7 @@ export class FlightHud {
     const status = element('div', 'hud-status');
     panel.append(aircraft, status);
 
-    this.fields = { speed, altitude, vertical, throttle, flaps, heading, aoa, g, hull, guns, ammo, base, baseKind, targets, aircraft, status };
+    this.fields = { speed, altitude, vertical, throttle, flaps, gear, heading, aoa, g, hull, guns, ammo, base, baseKind, targets, aircraft, status };
     this.stallWarning = element('div', 'hud-warning hud-warning-stall', 'STALL');
     this.pullUpWarning = element('div', 'hud-warning hud-warning-pullup', 'PULL UP');
     this.overheatWarning = element('div', 'hud-warning hud-warning-pullup', 'GUNS OVERHEATED');
@@ -181,6 +188,10 @@ export class FlightHud {
     serviceTrack.append(this.serviceBar);
     this.service.append(element('div', 'hud-service-label', 'REARMING & REPAIRING'), serviceTrack);
     this.service.hidden = true;
+
+    // Auto-land: the offer (P) near a base, then what the autopilot is doing.
+    this.autoLand = element('div', 'hud-autoland');
+    this.autoLand.hidden = true;
 
     // Approach calls along the top: distance, glide slope, line-up.
     this.approach = element('div', 'hud-approach');
@@ -232,7 +243,7 @@ export class FlightHud {
     this.aimReticle = element('div', 'hud-aim');
     this.aimReticle.hidden = true;
 
-    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.approach, this.baseStatus, markerLayer, this.impactPoint);
+    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.autoLand, this.approach, this.baseStatus, markerLayer, this.impactPoint);
     parent.append(this.root);
   }
 
@@ -278,6 +289,11 @@ export class FlightHud {
     toggle(this.overheatWarning, frame.guns.overheated && !state.crashed);
     toggle(this.outOfAmmoWarning, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
     toggle(this.service, frame.serviceProgress !== null);
+    toggle(this.autoLand, frame.autoLand !== null && !state.crashed);
+    if (frame.autoLand) {
+      if (this.autoLand.textContent !== frame.autoLand.text) this.autoLand.textContent = frame.autoLand.text;
+      this.autoLand.dataset.state = frame.autoLand.active ? 'active' : 'offer';
+    }
     this.updateApproach(frame.approach);
     this.updateBaseStatus(frame.baseStatus);
     placeMarker(this.impactPoint, frame.impactPoint);
@@ -316,6 +332,13 @@ export class FlightHud {
     const flapPercent = Math.round(state.flapPosition * 100);
     this.fields.flaps.textContent = `${frame.flapNotchName} ${flapPercent}%`;
     this.fields.flaps.classList.toggle('hud-value-warn', controls.flaps > 0 && state.flapPosition < controls.flaps - 0.05 && t.airspeed > spec.flaps.maxExtensionSpeed);
+    // Automatic gear: DOWN / UP, or which way it's moving.
+    const gear = state.gearPosition;
+    const lowering = gear > this.lastGear || (gear === this.lastGear && this.gearWasLowering);
+    this.gearWasLowering = lowering;
+    this.lastGear = gear;
+    this.fields.gear.textContent = gear >= 0.999 ? 'DOWN' : gear <= 0.001 ? 'UP' : `${lowering ? '▼' : '▲'} ${Math.round(gear * 100)}%`;
+    this.fields.gear.classList.toggle('hud-value-warn', gear > 0.001 && gear < 0.999);
     this.fields.heading.textContent = this.attitude.headingDeg.toFixed(0).padStart(3, '0');
     this.fields.aoa.textContent = `${aoaDeg.toFixed(1)} / ${critical.toFixed(0)}`;
     this.fields.g.textContent = t.loadFactor.toFixed(1);
