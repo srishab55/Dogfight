@@ -22,9 +22,11 @@ import { SHADOW_CONFIG } from '../config/graphics';
 export class SunShadows {
   private readonly generator: ShadowGenerator;
   private readonly offset = new Vector3();
-  /** Everything that casts a shadow, kept while shadows are off. */
+  /** Everything that casts a shadow (the map draws only those near the focus; none while shadows are off). */
   private readonly casters: AbstractMesh[] = [];
   private off = false;
+  /** Seconds until the casters near the focus are picked again. */
+  private untilCull = 0;
 
   constructor(private readonly sun: DirectionalLight) {
     this.generator = new ShadowGenerator(SHADOW_CONFIG.mapSize, sun);
@@ -57,7 +59,8 @@ export class SunShadows {
       map.renderList = [];
       map.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
     } else {
-      map.renderList = this.casters.filter((mesh) => !mesh.isDisposed());
+      map.renderList = [];
+      this.untilCull = 0; // picked on the next update
       map.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONEVERYFRAME;
       const size = quality === 'high' ? 2_048 : SHADOW_CONFIG.mapSize;
       if (map.getSize().width !== size) map.resize(size);
@@ -66,16 +69,49 @@ export class SunShadows {
   }
 
   addCasters(meshes: readonly AbstractMesh[]): void {
-    for (const mesh of meshes) {
-      this.casters.push(mesh);
-      if (!this.off) this.generator.addShadowCaster(mesh, false);
-    }
+    for (const mesh of meshes) this.casters.push(mesh);
+    this.untilCull = 0;
   }
 
-  /** Call once per frame, before rendering, with the point shadows should be centred on. */
-  update(focus: Vector3): void {
+  /**
+   * Call once per frame, before rendering, with the point shadows should be
+   * centred on (`deltaSeconds` paces the caster culling).
+   *
+   * The map covers only a square `frustumSize` across around the focus, so
+   * drawing every caster on the map into it was wasted work: measured, the
+   * shadow pass was about 160 of 230 draw calls and most of the frame's
+   * garbage (Babylon prepares each caster's shader every frame). A few times
+   * a second the map's list is rebuilt from the casters whose bounds come
+   * within `cullRadius` of the focus; the margin covers how far anything can
+   * move before the next rebuild.
+   */
+  update(focus: Vector3, deltaSeconds = 0): void {
     this.sun.direction.scaleToRef(-SHADOW_CONFIG.lightDistance, this.offset);
     focus.addToRef(this.offset, this.sun.position);
+    if (this.off) return;
+    this.untilCull -= deltaSeconds;
+    if (this.untilCull > 0) return;
+    this.untilCull = SHADOW_CONFIG.cullInterval;
+    const map = this.generator.getShadowMap();
+    if (!map) return;
+    const list = map.renderList ?? [];
+    list.length = 0;
+    const reach = SHADOW_CONFIG.cullRadius;
+    for (const mesh of this.casters) {
+      if (mesh.isDisposed()) continue;
+      const sphere = mesh.getBoundingInfo().boundingSphere;
+      const c = sphere.centerWorld;
+      const dx = c.x - focus.x;
+      const dz = c.z - focus.z;
+      const r = reach + sphere.radiusWorld;
+      if (dx * dx + dz * dz < r * r) list.push(mesh);
+    }
+    map.renderList = list;
+  }
+
+  /** How many casters the map draws now (for the debug overlay). */
+  get activeCasters(): number {
+    return this.generator.getShadowMap()?.renderList?.length ?? 0;
   }
 
   dispose(): void {

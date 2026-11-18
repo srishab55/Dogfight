@@ -40,7 +40,9 @@ body {
   display: none !important;
 }
 
-:focus-visible {
+/* Keyboard focus, and the focus a gamepad moves (GamepadInput marks the root while the pad is in use). */
+:focus-visible,
+:root[data-input='gamepad'] :focus {
   outline: none;
   box-shadow: var(--focus-ring);
 }

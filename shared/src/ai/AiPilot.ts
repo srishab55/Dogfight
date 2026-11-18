@@ -18,7 +18,7 @@ import { vec3 } from '../math/vec3';
 import type { Team } from '../types/team';
 import type { Vec3 } from '../types/vector';
 import type { CarrierStatusMap } from '../world/carrierStatus';
-import { Status, action, condition, selector, sequence, type BtNode } from './behaviourTree';
+import { Status, action, condition, guard, selector, sequence, timeout, type BtNode } from './behaviourTree';
 
 /*
  * An AI pilot: a behaviour tree (game-skills/GameAI/references/behaviour-tree.md)
@@ -28,14 +28,20 @@ import { Status, action, condition, selector, sequence, type BtNode } from './be
  *
  *   on the ground     take off, or wait out a capture or a service
  *   terrain ahead     pull up
+ *   off the map       turn back
  *   landing           fly the auto-land it started (to capture or to rearm;
- *                     a capture is broken off to defend a base)
+ *                     a capture is broken off to defend a base; given up
+ *                     after landingTimeoutSeconds)
  *   under attack      break turn
  *   needs service     go home and land to rearm and repair
  *   enemy aircraft    attack it: lead pursuit, fire when on target; an enemy
  *                     near one of its side's bases draws every pilot
  *   a base to take    land on it if it's open; otherwise strafe its defences
  *   patrol            fly towards the action
+ *
+ * The emergencies and the landing are guards, re-checked every step, so
+ * each ends as soon as its reason has gone; the choices below them are
+ * sequences, which keep their target or base while the attack runs.
  *
  * Deterministic (no Math.random): the Phase 5 server runs the same pilots.
  */
@@ -294,17 +300,28 @@ function baseThreat(pilot: AiPilot, world: AiWorld): AiContact | null {
 
 function buildTree(): BtNode<Context> {
   return selector('pilot', [
+    // Guards: re-checked every tick, so each ends the moment its reason has gone
+    // (the pull-up once the ground ahead is clear, the landing when it's attacked high up).
     // (Landing's own roll-out stays with the landing branch until it has stopped.)
-    sequence('on the ground', [condition('on the ground or taking off', ({ pilot }) => (pilot.state.onGround && !pilot.blackboard.landing) || pilot.blackboard.takingOff), action('take off or wait', groundRoutine)]),
-    sequence('avoid terrain', [condition('ground ahead', terrainAhead), action('pull up', pullUp)]),
-    sequence('stay on the map', [condition('off the map', offTheMap), action('turn back', turnBack)]),
-    sequence('landing', [condition('landing', keepLanding), action('fly the landing', flyLanding)]),
-    sequence('evade', [condition('under attack', underAttack), action('break turn', evade)]),
+    guard('on the ground or taking off', ({ pilot }) => (pilot.state.onGround && !pilot.blackboard.landing) || pilot.blackboard.takingOff, action('take off or wait', groundRoutine)),
+    guard('ground ahead', terrainAhead, action('pull up', pullUp)),
+    guard('off the map', offTheMap, action('turn back', turnBack)),
+    guard('landing', keepLanding, timeout(AI_CONFIG.landingTimeoutSeconds, worldTime, action('fly the landing', flyLanding), giveUpLanding)),
+    guard('under attack', underAttack, action('break turn', evade)),
+    // Sequences: the choice (target, base) is made once and kept while the action runs.
     sequence('go home', [condition('needs service', ({ pilot }) => pilot.needsService()), action('land to rearm', landToRearm)]),
     sequence('fight', [condition('enemy aircraft near', findAircraftTarget), action('attack', attackAircraft)]),
     sequence('take a base', [condition('a base to take', chooseObjective), action('take it', takeObjective)]),
     action('patrol', patrol),
   ]);
+}
+
+const worldTime = ({ world }: Context): number => world.time;
+
+/** A landing that couldn't finish in time: drop it, and let the tree choose again from here. */
+function giveUpLanding({ pilot }: Context): void {
+  pilot.blackboard.landing = null;
+  pilot.activity = 'gave up the landing';
 }
 
 /** Marks what it's doing (for the debug overlay and tests) and returns RUNNING. */

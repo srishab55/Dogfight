@@ -16,9 +16,14 @@ import { createPuffTextureUrl } from '../rendering/puffTexture';
  * with layers of transparent quads, which looks like flying through mist and
  * keeps GPU fill-rate in check.
  */
+/** The camera must move this far before puff fades are recomputed (m): well under the fade band. */
+const CLOUD_REFADE_DISTANCE = 4;
+
 export class Clouds {
   private readonly manager: SpriteManager;
   private readonly puffs: Array<{ sprite: Sprite; baseAlpha: number }> = [];
+  /** Where the camera was at the last fade update: puffs are re-faded only once it has moved. */
+  private readonly lastCamera = { x: Infinity, y: Infinity, z: Infinity };
 
   constructor(scene: Scene) {
     const config = CLOUD_CONFIG;
@@ -58,13 +63,29 @@ export class Clouds {
     }
   }
 
-  /** Fades puffs that are very close to the camera. */
+  /**
+   * Fades puffs that are very close to the camera. Only once the camera has
+   * moved a few metres (a stationary hangar view costs nothing), and with
+   * plain arithmetic: Math.hypot allocates in V8, and this runs over every
+   * puff (measured: the game's largest allocator before).
+   */
   update(cameraPosition: Vector3): void {
     const { fadeStart, fadeEnd } = CLOUD_CONFIG;
+    const last = this.lastCamera;
+    const mx = cameraPosition.x - last.x;
+    const my = cameraPosition.y - last.y;
+    const mz = cameraPosition.z - last.z;
+    if (mx * mx + my * my + mz * mz < CLOUD_REFADE_DISTANCE * CLOUD_REFADE_DISTANCE) return;
+    last.x = cameraPosition.x;
+    last.y = cameraPosition.y;
+    last.z = cameraPosition.z;
     for (const puff of this.puffs) {
       const p = puff.sprite.position;
+      const dx = p.x - cameraPosition.x;
+      const dy = p.y - cameraPosition.y;
+      const dz = p.z - cameraPosition.z;
       // Distance to the puff's edge, not its centre.
-      const distance = Math.hypot(p.x - cameraPosition.x, p.y - cameraPosition.y, p.z - cameraPosition.z) - puff.sprite.size * 0.4;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) - puff.sprite.size * 0.4;
       const fade = Math.max(0, Math.min(1, (distance - fadeEnd) / (fadeStart - fadeEnd)));
       puff.sprite.color.a = puff.baseAlpha * fade;
       puff.sprite.isVisible = fade > 0.01;

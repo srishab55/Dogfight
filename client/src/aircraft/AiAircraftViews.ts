@@ -4,6 +4,7 @@ import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { AIRFRAMES, CARRIERS, cloneAircraftState, copyAircraftState, type AiPilot, type AircraftState } from '@dogfight/shared';
 import { FLAP_STYLE_BY_CLASS, TEAM_PAINT } from '../config/aircraftVisuals';
 import { BURN_CONFIG } from '../config/combatVisuals';
+import { FEEDBACK_CONFIG } from '../config/feedback';
 import type { FireAndSmoke } from '../effects/FireAndSmoke';
 import type { AircraftVisual } from './AircraftVisual';
 import { createAircraftModel } from './aircraftModel';
@@ -17,6 +18,8 @@ interface View {
   stateRef: AircraftState | null;
   wasCrashed: boolean;
   smokeCarry: number;
+  /** Seconds left of the hit flash on its paint. */
+  flashLeft: number;
 }
 
 /** A hook goes down within this distance of a carrier with landing flaps out, as on the player's aircraft. */
@@ -56,6 +59,8 @@ export class AiAircraftViews {
         old.pilot = pilot;
         old.stateRef = null;
         old.wasCrashed = false;
+        old.flashLeft = 0;
+        old.visual.setFlash(0);
         kept.push(old);
         return;
       }
@@ -65,10 +70,16 @@ export class AiAircraftViews {
       visual.setFlapStyle(FLAP_STYLE_BY_CLASS[pilot.spec.id]);
       visual.setEnabled(false);
       this.addShadowCasters(visual.meshes);
-      kept.push({ pilot, visual, previous: cloneAircraftState(pilot.state), stateRef: null, wasCrashed: false, smokeCarry: 0 });
+      kept.push({ pilot, visual, previous: cloneAircraftState(pilot.state), stateRef: null, wasCrashed: false, smokeCarry: 0, flashLeft: 0 });
     });
     for (const extra of this.views.slice(pilots.length)) extra.visual.dispose();
     this.views = kept;
+  }
+
+  /** Your rounds hit this pilot's aircraft: its paint flashes for `seconds`. */
+  flash(pilotId: number, seconds: number): void {
+    const view = this.views.find((v) => v.pilot.id === pilotId);
+    if (view) view.flashLeft = Math.max(view.flashLeft, seconds);
   }
 
   /** Inside each physics step, just before the AI fly: remember where each aircraft was. */
@@ -92,6 +103,8 @@ export class AiAircraftViews {
       }
       view.wasCrashed = state.crashed;
       visual.setEnabled(shown);
+      view.flashLeft = Math.max(0, view.flashLeft - deltaSeconds);
+      visual.setFlash(view.flashLeft > 0 ? FEEDBACK_CONFIG.hitFlashStrength * Math.min(1, view.flashLeft / FEEDBACK_CONFIG.hitFlashSeconds) : 0);
       if (!shown) continue;
       // A fresh aircraft (launched, or towed back to the runway): no gliding from where the last one was.
       const a = view.stateRef === state ? view.previous : state;

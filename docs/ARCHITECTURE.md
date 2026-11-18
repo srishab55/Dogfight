@@ -72,7 +72,7 @@ The 11 components from the brief map onto folders like this:
 |---|---|---|---|
 | 1 | Game rendering | `client/src/rendering/`, `core/Game.ts` | 0 ✅ |
 | 2 | Aircraft flight simulation | `shared/src/flight/` (client and server) | 1 ✅ |
-| 3 | Input handling | `client/src/input/` (`InputManager`, `FlightInputController`) | 1 ✅ |
+| 3 | Input handling | `client/src/input/` (`InputManager`, `FlightInputController`, `MouseFlight`, `GamepadInput`) | 1 ✅ |
 | 4 | Camera management | `client/src/camera/` | 0 ✅ |
 | 5 | Weapons and combat | `shared/src/combat/` (rules), `client/src/combat/` (visual effects) | 4 |
 | 6 | Environment and terrain | `client/src/world/`, `shared/src/config/world.ts` | 0 ✅ / 3 |
@@ -233,10 +233,80 @@ storage and applied through small hooks on existing systems (pixel ratio,
 pipeline samples and bloom, shadow quality, master volume, orbit drag speed,
 key bindings, HUD flags).
 
+The screen state machine is the game-skills "screen stack" in practice: each
+screen that can be reached from two places records where to go back to
+(`hangarReturn`, `settingsReturn`), only the top screen is shown and takes
+input, and Esc (or a gamepad's B) pops it. It stays a state machine because
+the screens never stack more than two deep.
+
+**HUD updates:** discrete events (hits, kills, captures, messages, the crash
+card) are pushed to the HUD as they happen (`registerHit`, `showMessage`, the
+combat events). Continuous instruments (airspeed, altitude, heading, heat)
+change every frame anyway, so they are sampled at 20 Hz and a value is
+written to the page only when its text changes, which gives the event-driven
+HUD's benefit (no work when nothing changed) without an event per physics step.
+
+**Layout and reach (game-skills/Game UI):** HUD zones are anchored to the
+screen's corners and edges, scale from their own corner with the HUD-scale
+setting, and sit inside the safe area (`--safe-*` tokens from
+`env(safe-area-inset-*)`, with `viewport-fit=cover`); screens and dialogs
+too, while the 3D view and full-screen tints reach the edges. Menu text sizes
+are tokens multiplied by `--text-scale` (the Text size setting); the HUD
+re-declares them at 1, since its panels are a fixed width and scale as a
+whole. Every control is reachable by mouse, keyboard and gamepad:
+`GamepadInput` (polled each frame, as the Gamepad API has no button events)
+adds its actions to `InputManager` beside the keys in flight, gives the
+sticks to `FlightInputController` as analog axes (a held key still wins on
+its axis), and in the menus moves focus spatially (next row first, within
+45° of the direction; trapped in the top `aria-modal` dialog), presses with
+A, goes back with B, changes tab with LB/RB. Whichever device was used last
+styles the focus. State is never shown by colour alone: the score names the
+sides, map dots carry B / R, base labels say whose. Interface strings are
+English in the code (L77).
+
+**Game feel (game-skills/GameFeel):** `Game.feel(tier, distance)` is the one
+entry point for impact feedback. A tier (small, medium, large, in
+`config/feedback.ts`) sets the camera trauma it adds, fading with distance
+from you; `CameraEffects` shakes by trauma² (sums of sines, decaying) on top
+of the continuous buffet, recoil and g, all scaled by the Camera shake
+setting. Large events that are yours (your kills) also get hit-stop: the
+frame's world time is scaled to 12 % for 0.07 s, so the fixed-step loop runs
+fewer steps (each step itself is unchanged, so the simulation stays
+deterministic) and the world visuals use the same scaled time, while the
+camera, HUD and sound stay real-time. Hit flash (the target's paint
+emissive), damage numbers, the kill marker and the gunsight pop are HUD and
+view effects only. Reduced motion drops hit-stop and the pops; Flashing
+effects off drops both flashes.
+
 ## 9. Performance budget
 
 Target: a steady 60 FPS on a MacBook Air (M-series, 8 GB) at native resolution,
 with 10 aircraft and effects.
+
+Per-frame CPU budget at 60 FPS (16.7 ms), measured by `core/FrameTimings.ts`
+and shown in the debug overlay (CPU / frame, sim + AI, visuals, render, HUD,
+worst frame):
+
+| Section | Budget | Measured (1366×768, headless Chrome on the M3, 4 AI, shadows medium) |
+|---|---|---|
+| Simulation + AI (fixed steps) | 3 ms | 0.24 ms |
+| Visuals (posing models, effects, sound) | 3 ms | 0.38 ms |
+| Render (Babylon's CPU side) | 5 ms | 1.83 ms |
+| HUD and map | 2 ms | 0.28 ms |
+| Draw calls | 300 | 102 (shadows off: 70) |
+| Allocation | (no per-frame `new` in game code) | ~11 MB/s, almost all inside Babylon (L76) |
+
+Measured on a quiet machine before the game-feel and interface work. Two
+re-runs after it, with the machine under heavy load (load average 9–38,
+after long headless GPU runs on the fanless Air), were uniformly 3.5–4.5×
+slower in every section, the simulation included, with the same draw calls
+(101) and slightly less allocation (10 MB/s); the same 5-minute, 4-pilot AI
+simulation in Node took 1068 ms with the new behaviour tree against 1035 ms
+with the old. So those runs measured the load, not the code; re-measure on
+an idle, cool machine (the debug overlay, **`**, shows the same sections). Shadow
+casters are culled to the 160 m shadow square around the aircraft (re-culled
+4 times a second): before that the map drew all 246 casters every frame (232
+draw calls).
 
 Measured in Phase 1 (Apple M3, Chrome, 1280×720, in flight): **60 FPS, 60
 physics steps/s with 0 dropped, 12–13 draw calls, ~0.2–0.4 ms CPU render
@@ -322,4 +392,8 @@ around the aircraft (D51).
 | D60 | Auto-land chooses by intent (distance + 900 m per radian off the nose, + 3 km for a defended enemy base), with hysteresis in the offer; planAutoLand still picks the runway direction by path length | Nearest by distance; quickest landing | Your report: nearest flipped halfway along a route; "quickest" sometimes chose a base you weren't flying at |
 | D61 | AI defence as a target rule (`baseThreat`: an enemy near any of the side's bases is everyone's target, and breaks off capture landings still en route), plus relaunch at the side's base nearest the enemy after 5 s | A separate "defender" role; waves | Your choice: same four pilots, back quickly, and every base defended; no new pilots means no extra cost on your MacBook Air |
 | D58 | Runways east-west with service lanes as extra paved rectangles (`PAVED_AREAS`) | Lanes in the terrain texture only | Lanes are real ground (runway grip, inside the service and capture area); east-west keeps every approach over the sea, which the 4 km approach clearances need |
+| D62 | Impact feedback through one `feel(tier, distance)` call: tiered trauma (shake ∝ trauma²) plus hit-stop by scaling the frame's world time, only on your kills | Per-event shake numbers; pausing the loop; slowing each step | game-skills/GameFeel: tiers keep the big moments big and the small ones quiet; scaling time (not the step) keeps the simulation deterministic for Phase 5, and hit-stop only on your own kills means nobody else's fight stutters your game |
+| D63 | Behaviour-tree `guard` (condition re-checked every tick) for the emergency and landing branches; `timeout` gives up a landing after 150 s; sequences kept for "fight" and "take a base" | Making every sequence reactive | A sequence resumes at its RUNNING action, so an action that never finishes latched its branch (pull-ups of 90 s, measured). Reactive choices of target and base would flip-flop between near-equal options; those keep their sequence memory |
+| D64 | Gamepad as another action source for `InputManager` plus analog axes, and DOM spatial navigation for the menus | A separate gamepad control scheme; synthetic keyboard events | Flight logic unchanged (actions are actions); analog sticks are proportional, which the keyboard ramp would spoil; spatial focus works over the existing screens without per-screen neighbour tables |
+| D65 | No pathfinding for the AI | A navmesh or grid A* | game-skills/GameAI's pathfinding is for walkable worlds; aircraft fly free in 3D, so the AI steers (direction pilot), looks ahead for terrain along its velocity, keeps inside the map boundary and uses auto-land's approach planning, which together do the job a path does |
 | D30 | MSAA 2x in the post-process pipeline | 4x | Indistinguishable on Retina; measured ~1 ms a frame cheaper, keeping 60 FPS with the sea and carriers |

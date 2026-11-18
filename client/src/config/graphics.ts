@@ -77,6 +77,10 @@ export const SHADOW_CONFIG = {
    * shadow shrank to nothing.
    */
   frustumSize: 160,
+  /** Only casters whose bounds come within this of the aircraft are drawn into the map (m): half the square plus a margin. */
+  cullRadius: 160,
+  /** How often that list is rebuilt (s): at 150 m/s nothing crosses the margin in between. */
+  cullInterval: 0.25,
   /** How far the shadow "camera" sits behind the aircraft, along the sun direction (m). */
   lightDistance: 300,
   /** Depth range of the shadow camera (m). The ground only receives the shadow while within this range. */
@@ -198,6 +202,9 @@ export const CAMERA_EFFECTS_CONFIG = {
   gShakePerG: 0.025,
   /** How fast the shake jitters (Hz). */
   shakeFrequency: 17,
+  /** Impact shake at full trauma (m), and how fast trauma fades (per second: a full-trauma punch settles in under a second). */
+  traumaShake: 1.1,
+  traumaDecayPerSecond: 1.3,
 } as const;
 
 /** How the terrain is painted. Its shape comes from shared/src/config/terrain.ts. */

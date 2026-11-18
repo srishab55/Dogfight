@@ -136,3 +136,54 @@ export const ACTION_LABELS: Readonly<Partial<Record<InputAction, string>>> = {
 
 /** Keys a flight action can't take: they run the menus, move focus or open the debug overlay. */
 export const RESERVED_KEYS: readonly string[] = ['Escape', 'Enter', 'NumpadEnter', 'Tab', 'Backquote', 'MetaLeft', 'MetaRight'];
+
+/**
+ * A gamepad in the browser's "standard" layout (Xbox names; a PlayStation
+ * pad's buttons sit in the same places). Button indices are the Gamepad
+ * API's. In flight: the left stick is the control column (pull back to climb,
+ * unless inverted in Settings), the right stick's sideways axis the rudder,
+ * the triggers move the throttle lever. In the menus: the D-pad or left
+ * stick moves between controls, A presses, B or Menu goes back, LB/RB change tab.
+ */
+export const GAMEPAD_CONFIG = {
+  /** Stick movement ignored round the centre (fraction of full travel). */
+  deadzone: 0.18,
+  /** Throttle lever travel per second with a trigger fully in, as a multiple of the arrow keys' rate. */
+  throttleRateScale: 1,
+  /** In the menus, a stick pushed this far counts as a direction. */
+  menuStickThreshold: 0.55,
+  /** Holding a direction in the menus repeats it after this delay, then this often (s). */
+  menuRepeatDelay: 0.4,
+  menuRepeatInterval: 0.12,
+  /** In flight: the actions each button gives (held for as long as it is down). */
+  flightButtons: {
+    0: ['fireGuns', 'pickerConfirm'],
+    1: ['brake'],
+    2: ['toggleDiveBrakes'],
+    3: ['cycleCamera'],
+    4: ['yawLeft'],
+    5: ['yawRight'],
+    8: ['toggleMap'],
+    9: ['openHangar'],
+    12: ['flapsUp'],
+    13: ['flapsDown'],
+    15: ['autoLand'],
+  } as Readonly<Record<number, readonly InputAction[]>>,
+} as const;
+
+/** The gamepad layout as the Settings screen lists it. */
+export const GAMEPAD_LABELS: ReadonlyArray<readonly [string, string]> = [
+  ['Left stick', 'Pitch and roll (in Easy steering: turn)'],
+  ['Right stick ↔', 'Rudder'],
+  ['RT / LT', 'Throttle up / down'],
+  ['A', 'Fire guns; after a crash, fly again'],
+  ['B', 'Brakes (wheels on the ground, air brakes in the air)'],
+  ['X', 'Dive brakes'],
+  ['Y', 'Camera'],
+  ['LB / RB', 'Rudder left / right'],
+  ['D-pad ↑ / ↓', 'Flaps up / down'],
+  ['D-pad →', 'Auto-land'],
+  ['View', 'Map'],
+  ['Menu', 'Pause menu'],
+  ['Menus', 'D-pad or stick to move, A to press, B to go back, LB / RB to change tab'],
+];

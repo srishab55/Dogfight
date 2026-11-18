@@ -54,6 +54,19 @@ export interface HudFrame {
   readonly baseLabels: readonly BaseLabel[];
   /** The assist line: auto-land flying a landing (`active`) or on offer (P); on the ground, a pointer to the hangar. Null: nothing to say. */
   readonly prompt: { readonly active: boolean; readonly text: string } | null;
+  /** Where your last kill is going down, for a moment after it (game feel), or null. */
+  readonly killMarker: ScreenPoint | null;
+  /** Enemy aircraft near you but off the screen (or behind you): an arrow at the edge pointing to each, nearest first. */
+  readonly offscreen: readonly OffscreenMarker[];
+}
+
+/** An arrow near the screen's edge, pointing at an enemy aircraft you can't see, with its distance. */
+export interface OffscreenMarker {
+  readonly x: number;
+  readonly y: number;
+  /** Which way it points, clockwise from the right (deg). */
+  readonly angleDeg: number;
+  readonly distance: number;
 }
 
 /**
@@ -87,6 +100,8 @@ export interface EnemyMarker {
   readonly distance: number;
   /** For an aircraft: its type ("INTERCEPTOR"). */
   readonly label?: string;
+  /** Damage you've just done to it (counts up while you keep hitting, then fades); 0 or absent: none. */
+  readonly recentDamage?: number;
 }
 
 const MARKER_LABELS: Readonly<Record<TargetKind | 'aircraft', string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '', hangar: 'HANGAR', fuelDepot: 'FUEL', radar: 'RADAR', aircraft: 'AIRCRAFT' };
@@ -111,8 +126,12 @@ export interface ScreenPoint {
 const MAX_MARKERS = 16;
 /** At most this many base labels at once (there are four bases). */
 const MAX_BASE_LABELS = 6;
+/** At most this many off-screen arrows. */
+const MAX_OFFSCREEN = 4;
 /** How long the gunsight glows red after a hit (s). */
 const HIT_MARKER_SECONDS = 0.15;
+/** At most one gunsight pop this often while the hits keep coming (s). */
+const HIT_POP_INTERVAL = 0.25;
 
 /** A labelled readout: LABEL, a big value, a unit. */
 interface Readout {
@@ -212,7 +231,13 @@ export class FlightHud {
   private readonly leadPoint: HTMLElement;
   private readonly flightPathMarker: HTMLElement;
   private readonly impactPoint: HTMLElement;
-  private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string }> = [];
+  private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string; damage: HTMLElement; damageShown: number; pop: boolean }> = [];
+  private readonly killMarker: HTMLElement;
+  private readonly offscreenPool: Array<{ box: HTMLElement; arrow: HTMLElement; label: HTMLElement; angle: number; text: string }> = [];
+  /** Alternates the gunsight's pop animation so each hit restarts it without a layout flush. */
+  private hitPop = false;
+  /** Seconds since the gunsight last popped (sustained hits don't restart it every round). */
+  private sinceHitPop = 1;
   private readonly baseLabelPool: Array<{ box: HTMLElement; text: string; color: string }> = [];
 
   private damageFlashTimer = 0;
@@ -379,10 +404,12 @@ export class FlightHud {
     const markerLayer = h('div', 'hud-markers');
     for (let i = 0; i < MAX_MARKERS; i++) {
       const markerLabel = h('div', 'hud-enemy__label');
-      const box = h('div', 'hud-enemy', markerLabel);
+      const damage = h('div', 'hud-enemy__damage');
+      damage.hidden = true;
+      const box = h('div', 'hud-enemy', markerLabel, damage);
       box.hidden = true;
       markerLayer.append(box);
-      this.markers.push({ box, label: markerLabel, text: '' });
+      this.markers.push({ box, label: markerLabel, text: '', damage, damageShown: 0, pop: false });
     }
     for (let i = 0; i < MAX_BASE_LABELS; i++) {
       const box = h('div', 'hud-base-label');
@@ -391,7 +418,23 @@ export class FlightHud {
       this.baseLabelPool.push({ box, text: '', color: '' });
     }
 
-    this.root.append(this.damageFlash, markerLayer, this.impactPoint, this.leadPoint, this.flightPathMarker, this.gunsight, this.aimReticle, status, airframe, instruments, weapons, this.approach, alerts, feed, this.crashPanel);
+    // Off-screen enemy aircraft: arrows round the edge (drawn over the panels, so they aren't lost behind one).
+    const offscreenLayer = h('div', 'hud-offscreen-layer');
+    for (let i = 0; i < MAX_OFFSCREEN; i++) {
+      const arrow = h('div', 'hud-offscreen__arrow');
+      const offscreenLabel = h('div', 'hud-offscreen__label');
+      const box = h('div', 'hud-offscreen', arrow, offscreenLabel);
+      box.hidden = true;
+      offscreenLayer.append(box);
+      this.offscreenPool.push({ box, arrow, label: offscreenLabel, angle: NaN, text: '' });
+    }
+
+    // Your kill: a cross where it's going down, for a moment.
+    this.killMarker = h('div', 'hud-kill', h('div', 'hud-kill__label', 'Kill'));
+    this.killMarker.hidden = true;
+    markerLayer.append(this.killMarker);
+
+    this.root.append(this.damageFlash, markerLayer, this.impactPoint, this.leadPoint, this.flightPathMarker, this.gunsight, this.aimReticle, status, airframe, instruments, weapons, this.approach, alerts, feed, offscreenLayer, this.crashPanel);
     parent.append(this.root);
   }
 
@@ -408,6 +451,11 @@ export class FlightHud {
   /** Flash the gunsight: a round just hit something. */
   registerHit(): void {
     this.hitMarkerTimer = HIT_MARKER_SECONDS;
+    // A pop (overshoot ease) on the first hit of a burst, and again every few rounds after.
+    if (this.sinceHitPop < HIT_POP_INTERVAL) return;
+    this.sinceHitPop = 0;
+    this.hitPop = !this.hitPop;
+    this.gunsight.dataset['pop'] = this.hitPop ? 'a' : 'b';
   }
 
   /** Removes the current message early (e.g. a briefing that no longer applies). */
@@ -467,6 +515,33 @@ export class FlightHud {
         marker.text = text;
         marker.label.textContent = text;
       }
+      // Damage number: pops each time it goes up, gone once the hits stop.
+      const damage = enemy.recentDamage ?? 0;
+      show(marker.damage, damage > 0);
+      if (damage !== marker.damageShown) {
+        if (damage > marker.damageShown) {
+          marker.pop = !marker.pop;
+          marker.damage.dataset['pop'] = marker.pop ? 'a' : 'b';
+        }
+        marker.damageShown = damage;
+        if (damage > 0) marker.damage.textContent = `−${damage}`;
+      }
+    });
+    placeMarker(this.killMarker, frame.killMarker);
+    this.offscreenPool.forEach((slot, i) => {
+      const marker = frame.offscreen[i];
+      placeMarker(slot.box, marker ?? null);
+      if (!marker) return;
+      // (Not "> 1": the first angle is NaN, and every comparison with NaN is false.)
+      if (!(Math.abs(marker.angleDeg - slot.angle) <= 1)) {
+        slot.angle = marker.angleDeg;
+        slot.arrow.style.transform = `rotate(${marker.angleDeg.toFixed(0)}deg)`;
+      }
+      const text = formatDistance(marker.distance);
+      if (text !== slot.text) {
+        slot.text = text;
+        slot.label.textContent = text;
+      }
     });
     this.baseLabelPool.forEach((slot, i) => {
       const baseLabel = frame.baseLabels[i];
@@ -486,6 +561,7 @@ export class FlightHud {
     placeMarker(this.aimReticle, frame.aimReticle);
     placeMarker(this.leadPoint, frame.leadPoint);
     this.hitMarkerTimer = Math.max(0, this.hitMarkerTimer - deltaSeconds);
+    this.sinceHitPop += deltaSeconds;
     this.gunsight.classList.toggle('hud-gunsight--hit', this.hitMarkerTimer > 0);
     // On target: fire now and the rounds hit an enemy aircraft.
     this.gunsight.classList.toggle('hud-gunsight--on-target', frame.onTarget);
@@ -577,8 +653,9 @@ export class FlightHud {
     setText(this.timeLeft, match ? formatClock(match.secondsLeft) : '—');
     if (match && match.secondsLeft < 60) this.timeLeft.dataset['tone'] = 'caution';
     else delete this.timeLeft.dataset['tone'];
-    setText(this.basesBlue, match ? String(match.blue) : '—');
-    setText(this.basesRed, match ? String(match.red) : '—');
+    // Named as well as coloured (colour alone isn't enough to tell the sides apart).
+    setText(this.basesBlue, match ? `Blue ${match.blue}` : '—');
+    setText(this.basesRed, match ? `${match.red} Red` : '—');
     setText(this.basesOpen, match && match.open > 0 ? ` · ${match.open} open` : '');
     setText(this.kills, String(frame.kills));
     const base = frame.nearestBase;

@@ -1,3 +1,4 @@
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Quaternion, type Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
@@ -16,6 +17,7 @@ export interface PropellerVisual {
 }
 
 const TWO_PI = Math.PI * 2;
+const FLASH_WHITE = new Color3(1, 0.95, 0.85);
 
 /**
  * The renderable representation of one aircraft. It only *displays* a state;
@@ -27,6 +29,8 @@ export class AircraftVisual {
   /** Current visual propeller speed (rev/s), lagging the engine for a visible spin-up. */
   private propellerRevs = 0;
   private hidden = false;
+  /** How bright the hit flash on the paint is now (0: none). */
+  private flashStrength = 0;
   private flapStyle: FlapStyle = FLAP_STYLES.slotted;
   /** Current (lagged) surface deflections, -1 to 1, following the stick. */
   private readonly deflection = { pitch: 0, roll: 0, yaw: 0 };
@@ -110,6 +114,17 @@ export class AircraftVisual {
   /** Repaint the airframe (an sRGB hex colour); team markings keep their colour. */
   setPaint(color: string): void {
     if (this.paint) this.paint.albedoColor = srgbHexToLinear(color);
+  }
+
+  /**
+   * Hit flash (game feel): the paint glows white at `strength` (0-1), 0 for
+   * none. Only touches the material when the value changes.
+   */
+  setFlash(strength: number): void {
+    const s = Math.max(0, Math.min(1, strength));
+    if (!this.paint || Math.abs(s - this.flashStrength) < 0.01) return;
+    this.flashStrength = s < 0.01 ? 0 : s;
+    this.paint.emissiveColor.copyFrom(this.flashStrength === 0 ? Color3.BlackReadOnly : FLASH_WHITE.scale(this.flashStrength));
   }
 
   /** Landing gear from retracted (0) to down (1), mirroring the flight model's gear position. */

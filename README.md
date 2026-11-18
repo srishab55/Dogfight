@@ -83,8 +83,9 @@ The game opens at the **main menu**, over your aircraft parked at its base.
 Your callsign is top right (click to change it). **PLAY** opens the hangar;
 **Multiplayer** shows the lobby (online play needs the game server: Phase 5);
 **Settings** and **Controls** open the settings. Every screen works with the
-mouse or the keyboard (Tab, arrows, Enter, Esc to go back), and every screen
-pauses the game.
+mouse, the keyboard (Tab, arrows, Enter, Esc to go back) or a gamepad (D-pad
+or left stick to move, **A** to press, **B** to go back, **LB / RB** to change
+tab), and every screen pauses the game.
 
 **The hangar** (aircraft selection) is where you set up a flight, so the
 flight keys stay few:
@@ -114,9 +115,9 @@ sortie's figures.
 
 - **Graphics**: a Low / Medium / High preset, or set render resolution (50–100 %), antialiasing (off, 2×, 4×), shadows (off, 1024, 2048) and bloom yourself.
 - **Audio**: sound on or off, master volume.
-- **Controls**: steering (easy turns or direct roll), mouse aim sensitivity, camera drag speed, and every flight key rebindable (click Change, press the key; Esc and Enter stay fixed).
+- **Controls**: steering (easy turns or direct roll), mouse aim sensitivity, camera drag speed, every flight key rebindable (click Change, press the key; Esc and Enter stay fixed), invert gamepad pitch, and the gamepad layout.
 - **Gameplay**: target markers, base labels and beacons, auto-land offers.
-- **Accessibility**: HUD scale (capped so it always fits the window), reduced motion (follows your system unless you choose), damage flash, camera shake.
+- **Accessibility**: text size in the menus (standard, large, larger), HUD scale (capped so it always fits the window), reduced motion (follows your system unless you choose; also stops the freeze on a kill), flashing effects (the red flash when you're hit, the white flash on what you hit), camera shake strength (0–100 %).
 
 In flight (the default keys):
 
@@ -137,6 +138,23 @@ In flight (the default keys):
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** lets go of the mouse and pauses |
 | Mouse drag / wheel | Look round / zoom (orbit camera and the hangar) |
 | **`** | Debug stats (shown by default in dev) |
+
+**With a gamepad** (any pad in the browser's standard layout; Xbox names): left
+stick pitch and roll (pull back to climb; invert in Settings; in Easy
+steering it turns), right stick sideways the rudder, **RT / LT** throttle up /
+down, **A** fire (after a crash, fly again), **B** brakes, **X** dive brakes,
+**Y** camera, **LB / RB** rudder, **D-pad ↑ / ↓** flaps, **D-pad →**
+auto-land, **View** map, **Menu** pause. The keys and mouse keep working
+alongside it.
+
+**What you feel:** hits on an enemy flash its paint white and count up as a
+number over its bracket ("−24"); the gunsight pops on each burst that
+connects. Your kill punches the camera, freezes the world for a moment
+(0.07 s), and a white cross marks where it's going down. Being hit, nearby
+explosions, catapult launches and firm touchdowns shake the view by how big
+they are and how close. Enemy aircraft off the screen or behind you show as
+red arrows round the edge with their distance. All of it follows the
+Accessibility settings.
 
 Keys ramp the control surfaces smoothly: tap for small corrections, hold for
 full deflection. In mouse flight, holding any flight key overrides the mouse

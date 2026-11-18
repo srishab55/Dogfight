@@ -539,6 +539,26 @@ dropping; it smokes, then goes down. P always takes you to the field ahead,
 not back to the carrier.
 **Pass:** The side with more bases wins, the AI is a real opponent, and you can shoot it down.
 
+## Card 42: Game feel, gamepad and the interface skills
+
+**Do:** In a match, get behind a Red aircraft and fire; keep at it until it
+goes down. Let one get behind you. Then plug in a gamepad (or press a button
+on one already plugged in) and fly with it: left stick, RT / LT, A to fire,
+Menu to pause; in the pause menu and Settings use only the pad (D-pad, A, B,
+LB / RB). In Settings → Accessibility try Text size: Larger, Camera shake 0 %
+and Reduced motion: On, and fight again.
+**Expect:** Each hit flashes the enemy white and a number counts up above
+its bracket ("−8", "−24"); the gunsight pops when a burst connects. On the
+kill the view jolts, the world freezes for an instant, and a white cross
+springs in where it goes down. An enemy off the screen or behind you is a red
+arrow at the edge with its distance, pointing at it. The pad flies smoothly
+(no keyboard ramp), and in the menus a cyan ring moves row by row, A presses,
+B goes back, sliders move with left / right. Larger text makes the menus'
+text bigger but leaves the HUD alone; 0 % shake keeps the view still; reduced
+motion drops the freeze.
+**Pass:** Hits and kills feel like something happened, without hiding the
+target, and everything works from the pad alone.
+
 ## Card 34: Retractable gear
 
 **Do:** Take off from the airfield. Fly around, then come back and land by hand.

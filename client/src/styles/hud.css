@@ -18,28 +18,28 @@
 }
 
 .hud-zone--tl {
-  top: var(--hud-edge);
-  left: var(--hud-edge);
+  top: var(--hud-top);
+  left: var(--hud-left);
   width: var(--hud-panel-width);
   transform-origin: top left;
 }
 
 .hud-zone--bl {
-  bottom: var(--hud-edge);
-  left: var(--hud-edge);
+  bottom: var(--hud-bottom);
+  left: var(--hud-left);
   width: var(--hud-panel-width);
   transform-origin: bottom left;
 }
 
 .hud-zone--br {
-  right: var(--hud-edge);
-  bottom: var(--hud-edge);
+  right: var(--hud-right);
+  bottom: var(--hud-bottom);
   width: var(--hud-panel-width);
   transform-origin: bottom right;
 }
 
 .hud-zone--bc {
-  bottom: var(--hud-edge);
+  bottom: var(--hud-bottom);
   left: 50%;
   transform: translateX(-50%) scale(var(--hud-scale));
   transform-origin: bottom center;
@@ -328,7 +328,7 @@
 /* Alerts: one row under the radar, clear of the aircraft and the gunsight. Red pulses for critical, steady amber for caution. */
 .hud-alerts {
   position: absolute;
-  top: calc(var(--hud-edge) + 222px * var(--hud-scale));
+  top: calc(var(--hud-top) + 222px * var(--hud-scale));
   left: 0;
   right: 0;
   display: flex;
@@ -361,7 +361,7 @@
 /* Approach calls (LSO on a carrier), under the radar. */
 .hud-approach {
   position: absolute;
-  top: calc(var(--hud-edge) + 266px * var(--hud-scale));
+  top: calc(var(--hud-top) + 266px * var(--hud-scale));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -384,7 +384,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(var(--hud-edge) + 112px * var(--hud-scale));
+  bottom: calc(var(--hud-bottom) + 112px * var(--hud-scale));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -481,6 +481,31 @@
   border-color: var(--color-danger);
   background: radial-gradient(circle, var(--color-danger) 0 3px, transparent 3.5px);
   opacity: 1;
+}
+
+/*
+ * Pops (game feel): a quick overshoot scale. Two identical keyframe sets,
+ * alternated by data-pop, restart the animation on each event without a
+ * layout flush. They use the `scale` property, so the position transform is untouched.
+ */
+@keyframes hud-pop-a {
+  from { scale: 1.45; }
+  to { scale: 1; }
+}
+
+@keyframes hud-pop-b {
+  from { scale: 1.45; }
+  to { scale: 1; }
+}
+
+.hud-gunsight[data-pop='a'],
+.hud-enemy__damage[data-pop='a'] {
+  animation: hud-pop-a var(--duration-pop) var(--ease-back);
+}
+
+.hud-gunsight[data-pop='b'],
+.hud-enemy__damage[data-pop='b'] {
+  animation: hud-pop-b var(--duration-pop) var(--ease-back);
 }
 
 /* On target: fire now and the rounds hit an enemy aircraft. Red, a little larger. */
@@ -628,6 +653,119 @@
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
 }
 
+/* The damage you've just done to it, above the bracket. */
+.hud-enemy__damage {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.95), 0 0 1px var(--color-enemy);
+}
+
+/* Your kill going down: a white cross that springs in, with "KILL" under it. */
+.hud-kill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  will-change: transform;
+}
+
+.hud-kill::before,
+.hud-kill::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 3px;
+  margin: -1.5px 0 0 -23px;
+  background: var(--color-text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  rotate: 45deg;
+}
+
+.hud-kill::after {
+  rotate: -45deg;
+}
+
+.hud-kill:not([hidden]) {
+  animation: hud-kill-in calc(var(--duration-pop) * 1.4) var(--ease-back);
+}
+
+@keyframes hud-kill-in {
+  from { scale: 0.3; opacity: 0; }
+  to { scale: 1; opacity: 1; }
+}
+
+.hud-kill__label {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.95);
+}
+
+/* Enemy aircraft off the screen: a red arrow round the edge pointing at it (game-skills/Game UI: world markers clamp to the edges). */
+.hud-offscreen-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud-offscreen {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  will-change: transform;
+}
+
+.hud-offscreen__arrow {
+  position: absolute;
+  inset: 0;
+}
+
+/* A chevron pointing right at 0 degrees; rotated to point at the aircraft. */
+.hud-offscreen__arrow::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  margin: -10px 0 0 -6px;
+  border-style: solid;
+  border-width: 10px 0 10px 16px;
+  border-color: transparent transparent transparent var(--color-enemy);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+.hud-offscreen__label {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-enemy);
+  white-space: nowrap;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+
 /* A base far off: a diamond in its owner's colour, its name and distance. */
 .hud-base-label {
   position: absolute;
@@ -659,7 +797,7 @@
 
 .minimap {
   position: absolute;
-  top: var(--hud-edge);
+  top: var(--hud-top);
   left: 50%;
   z-index: var(--z-hud);
   padding: 4px;
@@ -701,8 +839,8 @@
 /* Dev-only stats, top right (out of the HUD's way). */
 .debug-overlay {
   position: absolute;
-  top: var(--hud-edge);
-  right: var(--hud-edge);
+  top: var(--hud-top);
+  right: var(--hud-right);
   z-index: var(--z-debug);
   margin: 0;
   padding: 8px 10px;

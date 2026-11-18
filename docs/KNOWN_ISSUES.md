@@ -72,6 +72,9 @@ None known.
 | L71 | The Red squadron takes undefended fields fast (all three within about 3 minutes if unopposed), comes back 5 s after each loss, and all of it turns on you near a Red base: alone against four, you need to defend as well as attack | A hard match | Tune `AI_CONFIG` (respawn, defence radius, roles, aim) and `AA_GUN_CONFIG` if it's too hard |
 | L75 | A Red aircraft can relaunch from a captured airfield next to you, in your sights, 5 s after you shot it down | Easy kills or a surprise | By design (your choice: from the base nearest you) |
 | L72 | The map edge isn't enforced for you (the AI turns back at 4.2 km, further when chasing) | You can fly off the map | Later |
+| L76 | About 10 MB/s of short-lived allocation remains, inside Babylon's material binding (image-processing defines rebuilt as strings, light binding each draw). Freezing materials would remove it, but the sun light moves every frame and frozen materials stop following it | Occasional minor GC pauses; 60 FPS held | Revisit with Babylon's material snapshot/frozen-light options (Phase 8) |
+| L77 | Interface text is English only, written in the code (not externalised for translation); containers size to their content, so longer strings wrap rather than clip | No translations | When localisation is wanted |
+| L78 | Gamepads: only the browser's "standard" layout; the pad layout is fixed (keys are rebindable, pad buttons not); the right stick's vertical axis is unused; the browser only reports a pad after one of its buttons is pressed with the page focused | Fine with Xbox / PlayStation pads | Phase 8 (rebinding) |
 | L66 | The shadow map covers 160 m around the aircraft, so buildings further away cast no shadow, and the runways show only shadows cast within that square | Fine from the air | By design (D51) |
 | L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
@@ -97,6 +100,8 @@ None known.
 
 | Issue | Found | Fix |
 |---|---|---|
+| AI pilots stuck in an emergency branch: once pulling up (or turning back, or breaking), a pilot kept at it after the danger had passed, up to 90 s, and a landing never re-checked its abort conditions | Measuring while applying game-skills/GameAI | `guard` decorator re-checks those branches every step; `timeout` gives up a landing after 150 s. Pull-up time in a 5-minute squadron run 333 s → 10 s |
+| The shadow map drew every shadow caster on the map (246) every frame | Measuring while applying game-skills/Performance | Casters within 160 m of the aircraft only, re-culled 4× a second: 232 → 102 draw calls |
 | Your rounds rarely hurt enemy aircraft (exact hit shapes, no aiming aid, no feedback) | Your report | 3 m near-miss allowance, lead marker, red on-target gunsight, hit flash and hull % on the label |
 | Auto-land picked the nearest base by distance, so halfway along a route it turned back to the base behind | Your report ("confused between areas") | Chooses the base you're heading for, prefers usable bases, steady offer |
 | Auto-land often crashed into terrain: final approach had no terrain check (it could start 25° off the centreline, over hills outside the cut corridor), and the intercept looked only straight ahead | Your report | Terrain checked along the turn it will fly and its next 6 s, in every phase; climb-out after a go-around; no steep turns low down. 40-approach sweep test, no ground contact |

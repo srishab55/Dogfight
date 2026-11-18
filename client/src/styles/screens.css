@@ -8,7 +8,8 @@
 
 .screen {
   position: absolute;
-  inset: 0;
+  /* Inside the safe area (styles/tokens.css): nothing under a notch. */
+  inset: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   z-index: var(--z-screen);
   color: var(--color-text);
   font-family: var(--font-body);

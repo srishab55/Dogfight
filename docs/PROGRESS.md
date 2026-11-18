@@ -2,11 +2,21 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
+**Current status:** the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
 AI pilots on a smaller map, island airfields to take, carriers as home bases,
 a timer, and the side holding more bases wins. Auto-land is faster and
 terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
-(FLIGHT_TEST.md card 41) and confirmation.
+(FLIGHT_TEST.md cards 41 and 42) and confirmation.
+
+## Game skills applied: feel, interface, AI, performance ✅ (your request, 2026-11-18)
+
+Went through `game-skills/` (GameAI, GameFeel, Game UI, Performance) and added what was missing, leaving the flight, combat and match rules as they were.
+
+- ✅ **Game feel** (`config/feedback.ts`): every juicy event has a tier (small, medium, large) that sets its camera trauma (shake ∝ trauma², decaying), fading with distance from you. Hit-stop on your kills only (the world runs at 12 % for 0.07 s; not with reduced motion). The aircraft you hit flashes white; the damage you're doing counts up above its bracket with an overshoot pop; the gunsight pops on a burst that connects; a white cross springs in where your kill goes down. Shake strength is a 0–100 % slider; "Flashing effects" turns both flashes off
+- ✅ **Interface**: gamepad support in flight (sticks are analog, triggers move the throttle; keys still win on their axis) and in every menu (spatial focus with the D-pad or stick, A, B, LB/RB for tabs, focus kept inside the open dialog); safe-area insets (`viewport-fit=cover`, HUD panels and menus inside `env(safe-area-inset-*)`); a text-size setting for the menus (the HUD keeps its own scale); red arrows round the screen edge for enemy aircraft off screen or behind you; colour-independent cues (the score reads "Blue 1 – 1 Red", base dots on the map carry B / R, base labels say YOURS / ENEMY / NOBODY'S)
+- ✅ **AI** (a fix): a behaviour-tree sequence resumes its running action without re-checking its condition, so an emergency branch whose action never finishes (pull up, turn back, break turn) carried on after the danger had passed, and a landing never re-checked "attacked high up" or "base taken already". New `guard` decorator (re-checked every step) on those branches, and a `timeout` decorator gives up a landing still not down after 150 s. Measured in a 5-minute squadron simulation: time spent pulling up 333 s → 10 s (pilot-seconds), longest pull-up 89.6 s → 1.1 s; the time went to landings and strafing instead
+- ✅ **Performance** (measured first): per-section frame timings in the debug overlay (sim + AI, visuals, render, HUD against the 16.7 ms budget). The shadow map drew all 246 shadow casters every frame; now only the 16 near the aircraft (re-culled 4× a second): draw calls 232 → 102 with shadows on. Clouds re-sort only after the camera moves 4 m; a few per-frame allocations removed. Allocation is still about 10 MB/s inside Babylon's material binding (KNOWN_ISSUES L76)
+- Verified: 508 tests (new: guard and timeout decorators), typecheck and build, and headless Chrome at 1366×768: damage number "−8" popping, the hit aircraft's paint flashing, the kill marker and 0.62 trauma on a kill, the world advancing one step in three during hit-stop and none with reduced motion; gamepad: D-pad walks every settings row in order, A presses, B goes back, LB/RB change tab, sliders move with left/right, the stick pitches (0.76 at 80 % travel), RT opens the throttle, A fires; off-screen arrows pointing at three Red aircraft behind; text size 130 % with nothing clipped; no console errors
 
 ## Red keeps coming; stronger base defence ✅ (your feedback, 2026-11-18)
 

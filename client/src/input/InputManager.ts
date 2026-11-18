@@ -1,5 +1,11 @@
 import type { InputAction, KeyBindings } from '../config/controls';
 
+/** Another device's actions this frame (a gamepad): held, and pressed this frame. */
+export interface ActionSource {
+  readonly held: ReadonlySet<InputAction>;
+  readonly pressed: ReadonlySet<InputAction>;
+}
+
 /**
  * Turns raw keyboard events into game actions.
  *
@@ -12,12 +18,14 @@ import type { InputAction, KeyBindings } from '../config/controls';
  *  - `wasPressed(action)`: true only in the frame the key went down (toggles).
  *
  * Call `endFrame()` once at the end of every frame to clear the "pressed" set.
+ * A gamepad adds its own actions through `addSource` (it is polled, not evented).
  */
 export class InputManager {
   private readonly heldKeys = new Set<string>();
   private readonly keysPressedThisFrame = new Set<string>();
   private codesByAction: ReadonlyMap<InputAction, readonly string[]> = new Map();
   private boundCodes: ReadonlySet<string> = new Set();
+  private readonly sources: ActionSource[] = [];
 
   constructor(private readonly target: Window, bindings: KeyBindings) {
     this.setBindings(bindings);
@@ -37,12 +45,17 @@ export class InputManager {
     this.releaseAll();
   }
 
+  /** Adds a polled device's actions (they count the same as the keys). */
+  addSource(source: ActionSource): void {
+    this.sources.push(source);
+  }
+
   isHeld(action: InputAction): boolean {
-    return this.anyBoundKey(action, this.heldKeys);
+    return this.anyBoundKey(action, this.heldKeys) || this.sources.some((s) => s.held.has(action));
   }
 
   wasPressed(action: InputAction): boolean {
-    return this.anyBoundKey(action, this.keysPressedThisFrame);
+    return this.anyBoundKey(action, this.keysPressedThisFrame) || this.sources.some((s) => s.pressed.has(action));
   }
 
   endFrame(): void {

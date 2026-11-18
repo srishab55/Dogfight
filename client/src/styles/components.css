@@ -203,13 +203,15 @@
 }
 
 .nav__item:hover,
-.nav__item:focus-visible {
+.nav__item:focus-visible,
+:root[data-input='gamepad'] .nav__item:focus {
   color: var(--color-text);
   background: var(--color-accent-soft);
 }
 
 .nav__item:hover::before,
 .nav__item:focus-visible::before,
+:root[data-input='gamepad'] .nav__item:focus::before,
 .nav__item[aria-current='true']::before {
   transform: scaleY(1);
 }
@@ -597,7 +599,8 @@
 }
 
 [data-tooltip]:hover::after,
-[data-tooltip]:focus-visible::after {
+[data-tooltip]:focus-visible::after,
+:root[data-input='gamepad'] [data-tooltip]:focus::after {
   content: attr(data-tooltip);
   position: absolute;
   left: 50%;
@@ -630,6 +633,8 @@
   z-index: var(--z-modal);
   display: grid;
   place-items: center;
+  /* The dim covers the whole screen; the dialog stays inside the safe area. */
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   background: var(--color-overlay);
   pointer-events: auto;
   animation: fade-in var(--duration) var(--ease-out);

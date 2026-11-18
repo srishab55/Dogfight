@@ -1,6 +1,9 @@
 import { neutralControls, type FlightControls, type StickInputs } from '@dogfight/shared';
 import { KEYBOARD_FLIGHT_CONFIG, type InputAction } from '../config/controls';
+import type { AnalogFlight } from './GamepadInput';
 import type { InputManager } from './InputManager';
+
+const NO_ANALOG: Readonly<AnalogFlight> = { pitch: 0, roll: 0, yaw: 0, throttle: 0 };
 
 /** The keys that fly the aircraft: pressing any of them takes over from an autopilot. */
 const FLIGHT_ACTIONS: readonly InputAction[] = ['pitchUp', 'pitchDown', 'rollLeft', 'rollRight', 'yawLeft', 'yawRight', 'throttleUp', 'throttleDown', 'flapsDown', 'flapsUp', 'brake', 'toggleDiveBrakes'];
@@ -17,11 +20,18 @@ export class FlightInputController {
   private diveBrakesOpen = false;
   /** Left/right as a smooth turn command (-1 to 1) for car-like steering. */
   private turn = 0;
+  /** A gamepad's sticks and triggers (zero without one). */
+  private analog: Readonly<AnalogFlight> = NO_ANALOG;
 
   constructor(private readonly input: InputManager) {}
 
   get controls(): Readonly<FlightControls> {
     return this.current;
+  }
+
+  /** A gamepad's stick and trigger positions, read every step. A held key still wins on its axis. */
+  setAnalog(analog: Readonly<AnalogFlight>): void {
+    this.analog = analog;
   }
 
   /** Name of the flap lever's current notch, e.g. "LANDING". */
@@ -47,8 +57,10 @@ export class FlightInputController {
    * command (ramped, so a tap is a gentle turn), and whether a pitch key is held.
    */
   steeringInputs(dt: number): { turn: number; pitchByHand: boolean } {
-    this.turn = rampAxis(this.turn, this.direction('rollRight', 'rollLeft'), dt);
-    return { turn: this.turn, pitchByHand: this.input.isHeld('pitchUp') || this.input.isHeld('pitchDown') };
+    const keys = this.direction('rollRight', 'rollLeft');
+    // A stick is already smooth and proportional: its position is the turn command.
+    this.turn = keys === 0 && this.analog.roll !== 0 ? this.analog.roll : rampAxis(this.turn, keys, dt);
+    return { turn: this.turn, pitchByHand: this.input.isHeld('pitchUp') || this.input.isHeld('pitchDown') || this.analog.pitch !== 0 };
   }
 
   /**
@@ -59,11 +71,13 @@ export class FlightInputController {
    */
   update(dt: number, assist: Readonly<StickInputs> | null = null, steering = false, assistAirbrake = 0): Readonly<FlightControls> {
     const c = this.current;
-    c.pitch = this.axis(c.pitch, 'pitchUp', 'pitchDown', assist?.pitch, dt);
-    c.roll = steering && assist ? assist.roll : this.axis(c.roll, 'rollRight', 'rollLeft', assist?.roll, dt);
-    c.yaw = this.axis(c.yaw, 'yawRight', 'yawLeft', assist?.yaw, dt);
+    const stick = this.analog;
+    c.pitch = this.axis(c.pitch, 'pitchUp', 'pitchDown', assist?.pitch, dt, stick.pitch);
+    c.roll = steering && assist ? assist.roll : this.axis(c.roll, 'rollRight', 'rollLeft', assist?.roll, dt, stick.roll);
+    c.yaw = this.axis(c.yaw, 'yawRight', 'yawLeft', assist?.yaw, dt, stick.yaw);
 
-    const throttle = c.throttle + this.direction('throttleUp', 'throttleDown') * KEYBOARD_FLIGHT_CONFIG.throttlePerSecond * dt;
+    const lever = this.direction('throttleUp', 'throttleDown') + stick.throttle;
+    const throttle = c.throttle + Math.max(-1, Math.min(1, lever)) * KEYBOARD_FLIGHT_CONFIG.throttlePerSecond * dt;
     c.throttle = Math.min(1, Math.max(0, throttle));
     // B: wheel brakes on the ground, air brakes in the air (both at once is fine: each only acts where it can).
     const braking = this.input.isHeld('brake');
@@ -93,9 +107,10 @@ export class FlightInputController {
     return c;
   }
 
-  /** Whether the pilot is touching any flight control (stick, rudder, throttle, flaps or brakes): that takes over from an autopilot. */
+  /** Whether the pilot is touching any flight control (stick, rudder, throttle, flaps or brakes, on the keys or a gamepad): that takes over from an autopilot. */
   flyingByHand(): boolean {
-    return FLIGHT_ACTIONS.some((action) => this.input.isHeld(action));
+    const a = this.analog;
+    return FLIGHT_ACTIONS.some((action) => this.input.isHeld(action)) || a.pitch !== 0 || a.roll !== 0 || a.yaw !== 0 || a.throttle !== 0;
   }
 
   /** Centre the stick and set the throttle and flap levers, e.g. on respawn. */
@@ -114,9 +129,12 @@ export class FlightInputController {
     this.current.flaps = notches[this.flapNotch] ?? 0;
   }
 
-  private axis(current: number, positive: InputAction, negative: InputAction, assist: number | undefined, dt: number): number {
+  /** A held key ramps the axis; otherwise a gamepad stick sets it directly; otherwise the assist, or it recentres. */
+  private axis(current: number, positive: InputAction, negative: InputAction, assist: number | undefined, dt: number, stick = 0): number {
     const direction = this.direction(positive, negative);
-    if (direction !== 0 || assist === undefined) return rampAxis(current, direction, dt);
+    if (direction !== 0) return rampAxis(current, direction, dt);
+    if (stick !== 0) return stick;
+    if (assist === undefined) return rampAxis(current, 0, dt);
     return assist;
   }
 

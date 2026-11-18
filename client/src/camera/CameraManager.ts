@@ -125,6 +125,11 @@ export class CameraManager {
     this.cockpit.setEye(spec.airframe.cockpitEye, spec.airframeScale);
   }
 
+  /** An impact felt in the camera (game feel): see CameraEffects.addTrauma. */
+  addTrauma(amount: number): void {
+    this.effects.addTrauma(amount);
+  }
+
   /** The Controls setting: orbit camera (and hangar view) drag speed, 1 = default. */
   setOrbitSensitivity(sensitivity: number): void {
     // Babylon's "sensibility" is pixels per radian: higher is slower.

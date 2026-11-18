@@ -1,4 +1,4 @@
-import { ACTION_LABELS, RESERVED_KEYS } from '../config/controls';
+import { ACTION_LABELS, GAMEPAD_LABELS, RESERVED_KEYS } from '../config/controls';
 import { UI_CONFIG } from '../config/ui';
 import {
   DEFAULT_SETTINGS,
@@ -10,6 +10,7 @@ import {
   type GraphicsPreset,
   type ReducedMotion,
   type ShadowQuality,
+  type TextSize,
 } from '../core/Settings';
 import { formatKeyCode } from './ControlsHint';
 import { button, h, kbd, label, segmented, settingRow, slider, tabs, tag, toggleSwitch, type Control } from './components';
@@ -281,6 +282,15 @@ export class SettingsScreen {
       h('div', 'keybinds', ...keyRows),
       h('div', 'settings__section', label('Fixed')),
       h('div', 'keybinds', ...fixed.map(([key, what]) => h('div', 'keybind keybind--fixed', h('span', 'keybind__action', what), h('span', 'keybind__keys', kbd(key))))),
+      h('div', 'settings__section', label('Gamepad')),
+      settingRow(
+        'Invert gamepad pitch',
+        'Off: pull the stick back to climb, as in an aircraft. On: push it forward to climb.',
+        toggleSwitch('Invert gamepad pitch', values.settings.controls.gamepadInvertPitch, (gamepadInvertPitch) =>
+          this.update({ ...this.values!.settings, controls: { ...this.values!.settings.controls, gamepadInvertPitch } }),
+        ).element,
+      ),
+      h('div', 'keybinds', ...GAMEPAD_LABELS.map(([pad, what]) => h('div', 'keybind keybind--fixed', h('span', 'keybind__action', what), h('span', 'keybind__keys', kbd(pad))))),
     ];
   }
 
@@ -367,11 +377,22 @@ export class SettingsScreen {
       a.reducedMotion,
       (reducedMotion) => set({ reducedMotion }),
     );
+    const textSize = segmented<TextSize>(
+      'Text size',
+      [
+        { value: 'standard', label: 'Standard' },
+        { value: 'large', label: 'Large' },
+        { value: 'larger', label: 'Larger' },
+      ],
+      a.textSize,
+      (size) => set({ textSize: size }),
+    );
     return [
+      settingRow('Text size', 'Text in the menus and screens. The flight instruments follow HUD scale.', textSize.element),
       settingRow('HUD scale', 'Size of the flight instruments. Capped so they always fit the window.', slider('HUD scale', a.hudScale, { ...UI_CONFIG.hudScale, format: percent }, (hudScale) => set({ hudScale })).element),
-      settingRow('Reduced motion', 'Stops interface animation (menus, radar sweep, pulsing alerts). System follows your computer’s setting.', motion.element),
-      settingRow('Damage flash', 'Red flash at the screen’s edges when you’re hit.', toggleSwitch('Damage flash', a.damageFlash, (damageFlash) => set({ damageFlash })).element),
-      settingRow('Camera shake', 'Shake from hits, gunfire, stall buffet and high g.', toggleSwitch('Camera shake', a.cameraShake, (cameraShake) => set({ cameraShake })).element),
+      settingRow('Reduced motion', 'Stops interface animation (menus, radar sweep, pulsing alerts) and the freeze on a kill. System follows your computer’s setting.', motion.element),
+      settingRow('Flashing effects', 'The red flash at the screen’s edges when you’re hit, and the white flash on an aircraft you hit.', toggleSwitch('Flashing effects', a.damageFlash, (damageFlash) => set({ damageFlash })).element),
+      settingRow('Camera shake', 'Shake from hits, explosions near you, gunfire, stall buffet and high g. 0% turns it off.', slider('Camera shake', a.cameraShake, { min: 0, max: 1, step: 0.05, format: percent }, (cameraShake) => set({ cameraShake })).element),
     ];
   }
 

@@ -10,6 +10,8 @@ import {
   basesHeld,
   condition,
   cooldown,
+  guard,
+  timeout,
   createAirborneState,
   createBaseControls,
   createGunState,
@@ -74,6 +76,32 @@ describe('behaviour tree', () => {
     now = 6;
     expect(node.tick({}, 0)).toBe(Status.Success);
     expect(runs).toBe(2);
+  });
+
+  it('a guard re-checks its condition every tick: the emergency stops when it has passed (a sequence would keep resuming the action)', () => {
+    let danger = true;
+    let pulls = 0;
+    const tree = selector('root', [guard('danger', () => danger, action('pull up', () => (pulls++, Status.Running))), action('patrol', () => Status.Running)]);
+    tree.tick({}, 0);
+    danger = false;
+    tree.tick({}, 0);
+    tree.tick({}, 0);
+    expect(pulls).toBe(1);
+  });
+
+  it('a timeout gives up a child that has been running too long, and says so', () => {
+    let now = 0;
+    let gaveUp = 0;
+    const node = timeout(10, () => now, action('circle', () => Status.Running), () => void gaveUp++);
+    expect(node.tick({}, 0)).toBe(Status.Running);
+    now = 9;
+    expect(node.tick({}, 0)).toBe(Status.Running);
+    now = 11;
+    expect(node.tick({}, 0)).toBe(Status.Failure);
+    expect(gaveUp).toBe(1);
+    // Starts its clock again next time.
+    now = 12;
+    expect(node.tick({}, 0)).toBe(Status.Running);
   });
 });
 

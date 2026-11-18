@@ -91,7 +91,7 @@ export class Environment {
    * @param cameraPosition where the active camera is; the sea follows it and clouds fade puffs close to it.
    */
   update(deltaSeconds: number, focus: Vector3, approachObserver: Vector3, cameraPosition: Vector3): void {
-    this.shadows?.update(focus);
+    this.shadows?.update(focus, deltaSeconds);
     this.updateCarriers();
     for (const lights of this.approachLights) lights.update(approachObserver);
     this.clouds?.update(cameraPosition);

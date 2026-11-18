@@ -59,6 +59,8 @@ export const AI_CONFIG = {
   strafe: { setupDistance: 1_600, setupHeight: 380, fireRange: 850, fireConeDeg: 3, pullUpDistance: 300, pullUpHeight: 100, recoverSeconds: 7 },
   /** On the ground after landing, it waits up to this long for a capture or a service before taking off again. */
   groundWaitSeconds: 14,
+  /** A landing still not down after this long (it can't line up, say) is given up, and the pilot thinks again. */
+  landingTimeoutSeconds: 150,
   /** Stays inside this square around the centre of the map (half-width)... */
   boundary: 4_200,
   /** ...or this much further while chasing an enemy within this range. */

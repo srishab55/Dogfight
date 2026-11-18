@@ -10,6 +10,10 @@ import { KEY_BINDINGS, type InputAction, type KeyBindings } from '../config/cont
 export type GraphicsPreset = 'low' | 'medium' | 'high' | 'custom';
 export type ShadowQuality = 'off' | 'medium' | 'high';
 export type ReducedMotion = 'system' | 'on' | 'off';
+export type TextSize = 'standard' | 'large' | 'larger';
+
+/** Menu and screen text size per setting (the HUD has its own scale). */
+export const TEXT_SCALES: Readonly<Record<TextSize, number>> = { standard: 1, large: 1.15, larger: 1.3 };
 
 export interface GameSettings {
   readonly graphics: {
@@ -30,6 +34,8 @@ export interface GameSettings {
     readonly cameraSensitivity: number;
     /** Keys changed from the defaults, per action. */
     readonly bindings: Partial<Record<InputAction, readonly string[]>>;
+    /** Gamepad: push the stick forward to climb (off: pull back to climb, as in an aircraft). */
+    readonly gamepadInvertPitch: boolean;
   };
   readonly gameplay: {
     readonly targetMarkers: boolean;
@@ -38,9 +44,13 @@ export interface GameSettings {
   };
   readonly accessibility: {
     readonly hudScale: number;
+    /** Text size in the menus and screens. */
+    readonly textSize: TextSize;
     readonly reducedMotion: ReducedMotion;
+    /** Flashing effects: the red flash when you're hit and the white flash on what you hit. */
     readonly damageFlash: boolean;
-    readonly cameraShake: boolean;
+    /** Camera shake strength, 0 (none) to 1 (full). */
+    readonly cameraShake: number;
   };
 }
 
@@ -54,9 +64,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   // The game's look before settings existed: full resolution, 2x MSAA, 1024 shadows, bloom.
   graphics: { preset: 'custom', renderScale: 1, antialiasing: 2, shadows: 'medium', bloom: true },
   audio: { volume: 0.7 },
-  controls: { cameraSensitivity: 1, bindings: {} },
+  controls: { cameraSensitivity: 1, bindings: {}, gamepadInvertPitch: false },
   gameplay: { targetMarkers: true, baseLabels: true, autoLandOffers: true },
-  accessibility: { hudScale: 1, reducedMotion: 'system', damageFlash: true, cameraShake: true },
+  accessibility: { hudScale: 1, textSize: 'standard', reducedMotion: 'system', damageFlash: true, cameraShake: 1 },
 };
 
 /** The flight actions a player may rebind (Esc and Enter stay fixed: they run the menus). */
@@ -89,11 +99,19 @@ export function loadSettings(): GameSettings {
       audio: { ...DEFAULT_SETTINGS.audio, ...saved.audio },
       controls: { ...DEFAULT_SETTINGS.controls, ...saved.controls, bindings: { ...saved.controls?.bindings } },
       gameplay: { ...DEFAULT_SETTINGS.gameplay, ...saved.gameplay },
-      accessibility: { ...DEFAULT_SETTINGS.accessibility, ...saved.accessibility },
+      accessibility: withShakeStrength({ ...DEFAULT_SETTINGS.accessibility, ...saved.accessibility }),
     };
   } catch {
     return DEFAULT_SETTINGS;
   }
+}
+
+/** Camera shake used to be on/off: an old saved true/false becomes full or none. An unknown text size becomes the default. */
+function withShakeStrength(a: GameSettings['accessibility']): GameSettings['accessibility'] {
+  const shake = a.cameraShake as unknown;
+  const strength = typeof shake === 'boolean' ? (shake ? 1 : 0) : typeof shake === 'number' && Number.isFinite(shake) ? Math.max(0, Math.min(1, shake)) : 1;
+  const textSize = a.textSize in TEXT_SCALES ? a.textSize : DEFAULT_SETTINGS.accessibility.textSize;
+  return { ...a, cameraShake: strength, textSize };
 }
 
 export function saveSettings(settings: GameSettings): void {

@@ -110,7 +110,7 @@ export { CombatWorld, type CombatEvent, type Shooter } from './combat/CombatWorl
 export { MATCH_CONFIG } from './config/match';
 export { AI_CONFIG } from './config/ai';
 export { createMatch, remainingSeconds, stepMatch, type MatchResult, type MatchState } from './match/match';
-export { Status, action, condition, cooldown, inverter, selector, sequence, type BtNode } from './ai/behaviourTree';
+export { Status, action, condition, cooldown, guard, inverter, selector, sequence, timeout, type BtNode } from './ai/behaviourTree';
 export { AiPilot, createSquadron, type AiContact, type AiRole, type AiWorld } from './ai/AiPilot';
 export { AiForce } from './ai/AiForce';
 export { leadDirection, roundsWouldHit } from './combat/aimAssist';

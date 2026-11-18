@@ -178,6 +178,16 @@ export function drawMap(ctx: CanvasRenderingContext2D, background: HTMLCanvasEle
       else ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      // The owner's initial too, so the sides don't depend on colour alone (nobody's: no letter).
+      const initial = view.owner === 'blue' ? 'B' : view.owner === 'red' ? 'R' : '';
+      if (initial) {
+        ctx.font = `bold ${Math.round((large ? 11 : 8) * unit)}px ui-monospace, Menlo, monospace`;
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(initial, x, y + 0.5 * unit);
+        ctx.textBaseline = 'alphabetic';
+        ctx.font = `${Math.round(11 * unit)}px ui-monospace, Menlo, monospace`;
+      }
     }
     ctx.globalAlpha = 1;
     // The picker: a ring round each base you can choose, a pulsing one round the selected base.

@@ -95,7 +95,8 @@ export function computeGroundContact(
 
   rotateVec3(worldAngularVelocity, state.orientation, state.angularVelocity);
   rotateVec3(noseAxis, state.orientation, bodyForward);
-  const horizontalSpeed = Math.hypot(state.velocity.x, state.velocity.z);
+  // Plain arithmetic, not Math.hypot (which allocates in V8): this runs every step for every aircraft.
+  const horizontalSpeed = Math.sqrt(state.velocity.x * state.velocity.x + state.velocity.z * state.velocity.z);
 
   // Gear retracted (or still on its way down): no wheels to land on.
   const wheelsDown = gearLocked(state);

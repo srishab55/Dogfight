@@ -95,18 +95,21 @@ import { SettingsScreen, type SettingsEvents, type SettingsTab } from '../ui/Set
 import { LobbyScreen } from '../ui/LobbyScreen';
 import { ResultsScreen, formatDuration } from '../ui/ResultsScreen';
 import { SessionStats } from './SessionStats';
-import { effectiveBindings, loadSettings, saveSettings, type GameSettings } from './Settings';
+import { TEXT_SCALES, effectiveBindings, loadSettings, saveSettings, type GameSettings } from './Settings';
+import { GamepadInput } from '../input/GamepadInput';
 import type { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { PAINT_SCHEMES } from '../config/aircraftVisuals';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
-import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
-import { MiniMap, renderMapBackground, type MapFrame } from '../ui/MiniMap';
+import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type BaseStatus, type EnemyMarker, type HudFrame, type OffscreenMarker, type ScreenPoint } from '../ui/FlightHud';
+import { MiniMap, reducedMotion, renderMapBackground, type MapFrame } from '../ui/MiniMap';
 import type { BaseChoice } from '../ui/BaseMap';
 import { describeBases, type BaseView } from '../combat/baseViews';
 import { BEACON_CONFIG, baseColor } from '../config/map';
 import { BaseBeacons } from '../world/BaseBeacons';
 import { Environment } from '../world/Environment';
 import { FixedTimestepLoop } from './FixedTimestepLoop';
+import { FRAME_BUDGET_MS, FrameTimings } from './FrameTimings';
+import { FEEDBACK_CONFIG, FEEDBACK_TIERS, type FeedbackTier } from '../config/feedback';
 
 const DEFAULT_AIRCRAFT: AircraftClassId = 'fighterBomber';
 /** The local player's team until team selection arrives (Phase 6). */
@@ -129,12 +132,19 @@ const RAD_TO_DEG = 180 / Math.PI;
 /** Identifies the local player's rounds in combat events. Phase 5 uses the server's player ids. */
 const PLAYER_ID = 1;
 
+/** The nose direction in the aircraft's frame (shared and never changed: Vector3.Forward() builds a new one each call). */
+const FORWARD: Readonly<Vector3> = Vector3.Forward();
 /** The AI pilots' ids in combat events (the player is 1; AA guns 10 000 and up). */
 const AI_FIRST_ID = 100;
 /** Auto-land keeps offering the same base until another is better by this much (m of its choice cost). */
 const AUTO_LAND_OFFER_HYSTERESIS = 600;
 /** The lead marker and on-target cue look for enemy aircraft out to this range (m). */
 const GUNNERY_AID_RANGE = 1_200;
+/**
+ * Off-screen arrows sit on an ellipse this fraction of the view's width and
+ * height from its centre: lower below the centre, to clear the instruments and the prompt above them.
+ */
+const OFFSCREEN_ELLIPSE = { x: 0.42, up: 0.34, down: 0.24 } as const;
 const NO_AIDS = { lead: null, onTarget: false } as const;
 
 /** The screens over the game. Any of them pauses it (single player). */
@@ -163,9 +173,13 @@ export class Game {
   private readonly cameras: CameraManager;
   private readonly input: InputManager;
   private readonly flightInput: FlightInputController;
+  /** A gamepad, if one is plugged in: flies (alongside the keys and mouse) and drives the menus. */
+  private readonly gamepad: GamepadInput;
   private readonly loop: FixedTimestepLoop;
   private readonly hud: FlightHud;
   private readonly debugOverlay: DebugOverlay;
+  /** CPU time per subsystem, for the debug overlay (measure before optimising). */
+  private readonly timings = new FrameTimings();
   /** This step's aircraft in the combat world: the player, then the AI (reused). */
   private readonly shooters: Shooter[] = [];
   private readonly combat: CombatWorld;
@@ -236,8 +250,12 @@ export class Game {
   private lostReport: RespawnReport | null = null;
   /** The respawn screen has parked a fresh aircraft: Resume in the pause menu goes back to it. */
   private awaitingRespawn = false;
-  /** Camera shake from being hit (m), decaying. */
-  private impactShake = 0;
+  /** Hit-stop: real seconds left of the world running slow (game feel, on your kills). */
+  private hitStopLeft = 0;
+  /** Recent damage you've done to each enemy aircraft, for the number beside its marker, and when it fades. */
+  private readonly recentDamage = new Map<number, { amount: number; seconds: number }>();
+  /** Where your last kill went down (its pilot id), for the kill marker, and for how much longer. */
+  private killMarker: { pilotId: number; seconds: number; x: number; y: number; z: number } | null = null;
   /** Smoke puffs owed to the player's damage trail (fractions carry between frames). */
   private smokeCarry = 0;
   private wasCrashed = false;
@@ -266,6 +284,10 @@ export class Game {
   // Scratch vectors for screen projections.
   private readonly worldPoint = new Vector3();
   private readonly cameraForward = new Vector3();
+  private readonly cameraRight = new Vector3();
+  private readonly cameraUp = new Vector3();
+  /** Enemy aircraft off the screen this frame (filled with the markers). */
+  private offscreen: OffscreenMarker[] = [];
   private readonly toPoint = new Vector3();
   private readonly projected = new Vector3();
   private readonly wheelHeightPoint = new Vector3();
@@ -313,6 +335,11 @@ export class Game {
     this.pipeline = createPostProcessing(this.scene, this.cameras.allCameras());
     this.input = new InputManager(window, this.bindings);
     this.flightInput = new FlightInputController(this.input);
+    this.gamepad = new GamepadInput(window, () => {
+      if (this.screen === null) this.hud.showMessage('CONTROLLER CONNECTED · LEFT STICK FLIES · TRIGGERS THROTTLE · A FIRES', 'good', 4);
+    });
+    this.input.addSource(this.gamepad);
+    this.flightInput.setAnalog(this.gamepad.analog);
     this.mouseFlight = new MouseFlight(canvas);
     this.mouseFlight.onChange = this.handleMouseFlightChange;
     // Esc while flying with the mouse lets go of it (the browser's rule): that opens the pause menu too.
@@ -365,6 +392,7 @@ export class Game {
     this.engine.stopRenderLoop(this.frame);
     window.removeEventListener('resize', this.handleResize);
     this.input.dispose();
+    this.gamepad.dispose();
     this.audio.dispose();
     this.mouseFlight.dispose();
     this.hud.dispose();
@@ -386,11 +414,17 @@ export class Game {
     const deltaSeconds = Math.min(this.engine.getDeltaTime() / 1000, RENDER_CONFIG.maxFrameDeltaSeconds);
     this.clock += deltaSeconds;
 
+    // The gamepad is polled (it has no events for its buttons): in flight it flies, with a screen open it drives the menu.
+    this.gamepad.poll(deltaSeconds, this.screen !== null);
     this.handleActions();
 
     const mouseFlying = this.isMouseFlying();
+    this.timings.begin();
+    // Hit-stop: for a moment after a kill the world runs slow (the steps themselves are unchanged).
+    const worldDelta = this.hitStopLeft > 0 ? deltaSeconds * FEEDBACK_CONFIG.hitStopTimeScale : deltaSeconds;
+    this.hitStopLeft = Math.max(0, this.hitStopLeft - deltaSeconds);
     // Any screen pauses the game (single player; Phase 5's shared world won't stop).
-    const alpha = this.screen !== null ? 1 : this.loop.advance(deltaSeconds, (dt) => {
+    const alpha = this.screen !== null ? 1 : this.loop.advance(worldDelta, (dt) => {
       let controls: Readonly<FlightControls>;
       if (this.autoLand && this.autoLandEnd === null && !this.flightInput.flyingByHand()) {
         // Auto-land flies; touching any flight key takes over (handled after the steps).
@@ -424,21 +458,23 @@ export class Game {
       this.catapultBriefing = false;
       this.hud.clearMessage();
     }
-    this.aircraft.updateVisual(alpha, deltaSeconds, this.flightInput.controls);
+    this.timings.end('simulation');
+    this.timings.begin();
+    // World visuals run on world time, so a hit-stop freezes the explosion with the aircraft; the camera, HUD and sound stay real-time.
+    this.aircraft.updateVisual(alpha, worldDelta, this.flightInput.controls);
 
     const { renderPosition, renderOrientation } = this.aircraft;
     if (mouseFlying) this.mouseFlight.aimDirection(this.aimDirection);
     const t = this.aircraft.state.telemetry;
-    // Camera shake (Accessibility setting): buffet, recoil, high g and hits.
-    const shake = this.settings.accessibility.cameraShake;
+    // Camera shake, scaled by the Accessibility setting: buffet, recoil, high g, and impact trauma.
     this.cameras.update(deltaSeconds, renderPosition, renderOrientation, mouseFlying ? this.aimDirection : null, {
       speed: t.airspeed,
-      buffet: shake ? this.aircraft.state.flowSeparation : 0,
-      firing: shake && this.playerGuns.firing,
-      loadFactor: shake ? t.loadFactor : 1,
-      impact: shake ? this.impactShake : 0,
+      buffet: this.aircraft.state.flowSeparation,
+      firing: this.playerGuns.firing,
+      loadFactor: t.loadFactor,
+      shakeScale: this.settings.accessibility.cameraShake,
     });
-    this.impactShake *= Math.exp(-6 * deltaSeconds);
+    this.updateFeedback(deltaSeconds);
     // The glide slope (and so the PAPI) is defined for the wheels, not the centre of mass.
     this.wheelHeightPoint.copyFrom(renderPosition).y -= groundClearance(this.aircraft.spec);
     this.environment.update(deltaSeconds, renderPosition, this.wheelHeightPoint, this.scene.activeCamera?.globalPosition ?? renderPosition);
@@ -448,17 +484,21 @@ export class Game {
     this.miniMap.update(deltaSeconds, mapFrame);
     this.hangar.update(deltaSeconds, mapFrame);
     if (this.scene.activeCamera) this.tracers.update(this.scene.activeCamera.globalPosition);
-    this.effects.update(deltaSeconds);
-    this.balloons.update(deltaSeconds);
-    this.enemyTargets.update(deltaSeconds);
-    this.aiViews.update(alpha, deltaSeconds);
+    this.effects.update(worldDelta);
+    this.balloons.update(worldDelta);
+    this.enemyTargets.update(worldDelta);
+    this.aiViews.update(alpha, worldDelta);
     this.environment.showCarrierOwners(this.combat.ownerOf);
-    this.baseStructures.update(deltaSeconds);
-    this.updateAircraftFire(deltaSeconds);
-    this.fireAndSmoke.update(deltaSeconds, this.scene.activeCamera?.globalPosition ?? renderPosition);
+    this.baseStructures.update(worldDelta);
+    this.updateAircraftFire(worldDelta);
+    this.fireAndSmoke.update(worldDelta, this.scene.activeCamera?.globalPosition ?? renderPosition);
     this.updateAudio(deltaSeconds);
 
+    this.timings.end('visuals');
+    this.timings.begin();
     this.scene.render();
+    this.timings.end('render');
+    this.timings.begin();
 
     const state = this.aircraft.state;
     const heightAboveGround = state.position.y - this.ground.heightAt(state.position.x, state.position.z) - groundClearance(this.aircraft.spec);
@@ -472,6 +512,7 @@ export class Game {
       gunsight: this.projectGunsight(),
       aimReticle: mouseFlying ? this.projectAim() : null,
       ...(({ lead, onTarget }) => ({ leadPoint: lead, onTarget }))(this.gunneryAids()),
+      killMarker: this.projectKillMarker(),
       guns: this.playerGuns,
       fullAmmo: fullAmmo(this.aircraft.spec),
       serviceProgress: this.service.base ? this.service.progress : null,
@@ -479,12 +520,16 @@ export class Game {
       approach: this.approachGuide(),
       baseStatus: this.enemyBaseStatus(),
       enemyMarkers: this.enemyMarkers(),
+      // Filled by enemyMarkers() just above.
+      offscreen: this.offscreen,
       baseLabels: this.baseLabels(baseViews),
       impactPoint: this.projectImpactPoint(),
       match: this.match ? { secondsLeft: remainingSeconds(this.match), blue: basesHeld(this.combat.bases, 'blue'), red: basesHeld(this.combat.bases, 'red'), open: this.combat.bases.filter((b) => b.owner === null).length } : null,
       kills: this.stats.kills,
       prompt: this.promptLine(),
     });
+    this.timings.end('hud');
+    this.timings.endFrame(deltaSeconds);
     this.debugOverlay.update(deltaSeconds, this.debugLines);
     this.input.endFrame();
   };
@@ -514,9 +559,17 @@ export class Game {
         this.effects.spawn('spark', event.x, event.y, event.z);
         // Your rounds on an enemy aircraft: the gunsight flashes, as on any target.
         if (event.owner === PLAYER_ID && event.victim !== PLAYER_ID) this.hud.registerHit();
+        if (event.owner === PLAYER_ID && event.victim !== PLAYER_ID) {
+          // The aircraft you hit flashes, and the damage you're doing to it counts up beside its marker.
+          if (this.settings.accessibility.damageFlash) this.aiViews.flash(event.victim, FEEDBACK_CONFIG.hitFlashSeconds);
+          const recent = this.recentDamage.get(event.victim) ?? { amount: 0, seconds: 0 };
+          recent.amount += event.damage;
+          recent.seconds = FEEDBACK_CONFIG.damagePopSeconds;
+          this.recentDamage.set(event.victim, recent);
+        }
         if (event.victim === PLAYER_ID) {
           if (this.settings.accessibility.damageFlash) this.hud.registerDamage(DEFENCE_VISUAL_CONFIG.hitFlashSeconds);
-          this.impactShake = Math.max(this.impactShake, DEFENCE_VISUAL_CONFIG.hitShake);
+          this.feel('medium');
         }
         return;
       case 'aircraftShotDown': {
@@ -526,7 +579,15 @@ export class Game {
           return;
         }
         const victim = this.aiForce.pilots.find((p) => p.id === event.victim);
-        if (victim && event.owner === PLAYER_ID) this.hud.showMessage(`ENEMY DOWN · ${victim.spec.displayName.toUpperCase()}`, 'good', 3);
+        if (victim && event.owner === PLAYER_ID) {
+          this.hud.showMessage(`ENEMY DOWN · ${victim.spec.displayName.toUpperCase()}`, 'good', 3);
+          // Your kill: the big one (a punch, a moment's freeze, a marker where it went down).
+          this.feel('large');
+          this.killMarker = { pilotId: victim.id, seconds: FEEDBACK_CONFIG.killMarkerSeconds, x: event.x, y: event.y, z: event.z };
+          this.recentDamage.delete(victim.id);
+        } else {
+          this.feel('medium', this.distanceTo(event));
+        }
         return;
       }
       case 'targetHit':
@@ -561,6 +622,55 @@ export class Game {
 
   private baseName(baseId: string): string {
     return BASES.find((b) => b.id === baseId)?.name ?? 'Base';
+  }
+
+  /**
+   * One call per juicy event (game-skills/GameFeel): its tier sets how hard
+   * it's felt, fading with `distance` from you (0: it happened to you).
+   * Shake goes through the camera's trauma; hit-stop only for the large tier,
+   * only when it's yours, and never with reduced motion.
+   */
+  private feel(tier: FeedbackTier, distance = 0, falloff: number = FEEDBACK_CONFIG.falloffDistance, allowHitStop = true): void {
+    const preset = FEEDBACK_TIERS[tier];
+    const near = distance <= 0 ? 1 : Math.max(0, 1 - distance / falloff);
+    if (near <= 0) return;
+    this.cameras.addTrauma(preset.trauma * near);
+    if (allowHitStop && distance <= 0 && preset.hitStopSeconds > 0 && !reducedMotion()) this.hitStopLeft = Math.max(this.hitStopLeft, preset.hitStopSeconds);
+  }
+
+  private distanceTo(point: { readonly x: number; readonly y: number; readonly z: number }): number {
+    const p = this.aircraft.renderPosition;
+    const dx = point.x - p.x;
+    const dy = point.y - p.y;
+    const dz = point.z - p.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  /** Recent-damage numbers fade after the last hit; the kill marker follows the wreck down, then goes. */
+  private updateFeedback(deltaSeconds: number): void {
+    for (const [id, recent] of this.recentDamage) {
+      recent.seconds -= deltaSeconds;
+      if (recent.seconds <= 0) this.recentDamage.delete(id);
+    }
+    const kill = this.killMarker;
+    if (kill) {
+      kill.seconds -= deltaSeconds;
+      const pilot = this.aiForce.pilots.find((p) => p.id === kill.pilotId);
+      if (pilot && pilot.spawned && !pilot.state.crashed) {
+        kill.x = pilot.state.position.x;
+        kill.y = pilot.state.position.y;
+        kill.z = pilot.state.position.z;
+      }
+      if (kill.seconds <= 0) this.killMarker = null;
+    }
+  }
+
+  /** Where the kill marker is on screen, or null. */
+  private projectKillMarker(): ScreenPoint | null {
+    const kill = this.killMarker;
+    if (!kill) return null;
+    this.markerPoint.set(kill.x, kill.y, kill.z);
+    return this.projectToScreen(this.markerPoint);
   }
 
   /** Who fired a round: an AI pilot's aircraft type, or a base's AA gun. */
@@ -615,6 +725,9 @@ export class Game {
 
   private targetDestroyed(event: Extract<CombatEvent, { type: 'targetDestroyed' }>): void {
     const byPlayer = event.owner === PLAYER_ID;
+    // Felt by how big it is and how near you are.
+    const tier: FeedbackTier = event.kind === 'balloon' ? 'small' : event.kind === 'fuelDepot' || event.kind === 'hangar' || event.kind === 'carrier' ? 'large' : 'medium';
+    this.feel(tier, Math.max(1, this.distanceTo(event)), tier === 'large' ? FEEDBACK_CONFIG.falloffDistance * 1.5 : FEEDBACK_CONFIG.falloffDistance, false);
     switch (event.kind) {
       case 'balloon':
         this.effects.spawn('burst', event.x, event.y, event.z);
@@ -703,6 +816,8 @@ export class Game {
 
     if (state.touchdownCount > this.lastTouchdowns && !state.crashed) {
       const firmness = Math.min(1, state.lastTouchdownSinkRate / 4);
+      // A firm arrival thumps; a greaser hardly moves the view.
+      this.cameras.addTrauma(FEEDBACK_TIERS.small.trauma * firmness * 1.5);
       this.audio.play('thud', AUDIO_CONFIG.touchdownVolume * (0.4 + 0.6 * firmness));
       this.audio.play('chirp', AUDIO_CONFIG.touchdownVolume * 0.6);
     }
@@ -715,9 +830,15 @@ export class Game {
       this.hud.showMessage('MISSED THE WIRES · caught by the crash barrier (some damage)', 'ok', 4);
     }
     this.lastBarrier = state.barrierEngaged;
-    if (state.catapult === 'launching' && this.lastCatapult === 'held') this.audio.play('whoosh', 0.7);
+    if (state.catapult === 'launching' && this.lastCatapult === 'held') {
+      this.audio.play('whoosh', 0.7);
+      this.feel('small');
+    }
     this.lastCatapult = state.catapult;
-    if (state.crashed && !this.wasCrashedForAudio) this.audio.play('explosion', AUDIO_CONFIG.explosionVolume, state.crashReason?.includes('sea') ? 1.4 : 1);
+    if (state.crashed && !this.wasCrashedForAudio) {
+      this.audio.play('explosion', AUDIO_CONFIG.explosionVolume, state.crashReason?.includes('sea') ? 1.4 : 1);
+      this.feel('large', 0, FEEDBACK_CONFIG.falloffDistance, false);
+    }
     this.wasCrashedForAudio = state.crashed;
   }
 
@@ -926,7 +1047,7 @@ export class Game {
     const me = this.aircraft.state;
     const spec = this.aircraft.spec;
     if (me.crashed || me.onGround || this.cameras.mode === 'orbit') return NO_AIDS;
-    Vector3.Forward().rotateByQuaternionToRef(this.aircraft.renderOrientation, this.cameraForward);
+    FORWARD.rotateByQuaternionToRef(this.aircraft.renderOrientation, this.cameraForward);
     let onTarget = false;
     let nearest: AiPilot | null = null;
     let nearestDistance: number = GUNNERY_AID_RANGE;
@@ -1040,7 +1161,11 @@ export class Game {
    */
   private enemyMarkers(): EnemyMarker[] {
     const markers: EnemyMarker[] = [];
+    this.offscreen = [];
     if (!this.settings.gameplay.targetMarkers) return markers;
+    const view = this.engine.getRenderingCanvasClientRect();
+    const viewWidth = view?.width ?? window.innerWidth;
+    const viewHeight = view?.height ?? window.innerHeight;
     const p = this.aircraft.state.position;
     // Enemy aircraft first: they matter most, out to 5 km.
     for (const pilot of this.aiForce.pilots) {
@@ -1053,8 +1178,17 @@ export class Game {
       // Its hull, once you've damaged it.
       const hull = s.hullHealth / pilot.spec.combat.maxHullHealth;
       const label = `${pilot.spec.displayName.toUpperCase()}${hull < 0.995 ? ` ${Math.round(hull * 100)}%` : ''}`;
-      if (screen) markers.push({ x: screen.x, y: screen.y, kind: 'aircraft', distance, label });
+      const recent = this.recentDamage.get(pilot.id);
+      const onScreen = screen !== null && screen.x >= 0 && screen.x <= viewWidth && screen.y >= 0 && screen.y <= viewHeight;
+      if (onScreen) markers.push({ x: screen.x, y: screen.y, kind: 'aircraft', distance, label, recentDamage: recent ? Math.round(recent.amount) : 0 });
+      else {
+        const edge = this.projectToEdge(this.markerPoint, viewWidth, viewHeight);
+        if (edge) this.offscreen.push({ ...edge, distance });
+      }
     }
+    // Nearest first; one arrow where several would sit on top of each other (dead behind, say).
+    this.offscreen.sort((a, b) => a.distance - b.distance);
+    this.offscreen = this.offscreen.filter((m, i) => !this.offscreen.slice(0, i).some((n) => Math.hypot(m.x - n.x, m.y - n.y) < 28));
     for (const target of this.combat.targets) {
       if (target.team === null || target.team === PLAYER_TEAM || target.health <= 0) continue;
       const sink = target.carrierId ? (this.carrierStatuses.get(target.carrierId)?.sink ?? 0) : 0;
@@ -1081,7 +1215,7 @@ export class Game {
     const { state, spec, renderPosition, renderOrientation } = this.aircraft;
     if (state.crashed || state.onGround) return null;
     const gun = GUN_SPECS[spec.id];
-    Vector3.Forward().rotateByQuaternionToRef(renderOrientation, this.toPoint);
+    FORWARD.rotateByQuaternionToRef(renderOrientation, this.toPoint);
     let x = renderPosition.x;
     let y = renderPosition.y;
     let z = renderPosition.z;
@@ -1133,7 +1267,7 @@ export class Game {
 
   /** Which way the nose points, clockwise from north (rad). */
   private aircraftHeading(): number {
-    Vector3.Forward().rotateByQuaternionToRef(this.aircraft.renderOrientation, this.toPoint);
+    FORWARD.rotateByQuaternionToRef(this.aircraft.renderOrientation, this.toPoint);
     return Math.atan2(this.toPoint.x, this.toPoint.z);
   }
 
@@ -1617,10 +1751,12 @@ export class Game {
     this.bindings = effectiveBindings(this.settings);
     this.input.setBindings(this.bindings);
     this.hud.setBindings(this.bindings);
+    this.gamepad.invertPitch = controls.gamepadInvertPitch;
     this.beacons.visible = gameplay.baseLabels;
     const root = document.documentElement;
     if (accessibility.reducedMotion === 'system') delete root.dataset['reducedMotion'];
     else root.dataset['reducedMotion'] = String(accessibility.reducedMotion === 'on');
+    root.style.setProperty('--text-scale', String(TEXT_SCALES[accessibility.textSize]));
     this.applyHudScale();
   }
 
@@ -1681,7 +1817,7 @@ export class Game {
   };
 
   private aimAlongNose(): void {
-    Vector3.Forward().rotateByQuaternionToRef(this.aircraft.renderOrientation, this.worldPoint);
+    FORWARD.rotateByQuaternionToRef(this.aircraft.renderOrientation, this.worldPoint);
     this.mouseFlight.aimAlong(this.worldPoint);
     this.mouseFlight.aimDirection(this.aimDirection);
     this.cameras.snapToTarget(this.aircraft.renderPosition, this.aircraft.renderOrientation, this.aimDirection);
@@ -1690,7 +1826,7 @@ export class Game {
   /** Where the gun streams converge: the convergence distance straight ahead of the nose, on screen. */
   private projectGunsight(): ScreenPoint | null {
     const distance = GUN_SPECS[this.aircraft.spec.id].convergenceDistance;
-    Vector3.Forward().rotateByQuaternionToRef(this.aircraft.renderOrientation, this.worldPoint);
+    FORWARD.rotateByQuaternionToRef(this.aircraft.renderOrientation, this.worldPoint);
     this.worldPoint.scaleInPlace(distance).addInPlace(this.aircraft.renderPosition);
     return this.projectToScreen(this.worldPoint);
   }
@@ -1718,8 +1854,8 @@ export class Game {
       this.markerPoint.set(view.x, view.y + BEACON_CONFIG.labelHeight, view.z);
       const screen = this.projectToScreen(this.markerPoint);
       if (!screen) continue;
-      const captured = view.owner !== view.base.team;
-      const status = view.state === 'open' ? ' · DEFENCELESS' : view.owner === null ? " · NOBODY'S" : captured && view.owner === PLAYER_TEAM ? ' · YOURS' : '';
+      // Whose it is in words as well as colour.
+      const status = view.state === 'open' ? ' · DEFENCELESS' : view.owner === null ? " · NOBODY'S" : view.owner === PLAYER_TEAM ? ' · YOURS' : ' · ENEMY';
       labels.push({
         x: screen.x,
         y: screen.y - 26,
@@ -1728,6 +1864,33 @@ export class Game {
       });
     }
     return labels;
+  }
+
+  /**
+   * Off the screen: where on an ellipse inside the screen's edges (clear of
+   * the corner panels) an arrow should sit to point at `point`, and its
+   * angle. Dead behind you, it points down.
+   */
+  private projectToEdge(point: Vector3, width: number, height: number): { x: number; y: number; angleDeg: number } | null {
+    const camera = this.scene.activeCamera;
+    if (!camera || this.cameras.mode === 'orbit' || this.aircraft.state.crashed) return null;
+    camera.getDirectionToRef(Axis.X, this.cameraRight);
+    camera.getDirectionToRef(Axis.Y, this.cameraUp);
+    point.subtractToRef(camera.globalPosition, this.toPoint);
+    let sx = Vector3.Dot(this.toPoint, this.cameraRight);
+    let sy = -Vector3.Dot(this.toPoint, this.cameraUp);
+    const length = Math.sqrt(sx * sx + sy * sy);
+    if (length < 1e-3) {
+      sx = 0;
+      sy = 1;
+    } else {
+      sx /= length;
+      sy /= length;
+    }
+    const rx = width * OFFSCREEN_ELLIPSE.x;
+    const ry = height * (sy > 0 ? OFFSCREEN_ELLIPSE.down : OFFSCREEN_ELLIPSE.up);
+    const t = 1 / Math.sqrt((sx / rx) ** 2 + (sy / ry) ** 2);
+    return { x: width / 2 + sx * t, y: height / 2 + sy * t, angleDeg: (Math.atan2(sy, sx) * 180) / Math.PI };
   }
 
   private projectToScreen(point: Vector3): ScreenPoint | null {
@@ -1807,6 +1970,12 @@ export class Game {
     const t = this.aircraft.state.telemetry;
     return [
       ['Physics', `${this.loop.measuredStepsPerSecond.toFixed(0)} steps/s, ${this.loop.droppedFrames} dropped`],
+      // CPU per subsystem against the 16.7 ms budget (render = submitting the frame; the GPU runs in parallel).
+      ['CPU / frame', `${this.timings.total.toFixed(2)} of ${FRAME_BUDGET_MS.toFixed(1)} ms (worst ${this.timings.worstFrame.toFixed(1)})`],
+      ['  sim + AI', `${this.timings.average('simulation').toFixed(2)} ms`],
+      ['  visuals', `${this.timings.average('visuals').toFixed(2)} ms`],
+      ['  render', `${this.timings.average('render').toFixed(2)} ms`],
+      ['  HUD', `${this.timings.average('hud').toFixed(2)} ms`],
       ['Camera', this.cameras.mode],
       ['AoA / slip', `${(t.angleOfAttack * RAD_TO_DEG).toFixed(1)}° / ${(t.sideslip * RAD_TO_DEG).toFixed(1)}°`],
       ['CL / CD', `${t.liftCoefficient.toFixed(2)} / ${t.dragCoefficient.toFixed(3)}`],

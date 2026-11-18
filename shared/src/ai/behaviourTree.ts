@@ -90,6 +90,57 @@ export function selector<C>(name: string, children: readonly BtNode<C>[]): BtNod
   };
 }
 
+/**
+ * A condition re-checked every tick, guarding its child: a Sequence of
+ * condition + action resumes at the RUNNING action and so would never look
+ * at the condition again (an emergency that has passed would carry on for
+ * ever). When the test fails, the child is reset and the guard fails, so the
+ * parent selector moves on.
+ */
+export function guard<C>(name: string, test: (context: C) => boolean, child: BtNode<C>): BtNode<C> {
+  return {
+    name,
+    tick(context, dt) {
+      if (!test(context)) {
+        child.reset();
+        return Status.Failure;
+      }
+      return child.tick(context, dt);
+    },
+    reset: () => child.reset(),
+  };
+}
+
+/**
+ * Time-limits its child: once it has been RUNNING for longer than `seconds`
+ * without a break, it is reset and the timeout fails (`onTimeout` can clear
+ * what the child left on the blackboard). Keeps a pilot from being stuck in
+ * a branch that can't finish. `clock` reads the time from the context.
+ */
+export function timeout<C>(seconds: number, clock: (context: C) => number, child: BtNode<C>, onTimeout?: (context: C) => void): BtNode<C> {
+  let startedAt: number | null = null;
+  return {
+    name: `timeout ${child.name}`,
+    tick(context, dt) {
+      const now = clock(context);
+      startedAt ??= now;
+      if (now - startedAt > seconds) {
+        startedAt = null;
+        child.reset();
+        onTimeout?.(context);
+        return Status.Failure;
+      }
+      const status = child.tick(context, dt);
+      if (status !== Status.Running) startedAt = null;
+      return status;
+    },
+    reset() {
+      startedAt = null;
+      child.reset();
+    },
+  };
+}
+
 /** Swaps SUCCESS and FAILURE; RUNNING passes through. */
 export function inverter<C>(child: BtNode<C>): BtNode<C> {
   return {
