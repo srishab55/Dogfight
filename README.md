@@ -233,6 +233,27 @@ Hobby plan limits: non-commercial use only, and about 100 GB of transfer a
 month. It also can't host the Phase 5 multiplayer server, which needs a
 process that stays running with open WebSocket connections.
 
+**Visitor analytics (Vercel Web Analytics).** The deployed game reports
+anonymous visits ([client/src/core/analytics.ts](client/src/core/analytics.ts),
+the MIT-licensed `@vercel/analytics` package). To see them, turn it on once:
+in the Vercel dashboard open the project → **Analytics** → **Enable**, then
+deploy again (any push to `main`). The Analytics tab then shows visitors and
+page views over time, and the countries, referrers, devices, browsers and
+operating systems they came from. It is anonymous by design: no cookies, no
+IP addresses stored, visitors counted by a hash of the request that Vercel
+discards after 24 hours, so it tells you how many people played and from
+where, not who they are. Only the deployed build reports: the dev server, the
+automated tests and a local `vite preview` never load it. Until Analytics is
+enabled, the page's request for `/_vercel/insights/script.js` simply gets a 404.
+
+Hobby limits: 50,000 events a month across all your projects (each visit to
+the game is one page view), one month of history, no custom events (those
+need the paid Pro plan); past the limit, collection pauses after a three-day
+grace period (nothing is billed). Self-hosted alternative, also free and
+open source: [Umami](https://umami.is) (MIT; Node and PostgreSQL) or
+[GoatCounter](https://www.goatcounter.com) (EUPL), with their script tag
+added to `client/index.html`.
+
 **Self-hosted alternative.** Copy `client/dist/` to any machine running a
 static web server, such as Caddy (`caddy file-server --root client/dist`) or
 nginx. GitHub Pages and Cloudflare Pages are also free. From Phase 5, the

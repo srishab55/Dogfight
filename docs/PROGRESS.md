@@ -2,11 +2,16 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** bigger targets and brakes that close the throttle (your feedback). Before that, the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
+**Current status:** visitor analytics for the Vercel site (your request: turn it on in the Vercel dashboard, see README "Deploying"). Before that, bigger targets and brakes that close the throttle (your feedback). Before that, the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
 AI pilots on a smaller map, island airfields to take, carriers as home bases,
 a timer, and the side holding more bases wins. Auto-land is faster and
 terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
 (FLIGHT_TEST.md cards 41 and 42) and confirmation.
+
+## Visitor analytics on Vercel ✅ (your request, 2026-11-18)
+
+- ✅ Vercel Web Analytics (`@vercel/analytics` 2.0.1, MIT) started from `main.ts` (`core/analytics.ts`), only in the production build on a real host: visitors, page views, countries, referrers, devices, browsers, operating systems; anonymous (no cookies or IPs). Needs one switch in the Vercel dashboard (project → Analytics → Enable) and a deploy
+- Verified: typecheck and build; the production build served locally loads nothing on `localhost`, and on another hostname it requests `/_vercel/insights/script.js` (served by Vercel once enabled); the game runs either way. No new npm audit findings (the 5 existing ones are in dev tooling)
 
 ## Bigger targets; brakes close the throttle ✅ (your feedback, 2026-11-18)
 

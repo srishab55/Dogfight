@@ -10,6 +10,7 @@ import '@fontsource/jetbrains-mono/latin-500.css';
 import './styles.css';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { Game } from './core/Game';
+import { startAnalytics } from './core/analytics';
 import { showFatalError } from './ui/fatalError';
 
 declare global {
@@ -20,6 +21,8 @@ declare global {
 }
 
 function bootstrap(): void {
+  // Visitor counts on the deployed site (counted even if WebGL then fails: worth knowing).
+  startAnalytics();
   const canvas = document.getElementById('render-canvas');
   const uiRoot = document.getElementById('ui-root');
   if (!(canvas instanceof HTMLCanvasElement) || !uiRoot) {
