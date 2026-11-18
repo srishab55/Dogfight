@@ -7,10 +7,12 @@
  * closes the browser tab on Windows and Linux, and pages can't block it.
  * Guns are on Space; wheel brakes on B (IL-2's key). Bombs arrive with the rest of Phase 4, on another key. The mouse can
  * fly the aircraft too (MOUSE_FLIGHT_CONFIG below). X opens and closes the
- * dive brakes (only the Dive Bomber has them).
- * The Settings screen (Phase 8) will let players override these defaults.
+ * dive brakes (only the Dive Bomber has them). Everything else (aircraft,
+ * paint, base, how to start, steering, mouse, sound) is set in the hangar
+ * (Esc), so the flight keys stay few.
  */
 export const KEY_BINDINGS = {
+  // ── In flight ──
   pitchUp: ['KeyW'],
   pitchDown: ['KeyS'],
   rollLeft: ['KeyA'],
@@ -25,14 +27,15 @@ export const KEY_BINDINGS = {
   toggleDiveBrakes: ['KeyX'],
   fireGuns: ['Space'],
   cycleCamera: ['KeyC'],
-  respawn: ['KeyR'],
-  airStart: ['KeyT'],
-  landingPractice: ['KeyL'],
   autoLand: ['KeyP'],
   toggleMap: ['KeyN'],
-  chooseBase: ['KeyJ'],
+  /** The hangar: aircraft, paint, base, start, settings and the controls. */
+  openHangar: ['Escape'],
+  toggleDebugOverlay: ['Backquote'],
+  // ── In the hangar (shortcuts for its buttons) ──
   pickerPrevious: ['ArrowLeft'],
   pickerNext: ['ArrowRight'],
+  /** FLY; after a crash, also flies again straight from the crash screen. */
   pickerConfirm: ['Enter', 'NumpadEnter'],
   selectInterceptor: ['Digit1'],
   selectFighterBomber: ['Digit2'],
@@ -41,13 +44,6 @@ export const KEY_BINDINGS = {
   selectDiveBomber: ['Digit5'],
   selectTriplane: ['Digit6'],
   selectBiplane: ['Digit7'],
-  cyclePaint: ['KeyO'],
-  mouseSensitivityDown: ['BracketLeft'],
-  mouseSensitivityUp: ['BracketRight'],
-  toggleMute: ['KeyM'],
-  toggleSteering: ['KeyK'],
-  toggleControlsHelp: ['KeyH'],
-  toggleDebugOverlay: ['Backquote'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type InputAction = keyof typeof KEY_BINDINGS;
@@ -117,28 +113,18 @@ export const MOUSE_FLIGHT_CONFIG = {
   },
 } as const;
 
-/** Rows of the on-screen controls reference (H). Generated from the bindings, so it stays correct when keys change. */
+/** The flight keys, as the hangar lists them. Generated from the bindings, so it stays correct when keys change. */
 export const CONTROLS_HINT_ROWS: ReadonlyArray<{ readonly actions: readonly InputAction[]; readonly label: string }> = [
   { actions: ['pitchUp', 'pitchDown'], label: 'Pitch up / down' },
-  { actions: ['rollLeft', 'rollRight'], label: 'Turn left / right (banks and levels itself)' },
-  { actions: ['toggleSteering'], label: 'Steering: easy turns / direct roll' },
-  { actions: ['yawLeft', 'yawRight'], label: 'Rudder left / right (steers on the ground)' },
-  { actions: ['throttleUp', 'throttleDown'], label: 'Throttle up / down' },
-  { actions: ['brake'], label: 'Brakes (hold): wheel brakes on the ground, air brakes in the air' },
+  { actions: ['rollLeft', 'rollRight'], label: 'Turn left / right (easy steering: it levels itself)' },
+  { actions: ['yawLeft', 'yawRight'], label: 'Rudder (steers on the ground)' },
+  { actions: ['throttleUp', 'throttleDown'], label: 'Throttle' },
+  { actions: ['brake'], label: 'Brakes (hold): wheels on the ground, air brakes in the air' },
   { actions: ['flapsDown', 'flapsUp'], label: 'Flaps down / up a notch' },
-  { actions: ['toggleDiveBrakes'], label: 'Dive brakes stay out / in (Dive Bomber)' },
-  { actions: ['fireGuns'], label: 'Fire guns (hold; limited ammo, watch the heat)' },
+  { actions: ['fireGuns'], label: 'Fire guns (hold)' },
+  { actions: ['toggleDiveBrakes'], label: 'Dive brakes (Dive Bomber)' },
   { actions: ['cycleCamera'], label: 'Camera: chase / cockpit / orbit' },
-  { actions: ['respawn'], label: 'Respawn at your base (the one chosen with J; at first your airfield or carrier)' },
-  { actions: ['chooseBase'], label: 'Take off from another of your bases, captured ones too (when stopped or crashed)' },
-  { actions: ['airStart'], label: 'Air start (800 m, for testing)' },
-  { actions: ['landingPractice'], label: 'Landing practice (carrier aircraft: the carrier)' },
-  { actions: ['autoLand'], label: 'Auto-land at the nearest base (any flight key takes over)' },
+  { actions: ['autoLand'], label: 'Auto-land at the nearest base' },
   { actions: ['toggleMap'], label: 'Map: corner / big / off' },
-  { actions: ['selectInterceptor', 'selectFighterBomber', 'selectHeavyBomber', 'selectNavalFighter', 'selectDiveBomber', 'selectTriplane', 'selectBiplane'], label: 'Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber / Triplane / Biplane' },
-  { actions: ['cyclePaint'], label: 'Paint: next colour scheme (remembered for each type)' },
-  { actions: ['mouseSensitivityDown', 'mouseSensitivityUp'], label: 'Mouse sensitivity down / up' },
-  { actions: ['toggleMute'], label: 'Sound on / off' },
-  { actions: ['toggleControlsHelp'], label: 'Hide this help' },
-  { actions: ['toggleDebugOverlay'], label: 'Debug stats' },
+  { actions: ['openHangar'], label: 'Hangar (pauses the game)' },
 ];

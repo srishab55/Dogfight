@@ -2,10 +2,10 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Two old-school aircraft (Triplane, Biplane), a new
-look for the Interceptor, paint schemes, and base selection on a map are
-in (your request). Remaining in Phase 4: bombs. Waiting for your test
-(FLIGHT_TEST.md cards 36-38) and confirmation.
+**Current status:** The hangar is in (your request): aircraft, paint,
+base, start and settings are chosen there, and the flight keys are down to
+the flying ones. Remaining in Phase 4: bombs. Waiting for your test
+(FLIGHT_TEST.md card 39) and confirmation.
 
 ## Extras added along the way
 
@@ -28,6 +28,14 @@ in (your request). Remaining in Phase 4: bombs. Waiting for your test
 - ✅ Limited ammunition per class; OUT OF AMMO warning; rearm and repair by stopping at idle on a friendly airfield or carrier (6 s). 8 tests
 - ✅ HUD: AMMO count and bar, BASE distance and bearing (ON BASE), rearming progress, catapult and hook status
 - Verified: typecheck, 258 tests (1 skipped by design), production build, and headless Chrome: spawn, island overview, coast, catapult launch, hands-off carrier landing (caught a wire, 2.0 m/s GOOD), out of ammo then rearmed on the deck, every new model, firing over the sea. 60 FPS at 1280x720, 52–71 draw calls, no console errors
+
+## The hangar ✅ (your request, 2026-11-18)
+
+- ✅ A hangar screen at the start of the game and on **Esc** (it pauses the game): the seven aircraft with their figures (top speed, stall speed, climb, turn, guns, armour, gear, carriers) and a line on what each is for; paint swatches; the base map (click a base, or ← →); the start (runway, in the air, landing practice); settings (steering, mouse sensitivity, sound); the flight controls. FLY (Enter) or RESUME (Esc)
+- ✅ Your aircraft on show behind the panels, the orbit camera slowly circling it (drag to look round). Stopped or crashed, choosing an aircraft or base parks it there to look at; during a flight, looking at another type is a preview that leaves the flight alone
+- ✅ Flight keys cut to the flying ones: W/S, A/D, Q/E, ↑/↓, B, F/V, Space, X, C, P, N and Esc. R, T, L, 1-7, O, J, K, M, [ ] and H moved into the hangar (1-7, ← → and Enter stay as hangar shortcuts). The in-flight help list became one line: "Esc · hangar & controls". After a crash, Enter flies again
+- ✅ Esc while flying with the mouse (which the browser uses to let go of it) opens the hangar too; the hangar's choices are remembered between sessions (aircraft, base, start)
+- Verified: 441 tests (1 skipped by design), typecheck, build, and headless Chrome: the hangar at load; choosing the Triplane, a paint and the carrier (it parked on the catapult); starting in the air; the old keys doing nothing in flight; Esc pausing (the aircraft didn't move) with RESUME; previewing the Heavy Bomber without touching the flight (its base switched to the airfield); settings applied and remembered; Enter after a crash; 60 FPS, no console errors
 
 ## Old-school aircraft, paint, base selection on a map ✅ (your request, 2026-11-18)
 

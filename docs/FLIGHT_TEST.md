@@ -36,8 +36,13 @@ and **H** to hide the controls list.
 | Space | Fire guns (hold) |
 | Mouse | Click the view: fly with the mouse (aim circle). Esc releases |
 | C | Camera: chase → cockpit → orbit |
-| R | Respawn on the runway · **T** air start at 800 m · **L** landing practice |
-| 1 / 2 / 3 | Interceptor / Fighter-Bomber / Heavy Bomber (respawns) |
+| Esc | The hangar (pauses): aircraft (1 – 7), paint, base, start (runway, air start, landing practice), settings. FLY (Enter) |
+
+**Since the hangar arrived (2026-11-18):** where a card below says **R**
+(respawn), **T** (air start), **L** (landing practice), **1 – 7** (aircraft),
+**O** (paint), **J** (base), **K** (steering), **M** (sound), **[ ]** (mouse)
+or **H** (help), do it in the hangar instead (**Esc**), then FLY. After a
+crash, **Enter** flies again with the same choices.
 
 Keys ramp the controls: a **tap** is a small correction, a **hold** is full
 deflection (about 0.3 s to reach it). Fly with taps.
@@ -473,6 +478,21 @@ the yellow Triplane; the green Biplane. **O** shows "PAINT · ..." and repaints
 the airframe; the blue markings stay. Switching away and back keeps your choice.
 **Pass:** The types are easy to tell apart, and the paint changes.
 
+## Card 39: The hangar
+
+**Do:** Load the game. Click through the aircraft, a paint, a base on the map,
+and each start, then FLY. In the air, press **Esc**, look at another
+aircraft, then **Esc** again. Press **Esc**, change the steering, mouse and
+sound settings, and RESUME. Crash, then press **Enter**.
+**Expect:** The game opens in the hangar with your aircraft on show, the
+camera circling it. Choosing an aircraft or base (while stopped) moves the
+parked aircraft there; the figures change with the type; paint changes it at
+once. FLY starts as chosen. Esc in flight pauses (nothing moves) and offers
+RESUME; looking at another type doesn't touch your flight. The settings take
+effect and are remembered. On the crash screen Enter flies again. In flight
+only the flying keys work (R, T, L, 1-7, O, J, K, M and H do nothing).
+**Pass:** Setting up is all in the hangar, and flying needs only the flight keys.
+
 ## Card 34: Retractable gear
 
 **Do:** Take off from the airfield. Fly around, then come back and land by hand.
@@ -514,4 +534,5 @@ ALT, AoA, G), plus the debug overlay if possible.
 | 32 | `bases.test.ts`: capture rules · nothing rebuilds itself · repaired for the new owner · the repaired gun fires at Red only · the radar shot from the runway, then captured |
 | 35 | headless Chrome (client only): labels, map modes, amber when defenceless |
 | 36 | `bases.test.ts`: where you can start from · `carrier.test.ts`: land fighters on the catapult and wires |
+| 39 | headless Chrome (client only): hangar at load, choices, FLY, Esc pause and RESUME, preview, settings, Enter after a crash, old keys inert |
 | 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

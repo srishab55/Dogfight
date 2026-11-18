@@ -29,6 +29,7 @@ export class MiniMap {
   private mode: MapMode;
   private sinceRedraw = Infinity;
   private time = 0;
+  private suppressed = false;
 
   constructor(parent: HTMLElement, background: HTMLCanvasElement) {
     this.root = document.createElement('div');
@@ -45,6 +46,12 @@ export class MiniMap {
     this.background = background;
     this.mode = readMode();
     this.applyMode();
+  }
+
+  /** Hidden while the hangar is open (it has its own map). */
+  setSuppressed(suppressed: boolean): void {
+    this.suppressed = suppressed;
+    this.root.hidden = suppressed || this.mode === 'off';
   }
 
   /** Small → large → off → small. Returns the new mode, and remembers it. */
@@ -72,7 +79,7 @@ export class MiniMap {
   }
 
   private applyMode(): void {
-    this.root.hidden = this.mode === 'off';
+    this.root.hidden = this.suppressed || this.mode === 'off';
     this.root.dataset['mode'] = this.mode;
     const css = this.mode === 'large' ? MINIMAP_CONFIG.largeSize : MINIMAP_CONFIG.smallSize;
     const pixels = Math.round(css * Math.min(2, window.devicePixelRatio || 1));

@@ -59,6 +59,8 @@ None known.
 | L58 | Taking off from another base (J) moves you there at once in a fresh, rearmed aircraft, rather than you flying there; it's offered only when stopped or crashed | Quick relocation | By design (your request) |
 | L59 | The Triplane and Biplane have tricycle gear like every type (history: tail-draggers), and the Triplane has an invisible "flap" lever that adds lift | Easier ground handling and landings | By design (D29) |
 | L60 | The new types share the fighters' guns and hit model; the Fighter-Bomber's bombs are only to look at | No bombs yet | Phase 4 bombs |
+| L61 | The hangar pauses the game: fine on your own, but a shared world can't stop | Nothing yet | Phase 5 (the hangar won't pause; you leave your aircraft safe at a base, or it keeps flying) |
+| L62 | With mouse flight, the browser uses the first Esc to let go of the mouse; the game opens the hangar on that same press | One press | By design |
 | L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
 | L49 | The strafing aim point and the mouse drop correction assume a round at muzzle velocity with no drag; the wing guns converge at 300 m | Small errors beyond about 800 m | Fine at strafing range |

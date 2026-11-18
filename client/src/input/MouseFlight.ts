@@ -24,6 +24,8 @@ export class MouseFlight {
   captureAllowed = true;
   /** Called when mouse flight starts or stops (e.g. to aim along the nose, show a message). */
   onChange: (active: boolean) => void = () => {};
+  /** The player let go of the mouse (Esc) while flying with it: the game opens the hangar. */
+  onUserRelease: () => void = () => {};
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     canvas.addEventListener('click', this.handleClick);
@@ -37,6 +39,11 @@ export class MouseFlight {
 
   get sensitivity(): number {
     return this.sensitivityDegPerPixel;
+  }
+
+  /** Sets the sensitivity (deg per pixel), clamped to the configured range, and remembers it. */
+  setSensitivity(degreesPerPixel: number): number {
+    return this.adjustSensitivity(degreesPerPixel / this.sensitivityDegPerPixel);
   }
 
   /** Scales sensitivity (e.g. 1.25 up, 0.8 down), clamped to the configured range, and remembers it. */
@@ -94,7 +101,11 @@ export class MouseFlight {
   };
 
   private readonly handleLockChange = (): void => {
-    this.setEnabled(document.pointerLockElement === this.canvas);
+    const wasEnabled = this.enabled;
+    const locked = document.pointerLockElement === this.canvas;
+    this.setEnabled(locked);
+    // Lost without release() being called: the player pressed Esc.
+    if (wasEnabled && !locked) this.onUserRelease();
   };
 
   private readonly handleMouseMove = (event: MouseEvent): void => {

@@ -79,6 +79,17 @@ export class AudioSystem {
     return this.muted;
   }
 
+  setMuted(muted: boolean): void {
+    if (muted !== this.muted) this.toggleMute();
+  }
+
+  /** Silences everything while the game is paused (the hangar), and picks up again after. */
+  setPaused(paused: boolean): void {
+    if (!this.ctx) return;
+    if (paused && this.ctx.state === 'running') void this.ctx.suspend();
+    else if (!paused && this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
   /** Mutes or unmutes everything. Returns whether it's now muted; the choice is remembered. */
   toggleMute(): boolean {
     this.muted = !this.muted;

@@ -68,32 +68,35 @@ can break each other (fix: stop both, run `npm run dev` again).
 
 ## Controls
 
+**The hangar** opens when the game starts, and with **Esc** at any time (the
+game pauses). It is where you set everything up, so the flight keys stay few:
+
+- **Aircraft**: the seven types (shortcuts **1 – 7**), each with its figures (top and stall speed, climb, turn, guns, armour, gear, carriers). Your aircraft is on show behind the panels, the camera slowly circling it (drag to look round).
+- **Paint**: ten schemes, remembered for each type; your team colour stays on the markings.
+- **Start from**: a map of your bases, captured ones too (click one, or **← →**). Every type but the Heavy Bomber can start on a carrier's catapult.
+- **Start**: on the runway, in the air (800 m), or on final for landing practice.
+- **Settings**: steering (easy turns or direct roll), mouse sensitivity, sound.
+- **FLY** (**Enter**) starts a flight; **RESUME** (**Esc**) carries on the one you paused. After a crash, **Enter** flies again straight away.
+
+In flight:
+
 | Key | Action |
 |---|---|
 | **W / S** | Pitch up / down |
-| **A / D** | Turn left / right: the aircraft banks into the turn and levels itself when you let go (**K** switches to direct roll) |
+| **A / D** | Turn left / right: the aircraft banks into the turn and levels itself when you let go (direct roll can be chosen in the hangar) |
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
 | **↑ / ↓** | Throttle up / down |
 | **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air |
 | **F / V** | Flaps down / up a notch (UP → TAKE-OFF → LANDING) |
-| **X** | Lock the Dive Bomber's dive brakes out / in |
 | **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
-| **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** releases. |
+| **X** | Lock the Dive Bomber's dive brakes out / in |
 | **C** | Camera: chase → cockpit → orbit |
-| **R** | Respawn at your base: the one you chose with **J**, at first your airfield (or the carrier's catapult) |
-| **J** | Stopped on the ground, or crashed: a map of your bases, captured ones too. Click one (or **← →**), then click it again, **TAKE OFF HERE** or **Enter**. Every type but the Heavy Bomber can start on a carrier's catapult |
-| **T** | Air start at 800 m (for testing manoeuvres) |
-| **L** | Landing practice: on a 3° final approach with flaps down (carrier aircraft: to the carrier) |
 | **P** | Auto-land at the nearest base within 10 km (any team; every type but the Heavy Bomber can land on a carrier). The HUD offers it within 5 km. **P** or any flight key takes over |
 | **N** | Map: corner → big → off (remembered) |
-| **1 – 7** | Interceptor / Fighter-Bomber / Heavy Bomber / Naval Fighter / Dive Bomber / Triplane / Biplane |
-| **O** | Paint: the next colour scheme for the aircraft you're flying (remembered for each type; your team colour stays on the markings) |
-| **[ / ]** | Mouse sensitivity down / up (remembered) |
-| **K** | Steering: easy turns (default) / direct roll |
-| **M** | Sound on / off (sound starts with your first key press or click) |
-| **H** | Hide / show the controls list |
+| **Esc** | The hangar (pauses the game) |
+| **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** lets go of the mouse and opens the hangar |
+| Mouse drag / wheel | Look round / zoom (orbit camera and the hangar) |
 | **`** | Debug stats (shown by default in dev) |
-| Mouse drag / wheel | Rotate / zoom (orbit camera) |
 
 Keys ramp the control surfaces smoothly: tap for small corrections, hold for
 full deflection. In mouse flight, holding any flight key overrides the mouse

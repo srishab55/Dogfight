@@ -22,17 +22,28 @@ export class PaintChoices {
     return PAINT_SCHEMES.find((s) => s.id === id) ?? PAINT_SCHEMES[0];
   }
 
+  /** Sets a type's scheme and remembers it. */
+  set(classId: AircraftClassId, id: PaintId): PaintScheme {
+    this.chosen[classId] = id;
+    this.save();
+    return this.schemeFor(classId);
+  }
+
   /** Moves a type on to the next scheme and remembers it. */
   next(classId: AircraftClassId): PaintScheme {
     const current = PAINT_SCHEMES.indexOf(this.schemeFor(classId));
     const scheme = PAINT_SCHEMES[(current + 1) % PAINT_SCHEMES.length] ?? PAINT_SCHEMES[0];
     this.chosen[classId] = scheme.id;
+    this.save();
+    return scheme;
+  }
+
+  private save(): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.chosen));
     } catch {
       // Storage can be unavailable; the choice just won't persist.
     }
-    return scheme;
   }
 }
 

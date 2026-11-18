@@ -244,10 +244,9 @@ export class FlightHud {
 
     this.crashPanel = element('div', 'hud-crash');
     this.crashReason = element('div', 'hud-crash-reason');
-    const respawnKey = KEY_BINDINGS.respawn.map(formatKeyCode).join(' / ');
     this.crashTitle = element('div', 'hud-crash-title', 'CRASHED');
-    const chooseKey = KEY_BINDINGS.chooseBase.map(formatKeyCode).join(' / ');
-    this.crashPanel.append(this.crashTitle, this.crashReason, element('div', 'hud-crash-hint', `Press ${respawnKey} to respawn · ${chooseKey} to choose a base`));
+    const hangarKey = KEY_BINDINGS.openHangar.map(formatKeyCode).join(' / ');
+    this.crashPanel.append(this.crashTitle, this.crashReason, element('div', 'hud-crash-hint', `Enter: fly again · ${hangarKey}: hangar (another aircraft, paint or base)`));
     this.damageFlash = element('div', 'hud-damage-flash');
     this.damageFlash.hidden = true;
 
@@ -287,6 +286,11 @@ export class FlightHud {
   }
 
   /** A short message in the centre-bottom of the screen, e.g. a briefing or a touchdown grade. */
+  /** Hidden while the hangar is open. */
+  setVisible(visible: boolean): void {
+    this.root.hidden = !visible;
+  }
+
   showMessage(text: string, tone: 'good' | 'ok' | 'bad', seconds: number): void {
     this.touchdownMessage.textContent = text;
     this.touchdownMessage.dataset['tone'] = tone;

@@ -59,6 +59,8 @@ export class PlayerAircraft {
   private readonly models: Readonly<Record<AirframeId, AircraftVisual>>;
   /** The base you chose to take off from (J), or null: the class's usual home. */
   private chosenBase: BaseDefinition | null = null;
+  /** A type shown in the hangar in place of the one being flown, or null. */
+  private previewId: AircraftClassId | null = null;
 
   /** Interpolated pose for this frame, read by the cameras and shadows. */
   readonly renderPosition = new Vector3();
@@ -94,9 +96,28 @@ export class PlayerAircraft {
     return scheme.name;
   }
 
-  /** The model of the aircraft being flown. */
+  /** The model shown: the aircraft being flown, or another type being looked at in the hangar. */
   get visual(): AircraftVisual {
-    return this.models[this.spec.airframe.id];
+    return this.models[(this.previewId ? AIRCRAFT_CLASSES[this.previewId] : this.spec).airframe.id];
+  }
+
+  /**
+   * The hangar, during a flight: show another type's model (in its paint)
+   * where the aircraft is, without touching the flight. Null shows the
+   * aircraft being flown again.
+   */
+  setPreview(classId: AircraftClassId | null): void {
+    this.previewId = classId === this.spec.id ? null : classId;
+    const shown = this.previewId ? AIRCRAFT_CLASSES[this.previewId] : this.spec;
+    for (const [id, model] of Object.entries(this.models)) model.setEnabled(id === shown.airframe.id);
+    this.visual.setScale(shown.airframeScale);
+    this.visual.setPaint(this.paint.schemeFor(shown.id).body);
+    this.updateVisual(1, 0);
+  }
+
+  /** Repaints the model on show with its type's chosen scheme. */
+  refreshPaint(): void {
+    this.visual.setPaint(this.paint.schemeFor(this.previewId ?? this.spec.id).body);
   }
 
   /** Every model's shadow-casting meshes (all four types), for the shadow generator. */
@@ -220,6 +241,7 @@ export class PlayerAircraft {
   }
 
   private applyClass(classId: AircraftClassId): void {
+    this.previewId = null;
     this.spec = AIRCRAFT_CLASSES[classId];
     this.performance = computePerformance(this.spec);
     for (const [id, model] of Object.entries(this.models)) model.setEnabled(id === this.spec.airframe.id);

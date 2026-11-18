@@ -30,6 +30,9 @@ export class CameraManager {
   /** Mouse-controlled camera for inspecting the aircraft: drag to orbit, scroll to zoom. */
   private readonly orbit: ArcRotateCamera;
   private currentMode: CameraMode = 'chase';
+  /** The hangar's slowly circling view is on, and the mode to return to after it. */
+  private showcase = false;
+  private modeBeforeShowcase: CameraMode = 'chase';
   private readonly effects = new CameraEffects();
 
   constructor(
@@ -75,6 +78,32 @@ export class CameraManager {
     this.currentMode = mode;
     if (mode === 'orbit') this.orbit.attachControl(true);
     this.selectActiveCamera(null);
+  }
+
+  /**
+   * The hangar's view: the orbit camera, slowly circling the aircraft (drag
+   * to look round; it carries on circling when you let go). Off: back to the
+   * camera used before.
+   */
+  setShowcase(on: boolean, spec?: AircraftClassSpec): void {
+    if (on) {
+      if (!this.showcase) this.modeBeforeShowcase = this.currentMode;
+      this.showcase = true;
+      this.setMode('orbit');
+      this.orbit.useAutoRotationBehavior = true;
+      const rotation = this.orbit.autoRotationBehavior;
+      if (rotation) {
+        rotation.idleRotationSpeed = 0.18;
+        rotation.idleRotationWaitTime = 2_500;
+        rotation.idleRotationSpinupTime = 1_500;
+      }
+      if (spec) this.orbit.radius = 2.1 * wingSpan(spec) + 6;
+      this.orbit.beta = degreesToRadians(72);
+    } else if (this.showcase) {
+      this.showcase = false;
+      this.orbit.useAutoRotationBehavior = false;
+      this.setMode(this.modeBeforeShowcase);
+    }
   }
 
   /**
