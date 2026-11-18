@@ -95,3 +95,18 @@ export const PRACTICE_TARGET_CONFIG = {
 export const HIT_ASSIST_CONFIG = {
   nearMissMetres: 3,
 } as const;
+
+/**
+ * Target visibility (an arcade aid, your request: aircraft were too small to
+ * aim at). An aircraft in the air far enough off to look tiny is drawn
+ * larger: never narrower than `minApparentDeg` of the view, up to
+ * `maxScale` times its real size. Close up (a fighter within about 135 m)
+ * and on the ground it is its real size, blending in over the first
+ * `fullHeight` metres above the ground. A human pilot's rounds hit the
+ * larger shape they see (combat/visibility.ts); the AI's use real sizes.
+ */
+export const TARGET_VISIBILITY_CONFIG = {
+  minApparentDeg: 4.5,
+  maxScale: 3,
+  fullHeight: 30,
+} as const;

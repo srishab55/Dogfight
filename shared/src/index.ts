@@ -95,12 +95,13 @@ export { STEERING_ASSIST_CONFIG, createSteeringAssistMemory, steerWithTurnInput,
 export { AUTO_LAND_CONFIG, autoLandBaseFor, planAutoLand, stepAutoLand, type AutoLand, type AutoLandPhase, autoLandCost, chooseAutoLandBase, type AutoLandPreferences } from './flight/autoLand';
 export { LANDING_GEAR_CONFIG, gearLocked, stepLandingGear } from './flight/landingGear';
 
-export { GUN_SPECS, PRACTICE_TARGET_CONFIG, SERVICE_CONFIG, type GunSpec, HIT_ASSIST_CONFIG } from './config/weapons';
+export { GUN_SPECS, PRACTICE_TARGET_CONFIG, SERVICE_CONFIG, type GunSpec, HIT_ASSIST_CONFIG, TARGET_VISIBILITY_CONFIG } from './config/weapons';
+export { enlargeBlend, shownScale, visibilityScale } from './combat/visibility';
 export { createGunState, fullAmmo, gunMounts, hashToUnit, stepGuns, type GunState } from './combat/guns';
-export { AA_GUN_CONFIG, AIRCRAFT_HIT_SHAPE_CONFIG, BASE_STRUCTURE_CONFIG, CAPTURE_CONFIG, CARRIER_DAMAGE_CONFIG, BASE_LAYOUT, PARKED_AIRCRAFT_CONFIG } from './config/targets';
+export { AA_GUN_CONFIG, AIRCRAFT_HIT_SHAPE_CONFIG, BASE_STRUCTURE_CONFIG, BASE_UNIT_SCALE, CAPTURE_CONFIG, CARRIER_DAMAGE_CONFIG, BASE_LAYOUT, PARKED_AIRCRAFT_CONFIG } from './config/targets';
 export { airStartBases, basesHeld, createBaseControls, startingBases, stepBaseControls, type BaseControl, type BaseEvent, type Capturer } from './combat/baseControl';
 export { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './combat/antiAircraft';
-export { airframeHitSpheres, placeHitSpheres, type HitSphere, type PlacedSphere } from './combat/hitShapes';
+export { airframeHitSpheres, placeHitSpheres, placedSphere, type HitSphere, type PlacedSphere } from './combat/hitShapes';
 export { createCarrierStatuses, type CarrierStatus, type CarrierStatusMap } from './world/carrierStatus';
 export { createServiceStatus, needsService, stepService, type ServiceEvent, type ServiceStatus } from './combat/service';
 export { ProjectilePool, segmentSphereIntersection, teamCode, type ImpactListener, type SphereTarget } from './combat/projectiles';

@@ -61,6 +61,8 @@ export function stepGuns(
   team = -1,
   /** Near-miss allowance against aircraft for these rounds (m). */
   nearMiss = 0,
+  /** These rounds hit aircraft at the size the shooter sees them (target visibility: human pilots). */
+  enlargedTargets = false,
 ): number {
   const mounts = gunMounts(spec);
   const interval = 1 / (gun.roundsPerSecondPerGun * mounts.length);
@@ -72,7 +74,7 @@ export function stepGuns(
     guns.fireTimer = Math.min(guns.fireTimer, interval) + dt;
     while (guns.fireTimer >= interval && guns.ammo > 0) {
       guns.fireTimer -= interval;
-      fireRound(guns, aircraft, spec, gun, mounts, pool, owner, team, nearMiss);
+      fireRound(guns, aircraft, spec, gun, mounts, pool, owner, team, nearMiss, enlargedTargets);
       guns.ammo--;
       fired++;
     }
@@ -97,6 +99,7 @@ function fireRound(
   owner: number,
   team: number,
   nearMiss: number,
+  enlargedTargets: boolean,
 ): void {
   const m = mounts[guns.nextGun % mounts.length];
   guns.nextGun = (guns.nextGun + 1) % mounts.length;
@@ -127,7 +130,7 @@ function fireRound(
     aircraft.velocity.y + direction.y * gun.muzzleVelocity,
     aircraft.velocity.z + direction.z * gun.muzzleVelocity,
   );
-  pool.spawn(muzzle, velocity, gun.projectileLifetime, gun.damagePerRound, owner, team, nearMiss);
+  pool.spawn(muzzle, velocity, gun.projectileLifetime, gun.damagePerRound, owner, team, nearMiss, enlargedTargets ? gun.muzzleVelocity : 0);
   guns.roundsFired++;
 }
 

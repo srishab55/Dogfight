@@ -47,6 +47,7 @@ import {
   chooseAutoLandBase,
   leadDirection,
   roundsWouldHit,
+  enlargeBlend,
   HIT_ASSIST_CONFIG,
   type AutoLandPreferences,
   neutralControls,
@@ -371,7 +372,7 @@ export class Game {
     this.aiViews = new AiAircraftViews(this.scene, this.fireAndSmoke, (meshes) => this.environment.addShadowCasters(meshes), (x, y, z) => {
       const ear = this.scene.activeCamera?.globalPosition ?? this.aircraft.renderPosition;
       this.audio.playAt('explosion', { x, y, z }, ear, AUDIO_CONFIG.explosionVolume, 1);
-    });
+    }, this.ground);
     this.aiForce = this.newSquadron();
     this.applySettings();
     // Start at the main menu, the aircraft parked at the remembered base if it's still yours.
@@ -442,8 +443,8 @@ export class Game {
       this.aiClock += dt;
       this.aiForce.fly(this.aiWorldFor(this.aiClock), dt);
       this.shooters.length = 0;
-      // Your rounds count from a few metres off an enemy aircraft (aim assist; the AI has none).
-      this.shooters.push({ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire, nearMiss: HIT_ASSIST_CONFIG.nearMissMetres }, ...this.aiForce.shooters());
+      // Your rounds count from a few metres off an enemy aircraft, and hit it at the size it's drawn (aim assists; the AI has neither).
+      this.shooters.push({ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire, nearMiss: HIT_ASSIST_CONFIG.nearMissMetres, enlargedTargets: true }, ...this.aiForce.shooters());
       this.combat.step(dt, this.shooters);
       this.serviceEvent = stepService(this.service, state, spec, this.playerGuns, PLAYER_TEAM, dt, this.combat.ownerOf) ?? this.serviceEvent;
       this.aiForce.service(this.combat.ownerOf, dt);
@@ -487,7 +488,7 @@ export class Game {
     this.effects.update(worldDelta);
     this.balloons.update(worldDelta);
     this.enemyTargets.update(worldDelta);
-    this.aiViews.update(alpha, worldDelta);
+    this.aiViews.update(alpha, worldDelta, this.aircraft.renderPosition);
     this.environment.showCarrierOwners(this.combat.ownerOf);
     this.baseStructures.update(worldDelta);
     this.updateAircraftFire(worldDelta);
@@ -1061,7 +1062,7 @@ export class Game {
       if (distance > GUNNERY_AID_RANGE) continue;
       // Ahead of the nose (within about 50 degrees).
       if ((dx * this.cameraForward.x + dy * this.cameraForward.y + dz * this.cameraForward.z) / distance < 0.64) continue;
-      if (!onTarget && roundsWouldHit(me, spec, s, pilot.spec, HIT_ASSIST_CONFIG.nearMissMetres)) onTarget = true;
+      if (!onTarget && roundsWouldHit(me, spec, s, pilot.spec, HIT_ASSIST_CONFIG.nearMissMetres, enlargeBlend(s, pilot.spec, this.ground.heightAt(s.position.x, s.position.z)))) onTarget = true;
       if (distance < nearestDistance) {
         nearest = pilot;
         nearestDistance = distance;

@@ -6,7 +6,7 @@ import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder';
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
-import { AA_GUN_CONFIG, AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, type CombatWorld, type Team } from '@dogfight/shared';
+import { AA_GUN_CONFIG, BASE_UNIT_SCALE, AIRFRAMES, isTargetAlive, type CarrierStatusMap, type CombatTarget, type CombatWorld, type Team } from '@dogfight/shared';
 import { createAircraftModel } from '../aircraft/aircraftModel';
 import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { degreesToRadians } from '../math/orientation';
@@ -97,16 +97,20 @@ export class EnemyTargets {
       scratchPos.set(p.x, groundY, p.z);
       // A gun nobody has built yet (at a field nobody holds): just its empty platform.
       const unbuilt = !target.built;
-      setMatrix(this.gunBases, i, alive || unbuilt ? scratchPos : null, 0, 0, (mount - 1.2) / PLATFORM_HEIGHT);
-      setMatrix(this.gunFlags.red, i, alive && target.team !== 'blue' ? scratchPos : null, 0, 0);
-      setMatrix(this.gunFlags.blue, i, alive && target.team === 'blue' ? scratchPos : null, 0, 0);
+      // Everything BASE_UNIT_SCALE larger than life (the hit sphere and mount height match); the platform is stretched to just under the guns.
+      const s = BASE_UNIT_SCALE;
+      // A carrier's platform is narrower, so its inner edge stays well clear of the landing line (the deck is 34 m wide).
+      const footprint = target.carrierId ? CARRIER_PLATFORM_SCALE : s;
+      setMatrix(this.gunBases, i, alive || unbuilt ? scratchPos : null, 0, 0, (mount - 1.2 * s) / PLATFORM_HEIGHT, footprint);
+      setMatrix(this.gunFlags.red, i, alive && target.team !== 'blue' ? scratchPos : null, 0, 0, s, s);
+      setMatrix(this.gunFlags.blue, i, alive && target.team === 'blue' ? scratchPos : null, 0, 0, s, s);
       scratchPos.y = p.y - sink;
-      setMatrix(this.gunBarrels, i, alive ? scratchPos : null, gun.yaw, gun.pitch);
+      setMatrix(this.gunBarrels, i, alive ? scratchPos : null, gun.yaw, gun.pitch, s, s);
       scratchPos.y = groundY;
       // On a carrier that's going down, the wreck goes with it; under water it isn't drawn.
       const showWreck = !alive && !unbuilt && groundY > -6;
-      setMatrix(this.wrecks, wreck++, showWreck ? scratchPos : null, degreesToRadians(target.id * 47), 0, 2);
-      if (showWreck) this.burn(target, p.x, groundY + 1, p.z, 1.6, deltaSeconds);
+      setMatrix(this.wrecks, wreck++, showWreck ? scratchPos : null, degreesToRadians(target.id * 47), 0, 2 * s, s);
+      if (showWreck) this.burn(target, p.x, groundY + 1, p.z, 1.6 * s, deltaSeconds);
     });
     // Parked aircraft.
     this.parkedTargets.forEach((target, i) => {
@@ -183,12 +187,12 @@ function layer(mesh: Mesh, count: number): InstancedLayer {
 
 const scratchScale = new Vector3();
 
-/** Writes instance `index`'s matrix: placed and turned (yaw, then pitch up), stretched vertically by `scaleY`, or zero-scaled (hidden) if `position` is null. */
-function setMatrix(l: InstancedLayer, index: number, position: Vector3 | null, yaw: number, pitch: number, scaleY = 1): void {
+/** Writes instance `index`'s matrix: placed and turned (yaw, then pitch up), scaled by `scaleXZ` across and `scaleY` up, or zero-scaled (hidden) if `position` is null. */
+function setMatrix(l: InstancedLayer, index: number, position: Vector3 | null, yaw: number, pitch: number, scaleY = 1, scaleXZ = 1): void {
   if (position) {
     Quaternion.RotationYawPitchRollToRef(yaw, -pitch, 0, scratchQuat);
-    scratchScale.set(1, scaleY, 1);
-    Matrix.ComposeToRef(scaleY === 1 ? ONE : scratchScale, scratchQuat, position, scratchMatrix);
+    scratchScale.set(scaleXZ, scaleY, scaleXZ);
+    Matrix.ComposeToRef(scaleY === 1 && scaleXZ === 1 ? ONE : scratchScale, scratchQuat, position, scratchMatrix);
   } else {
     Matrix.ComposeToRef(ZERO, IDENTITY, ZERO, scratchMatrix);
   }
@@ -202,6 +206,9 @@ function mergeParts(name: string, parts: Mesh[], material: Material): Mesh {
   merged.material = material;
   return merged;
 }
+
+/** A carrier gun's platform footprint scale: 12 m square, its inner edge 10 m from the centreline (the aircraft that land there span up to 12.7 m). */
+const CARRIER_PLATFORM_SCALE = 1.2;
 
 /** Height of the flak platform's model (m); it's stretched to each gun's mount height. */
 const PLATFORM_HEIGHT = 3.8;

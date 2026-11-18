@@ -127,7 +127,7 @@ In flight (the default keys):
 | **A / D** | Turn left / right: the aircraft banks into the turn and levels itself when you let go (direct roll can be chosen in Settings) |
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
 | **↑ / ↓** | Throttle up / down |
-| **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air |
+| **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air. Braking closes the throttle to idle; it stays there when you let go (↑ to go again) |
 | **F / V** | Flaps down / up a notch (UP → TAKE-OFF → LANDING) |
 | **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited). Against aircraft, a red dot leads the nearest enemy ahead (put the gunsight on it), the gunsight turns **red** when firing now would hit, and rounds passing within 3 m of an enemy aircraft count as hits |
 | **X** | Lock the Dive Bomber's dive brakes out / in |
@@ -146,6 +146,14 @@ down, **A** fire (after a crash, fly again), **B** brakes, **X** dive brakes,
 **Y** camera, **LB / RB** rudder, **D-pad ↑ / ↓** flaps, **D-pad →**
 auto-land, **View** map, **Menu** pause. The keys and mouse keep working
 alongside it.
+
+**Bigger targets:** an enemy aircraft far enough off to look tiny is drawn
+larger, never narrower than 4.5° of the view, up to 3× its real size (a
+fighter at 300 m is drawn about twice as big, at 500 m three times); within
+about 135 m, and on the ground, it is its real size. Your rounds hit the
+size you see (the AI's rounds don't get this). Everything at a base (AA
+guns, hangars, fuel depots, radars) is built 1.6× larger than life, hit
+areas included.
 
 **What you feel:** hits on an enemy flash its paint white and count up as a
 number over its bracket ("−24"); the gunsight pops on each burst that

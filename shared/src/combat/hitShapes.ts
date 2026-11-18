@@ -2,6 +2,7 @@ import type { AircraftClassSpec } from '../config/aircraftClasses';
 import type { Airframe } from '../config/airframe';
 import { AIRCRAFT_HIT_SHAPE_CONFIG } from '../config/targets';
 import type { AircraftState } from '../flight/AircraftState';
+import { wingSpan } from '../flight/aerodynamics';
 import { rotateVec3 } from '../math/quat';
 import { vec3 } from '../math/vec3';
 import type { Vec3 } from '../types/vector';
@@ -48,14 +49,29 @@ export interface PlacedSphere {
   team: number;
   /** Always true: an aircraft's sphere (near-miss allowances apply). */
   readonly aircraft: true;
+  /** The aircraft's centre of mass: an enlarged shape (target visibility) scales about it. */
+  readonly centre: Vec3;
+  /** The aircraft's wingspan (m). */
+  span: number;
+  /** How far target visibility applies (0 on the ground, 1 well up; see enlargeBlend). */
+  enlarge: number;
+}
+
+/** An empty placed sphere, for the arrays placeHitSpheres fills. */
+export function placedSphere(): PlacedSphere {
+  return { position: vec3(), radius: 0, team: -1, aircraft: true, centre: vec3(), span: 0, enlarge: 0 };
 }
 
 const scaled = vec3();
 
-/** Writes an aircraft's hit spheres in world space into `out` (which must have room for them). */
-export function placeHitSpheres(state: Readonly<AircraftState>, spec: AircraftClassSpec, team: number, out: PlacedSphere[], start: number): number {
+/**
+ * Writes an aircraft's hit spheres in world space into `out` (which must
+ * have room for them). `enlarge`: how far target visibility applies to it.
+ */
+export function placeHitSpheres(state: Readonly<AircraftState>, spec: AircraftClassSpec, team: number, out: PlacedSphere[], start: number, enlarge = 0): number {
   const spheres = airframeHitSpheres(spec.airframe);
   const scale = spec.airframeScale;
+  const span = wingSpan(spec);
   for (let i = 0; i < spheres.length; i++) {
     const sphere = spheres[i];
     const placed = out[start + i];
@@ -69,6 +85,11 @@ export function placeHitSpheres(state: Readonly<AircraftState>, spec: AircraftCl
     placed.position.z += state.position.z;
     placed.radius = sphere.radius * scale;
     placed.team = team;
+    placed.centre.x = state.position.x;
+    placed.centre.y = state.position.y;
+    placed.centre.z = state.position.z;
+    placed.span = span;
+    placed.enlarge = enlarge;
   }
   return spheres.length;
 }

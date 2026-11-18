@@ -11,7 +11,8 @@ import { createAaGun, stepAaGun, type AaGunState, type AaTarget } from './antiAi
 import { createBaseControls, stepBaseControls, type BaseControl, type BaseEvent } from './baseControl';
 import type { BaseDefinition, BaseOwnerLookup } from '../config/world';
 import { stepGuns, type GunState } from './guns';
-import { airframeHitSpheres, placeHitSpheres, type PlacedSphere } from './hitShapes';
+import { airframeHitSpheres, placeHitSpheres, placedSphere, type PlacedSphere } from './hitShapes';
+import { enlargeBlend } from './visibility';
 import { ProjectilePool, teamCode, type ImpactListener, type SphereTarget } from './projectiles';
 import { createTargets, damageTarget, isTargetAlive, updateTargets, type CombatTarget, type TargetKind, type TargetOptions } from './targets';
 
@@ -40,6 +41,8 @@ export interface Shooter {
    * aim assist for human pilots (HIT_ASSIST_CONFIG); the AI shoots without one.
    */
   readonly nearMiss?: number;
+  /** This shooter's rounds hit aircraft at the size it sees them drawn (target visibility; human pilots). */
+  readonly enlargedTargets?: boolean;
 }
 
 /** Default pool size: aircraft guns plus every AA gun's shells in flight. */
@@ -92,14 +95,14 @@ export class CombatWorld implements ImpactListener {
     this.targets = targets;
     this.aaGuns = targets.filter((t) => t.kind === 'aaGun').map((t) => createAaGun(t, AA_OWNER_BASE + t.id));
     this.carriersById = new Map(carriers.map((c) => [c.id, c]));
-    this.aircraftSpheres = Array.from({ length: MAX_AIRCRAFT * SPHERES_PER_AIRCRAFT }, () => ({ position: { x: 0, y: 0, z: 0 }, radius: 0, team: -1, aircraft: true as const }));
+    this.aircraftSpheres = Array.from({ length: MAX_AIRCRAFT * SPHERES_PER_AIRCRAFT }, placedSphere);
     this.targetSpheres = targets.map((t) => ({ position: t.position, radius: t.radius, team: teamCode(t.team) }));
   }
 
   step(dt: number, shooters: readonly Shooter[]): void {
     this.shooters = shooters;
     for (const shooter of shooters) {
-      stepGuns(shooter.guns, shooter.state, shooter.spec, GUN_SPECS[shooter.spec.id], shooter.trigger, this.projectiles, shooter.id, dt, teamCode(shooter.team), shooter.nearMiss ?? 0);
+      stepGuns(shooter.guns, shooter.state, shooter.spec, GUN_SPECS[shooter.spec.id], shooter.trigger, this.projectiles, shooter.id, dt, teamCode(shooter.team), shooter.nearMiss ?? 0, shooter.enlargedTargets ?? false);
     }
 
     this.aaTargets.length = 0;
@@ -254,7 +257,8 @@ export class CombatWorld implements ImpactListener {
       if (!shooter || shooter.state.crashed) continue;
       const count = airframeHitSpheres(shooter.spec.airframe).length;
       if (used + count > this.aircraftSpheres.length) break;
-      placeHitSpheres(shooter.state, shooter.spec, teamCode(shooter.team), this.aircraftSpheres, used);
+      const p = shooter.state.position;
+      placeHitSpheres(shooter.state, shooter.spec, teamCode(shooter.team), this.aircraftSpheres, used, enlargeBlend(shooter.state, shooter.spec, this.ground.heightAt(p.x, p.z)));
       for (let k = 0; k < count; k++) this.setHittable(n++, this.aircraftSpheres[used + k] ?? null, -(s + 1));
       used += count;
     }

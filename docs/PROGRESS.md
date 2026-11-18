@@ -2,11 +2,19 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
+**Current status:** bigger targets and brakes that close the throttle (your feedback). Before that, the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
 AI pilots on a smaller map, island airfields to take, carriers as home bases,
 a timer, and the side holding more bases wins. Auto-land is faster and
 terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
 (FLIGHT_TEST.md cards 41 and 42) and confirmation.
+
+## Bigger targets; brakes close the throttle ✅ (your feedback, 2026-11-18)
+
+- ✅ Enemy aircraft are drawn larger when far enough off to look tiny: never narrower than 4.5° of the view, up to 3× real size; real size within about 135 m (a fighter) and near the ground (so wheels stay on runways), easing between sizes. Measured at 1366×768: a Naval Fighter at 300 m 57 px across (was 29), at 500 m 53 px (was 18), at 120 m unchanged (73 px)
+- ✅ Your rounds hit the size you see (shared `combat/visibility.ts`: each round knows its range, and an aircraft's hit spheres scale about its centre by the same rule); the on-target cue uses it too. The AI's rounds and the AA's use real sizes
+- ✅ Everything at a base built 1.6× larger (`BASE_UNIT_SCALE`): AA guns and their platforms, hangars, fuel depots, radars, with hit spheres and heights to match; carriers' gun platforms are drawn narrower (1.2×) so they stay clear of the landing line
+- ✅ Braking (B, or a gamepad's B) closes the throttle to idle while held; it stays at idle when you let go
+- Verified: 510 tests (new: the visibility rule, and rounds 15 m off an aircraft 450 m away hitting only with the aid while the cue agrees), typecheck and build, and headless Chrome: a burst 13 m to the side of a Red aircraft at 450 m did 78 damage (none 40 m off); throttle 0.80 → 0 holding B, stays 0, ↑ opens it; screenshots of the bigger airfield units and the carrier guns; no console errors
 
 ## Game skills applied: feel, interface, AI, performance ✅ (your request, 2026-11-18)
 

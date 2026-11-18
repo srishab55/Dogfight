@@ -76,11 +76,12 @@ export class FlightInputController {
     c.roll = steering && assist ? assist.roll : this.axis(c.roll, 'rollRight', 'rollLeft', assist?.roll, dt, stick.roll);
     c.yaw = this.axis(c.yaw, 'yawRight', 'yawLeft', assist?.yaw, dt, stick.yaw);
 
+    // B: wheel brakes on the ground, air brakes in the air (both at once is fine: each only acts where it can).
+    // Braking also closes the throttle (to idle; it stays there when you let go: open it again to go).
+    const braking = this.input.isHeld('brake');
     const lever = this.direction('throttleUp', 'throttleDown') + stick.throttle;
     const throttle = c.throttle + Math.max(-1, Math.min(1, lever)) * KEYBOARD_FLIGHT_CONFIG.throttlePerSecond * dt;
-    c.throttle = Math.min(1, Math.max(0, throttle));
-    // B: wheel brakes on the ground, air brakes in the air (both at once is fine: each only acts where it can).
-    const braking = this.input.isHeld('brake');
+    c.throttle = braking ? 0 : Math.min(1, Math.max(0, throttle));
     c.brake = braking || (KEYBOARD_FLIGHT_CONFIG.autoBrakeAtIdle && c.throttle === 0) ? 1 : 0;
     c.airbrake = braking || this.diveBrakesOpen ? 1 : assistAirbrake;
     c.fire = this.input.isHeld('fireGuns');

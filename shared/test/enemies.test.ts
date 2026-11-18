@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
+import { BASE_UNIT_SCALE,
   AA_GUN_CONFIG,
   AIRCRAFT_CLASSES,
   CARRIER_DAMAGE_CONFIG,
@@ -73,7 +73,8 @@ describe("every base's defences", () => {
       const ground = world.heightAt(t.position.x, t.position.z);
       expect(ground).toBeGreaterThan(WORLD_CONFIG.seaLevel);
       expect(t.position.y - ground).toBeGreaterThan(0.5);
-      expect(t.position.y - ground).toBeLessThan(10);
+      // (Its hit sphere's centre: base units are built BASE_UNIT_SCALE larger than life.)
+      expect(t.position.y - ground).toBeLessThan(10 * BASE_UNIT_SCALE);
       if (!t.carrierId) expect(Math.abs(ground - WORLD_CONFIG.groundHeight)).toBeLessThan(0.5);
     }
   });

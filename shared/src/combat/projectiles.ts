@@ -1,4 +1,5 @@
 import { PHYSICS_CONSTANTS } from '../config/simulation';
+import { shownScale } from './visibility';
 import type { GroundQuery } from '../flight/ground';
 import type { Vec3 } from '../types/vector';
 
@@ -10,7 +11,14 @@ export interface SphereTarget {
   readonly team?: number;
   /** Part of an aircraft: rounds fired with a near-miss allowance hit it from that much further out. */
   readonly aircraft?: boolean;
+  /** An aircraft's: its centre, wingspan and how far target visibility applies (see combat/visibility.ts). */
+  readonly centre?: Readonly<Vec3>;
+  readonly span?: number;
+  readonly enlarge?: number;
 }
+
+/** The enlarged sphere an assisted round is tested against (reused: no allocation per test). */
+const enlarged = { position: { x: 0, y: 0, z: 0 }, radius: 0 };
 
 /** Team as a small integer for the typed arrays: 0 Blue, 1 Red, -1 nobody's (practice targets). */
 export function teamCode(team: 'blue' | 'red' | null): number {
@@ -48,6 +56,12 @@ export class ProjectilePool {
   readonly team: Int8Array;
   /** Near-miss allowance (m): passing this close to an aircraft counts as a hit (an aim assist; 0 for most rounds). */
   readonly nearMiss: Float32Array;
+  /**
+   * Target visibility for this round (m/s): its speed away from the gun, so
+   * speed x age is its range, which sets how much larger aircraft look to
+   * whoever fired it. 0: real sizes (the AI's rounds, AA shells).
+   */
+  readonly assistSpeed: Float32Array;
   readonly active: Uint8Array;
   private readonly freeSlots: number[];
   activeCount = 0;
@@ -65,13 +79,14 @@ export class ProjectilePool {
     this.owner = new Int32Array(capacity);
     this.team = new Int8Array(capacity);
     this.nearMiss = new Float32Array(capacity);
+    this.assistSpeed = new Float32Array(capacity);
     this.active = new Uint8Array(capacity);
     // Free slots as a stack, highest index at the bottom.
     this.freeSlots = Array.from({ length: capacity }, (_, i) => capacity - 1 - i);
   }
 
   /** Adds a round. Returns false if the pool is full (the round is dropped). */
-  spawn(position: Readonly<Vec3>, velocity: Readonly<Vec3>, lifetime: number, damage: number, owner: number, team = -1, nearMiss = 0): boolean {
+  spawn(position: Readonly<Vec3>, velocity: Readonly<Vec3>, lifetime: number, damage: number, owner: number, team = -1, nearMiss = 0, assistSpeed = 0): boolean {
     const slot = this.freeSlots.pop();
     if (slot === undefined) return false;
     this.px[slot] = position.x;
@@ -86,6 +101,7 @@ export class ProjectilePool {
     this.owner[slot] = owner;
     this.team[slot] = team;
     this.nearMiss[slot] = nearMiss;
+    this.assistSpeed[slot] = assistSpeed;
     this.active[slot] = 1;
     this.activeCount++;
     return true;
@@ -126,11 +142,12 @@ export class ProjectilePool {
       let hitTarget = -1;
       const team = this.team[i] ?? -1;
       const nearMiss = this.nearMiss[i] ?? 0;
+      const range = (this.assistSpeed[i] ?? 0) * age;
       for (let t = 0; t < targets.length; t++) {
         const target = targets[t];
         if (!target) continue;
         if (team >= 0 && target.team === team) continue; // no friendly fire
-        const along = segmentSphereIntersection(x0, y0, z0, dx, dy, dz, target, target.aircraft ? nearMiss : 0);
+        const along = segmentSphereIntersection(x0, y0, z0, dx, dy, dz, range > 0 ? enlargedFor(target, range) : target, target.aircraft ? nearMiss : 0);
         if (along < hitT) {
           hitT = along;
           hitTarget = t;
@@ -172,6 +189,20 @@ export class ProjectilePool {
  * sphere, or Infinity if it doesn't. Solves |p0 + t*d - c|^2 = r^2 for the
  * smaller root.
  */
+/** An aircraft's sphere as it looks from `range` metres (target visibility), or the sphere itself. */
+function enlargedFor(target: SphereTarget, range: number): SphereTarget {
+  const blend = target.enlarge ?? 0;
+  const centre = target.centre;
+  if (!target.aircraft || blend <= 0 || !centre || !target.span) return target;
+  const s = shownScale(target.span, range, blend);
+  if (s <= 1.0001) return target;
+  enlarged.position.x = centre.x + (target.position.x - centre.x) * s;
+  enlarged.position.y = centre.y + (target.position.y - centre.y) * s;
+  enlarged.position.z = centre.z + (target.position.z - centre.z) * s;
+  enlarged.radius = target.radius * s;
+  return enlarged;
+}
+
 export function segmentSphereIntersection(x0: number, y0: number, z0: number, dx: number, dy: number, dz: number, sphere: SphereTarget, extraRadius = 0): number {
   const mx = x0 - sphere.position.x;
   const my = y0 - sphere.position.y;

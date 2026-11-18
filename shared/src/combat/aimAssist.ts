@@ -5,7 +5,8 @@ import type { AircraftState } from '../flight/AircraftState';
 import { rotateVec3 } from '../math/quat';
 import { vec3 } from '../math/vec3';
 import type { Vec3 } from '../types/vector';
-import { airframeHitSpheres, placeHitSpheres, type PlacedSphere } from './hitShapes';
+import { airframeHitSpheres, placeHitSpheres, placedSphere, type PlacedSphere } from './hitShapes';
+import { shownScale } from './visibility';
 
 /*
  * Gunnery aids for a human pilot (the HUD's lead marker and on-target cue),
@@ -15,7 +16,7 @@ import { airframeHitSpheres, placeHitSpheres, type PlacedSphere } from './hitSha
 const FORWARD: Vec3 = { x: 0, y: 0, z: 1 };
 const nose = vec3();
 const MAX_SPHERES = 16;
-const spheres: PlacedSphere[] = Array.from({ length: MAX_SPHERES }, () => ({ position: vec3(), radius: 0, team: -1, aircraft: true as const }));
+const spheres: PlacedSphere[] = Array.from({ length: MAX_SPHERES }, placedSphere);
 
 /**
  * The gun solution: the direction to point the nose so rounds fired now
@@ -40,13 +41,27 @@ export function leadDirection(shooter: Readonly<AircraftState>, spec: AircraftCl
  * lifetime, against each of the target's hit spheres moving at its present
  * velocity, and asks whether any comes within its radius plus `nearMiss`.
  * Turning targets are taken as flying straight: over a second of flight
- * that's close enough for a cue.
+ * that's close enough for a cue. `enlarge`: target visibility for the
+ * target (see enlargeBlend), so the cue agrees with the shape the rounds hit.
  */
-export function roundsWouldHit(shooter: Readonly<AircraftState>, spec: AircraftClassSpec, target: Readonly<AircraftState>, targetSpec: AircraftClassSpec, nearMiss: number): boolean {
+export function roundsWouldHit(shooter: Readonly<AircraftState>, spec: AircraftClassSpec, target: Readonly<AircraftState>, targetSpec: AircraftClassSpec, nearMiss: number, enlarge = 0): boolean {
   const gun = GUN_SPECS[spec.id];
   rotateVec3(nose, shooter.orientation, FORWARD);
   const count = Math.min(MAX_SPHERES, airframeHitSpheres(targetSpec.airframe).length);
   placeHitSpheres(target, targetSpec, -1, spheres, 0);
+  if (enlarge > 0) {
+    // As the combat world does for these rounds: the shape scaled about its centre, by its range.
+    const range = Math.hypot(target.position.x - shooter.position.x, target.position.y - shooter.position.y, target.position.z - shooter.position.z);
+    const s = shownScale(spheres[0]?.span ?? 0, range, enlarge);
+    for (let i = 0; i < count; i++) {
+      const sphere = spheres[i]!;
+      const c = sphere.centre;
+      sphere.position.x = c.x + (sphere.position.x - c.x) * s;
+      sphere.position.y = c.y + (sphere.position.y - c.y) * s;
+      sphere.position.z = c.z + (sphere.position.z - c.z) * s;
+      sphere.radius *= s;
+    }
+  }
   const g = PHYSICS_CONSTANTS.gravity;
   const vx = shooter.velocity.x + nose.x * gun.muzzleVelocity;
   const vy = shooter.velocity.y + nose.y * gun.muzzleVelocity;

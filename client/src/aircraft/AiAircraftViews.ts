@@ -1,7 +1,7 @@
 import type { Scene } from '@babylonjs/core/scene';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { AIRFRAMES, CARRIERS, cloneAircraftState, copyAircraftState, type AiPilot, type AircraftState } from '@dogfight/shared';
+import { AIRFRAMES, CARRIERS, cloneAircraftState, copyAircraftState, enlargeBlend, shownScale, wingSpan, type AiPilot, type AircraftState, type GroundQuery, type Vec3 } from '@dogfight/shared';
 import { FLAP_STYLE_BY_CLASS, TEAM_PAINT } from '../config/aircraftVisuals';
 import { BURN_CONFIG } from '../config/combatVisuals';
 import { FEEDBACK_CONFIG } from '../config/feedback';
@@ -20,7 +20,12 @@ interface View {
   smokeCarry: number;
   /** Seconds left of the hit flash on its paint. */
   flashLeft: number;
+  /** Target visibility: how much larger it's drawn now (eased, so it never jumps). */
+  shownScale: number;
 }
+
+/** How quickly the drawn size follows target visibility (1/s). */
+const SCALE_SHARPNESS = 5;
 
 /** A hook goes down within this distance of a carrier with landing flaps out, as on the player's aircraft. */
 const HOOK_NEAR_CARRIER = 3_000;
@@ -48,6 +53,8 @@ export class AiAircraftViews {
     private readonly addShadowCasters: (meshes: readonly Mesh[]) => void,
     /** An AI aircraft hit the ground or sea (for the explosion sound). */
     private readonly onCrash: (x: number, y: number, z: number) => void,
+    /** The world's ground, for target visibility (real size near it). */
+    private readonly ground: GroundQuery,
   ) {}
 
   /** The squadron to show (a new match brings new pilots; the models are kept when the types match). */
@@ -61,6 +68,7 @@ export class AiAircraftViews {
         old.wasCrashed = false;
         old.flashLeft = 0;
         old.visual.setFlash(0);
+        old.shownScale = 1;
         kept.push(old);
         return;
       }
@@ -70,7 +78,7 @@ export class AiAircraftViews {
       visual.setFlapStyle(FLAP_STYLE_BY_CLASS[pilot.spec.id]);
       visual.setEnabled(false);
       this.addShadowCasters(visual.meshes);
-      kept.push({ pilot, visual, previous: cloneAircraftState(pilot.state), stateRef: null, wasCrashed: false, smokeCarry: 0, flashLeft: 0 });
+      kept.push({ pilot, visual, previous: cloneAircraftState(pilot.state), stateRef: null, wasCrashed: false, smokeCarry: 0, flashLeft: 0, shownScale: 1 });
     });
     for (const extra of this.views.slice(pilots.length)) extra.visual.dispose();
     this.views = kept;
@@ -90,8 +98,12 @@ export class AiAircraftViews {
     }
   }
 
-  /** Once a frame, after the physics: pose the models between the last two steps, and their smoke and fire. */
-  update(alpha: number, deltaSeconds: number): void {
+  /**
+   * Once a frame, after the physics: pose the models between the last two
+   * steps, and their smoke and fire. Each is drawn at the size target
+   * visibility gives it from `viewer` (you), as your rounds hit it.
+   */
+  update(alpha: number, deltaSeconds: number, viewer: Readonly<Vec3>): void {
     for (const view of this.views) {
       const { pilot, visual } = view;
       const state = pilot.state;
@@ -115,6 +127,12 @@ export class AiAircraftViews {
       this.toQ.set(state.orientation.x, state.orientation.y, state.orientation.z, state.orientation.w);
       Quaternion.SlerpToRef(this.fromQ, this.toQ, alpha, this.orientation);
       visual.setPose(this.position, this.orientation);
+      const p = this.position;
+      const distance = Math.sqrt((p.x - viewer.x) ** 2 + (p.y - viewer.y) ** 2 + (p.z - viewer.z) ** 2);
+      const wanted = shownScale(wingSpan(pilot.spec), distance, enlargeBlend(state, pilot.spec, this.ground.heightAt(state.position.x, state.position.z)));
+      // A fresh aircraft starts at the right size; otherwise ease towards it.
+      view.shownScale = a === state ? wanted : view.shownScale + (wanted - view.shownScale) * Math.min(1, SCALE_SHARPNESS * deltaSeconds);
+      visual.setScale(pilot.spec.airframeScale * view.shownScale);
       visual.setFlapDeflection(state.flapPosition);
       visual.setAirbrake(state.airbrakePosition);
       visual.setGear(state.gearPosition);

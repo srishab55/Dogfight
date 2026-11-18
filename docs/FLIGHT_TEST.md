@@ -559,6 +559,18 @@ motion drops the freeze.
 **Pass:** Hits and kills feel like something happened, without hiding the
 target, and everything works from the pad alone.
 
+## Card 43: Bigger targets, and brakes
+
+**Do:** In a match, find a Red aircraft 300-500 m away and close on it to
+100 m; shoot at it from 400 m. Fly at an airfield and at your carrier. In
+flight with the throttle at 80 %, hold **B** for a second, let go, then **↑**.
+**Expect:** Far off, the Red aircraft is clearly visible (about twice its
+size at 300 m), shrinking smoothly to its real size as you close; rounds that
+cross the larger shape hit it. Hangars, fuel tanks, radars and AA guns are
+easy to pick out from a kilometre. Holding B drops the throttle to 0 % and
+it stays there until you open it again.
+**Pass:** You can find and aim at aircraft and base units without squinting.
+
 ## Card 34: Retractable gear
 
 **Do:** Take off from the airfield. Fly around, then come back and land by hand.

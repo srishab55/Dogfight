@@ -5,6 +5,14 @@
  */
 
 /**
+ * Everything at a base (AA guns and their platforms, hangars, fuel depots,
+ * radars) is built this much larger than life, hit spheres and heights
+ * included, so it's big enough to find and aim at from the air (your
+ * request). The client scales the models by the same factor.
+ */
+export const BASE_UNIT_SCALE = 1.6;
+
+/**
  * The bases' anti-aircraft guns, two at each: a quad 40 mm mount on a
  * raised concrete flak platform, with a tall flag, so you can see it from
  * far off. It fires rapid tracer in bursts and leads its target (aims where
@@ -36,9 +44,9 @@ export const AA_GUN_CONFIG = {
   /** About 70 machine-gun hits: two or three good passes. Once destroyed it stays destroyed (see CAPTURE_CONFIG). */
   maxHealth: 70,
   /** Hit sphere around the platform and gun (m). */
-  hitRadius: 7,
+  hitRadius: 7 * BASE_UNIT_SCALE,
   /** The guns sit on top of the platform (m above the ground or deck). */
-  mountHeight: 5,
+  mountHeight: 5 * BASE_UNIT_SCALE,
 } as const;
 
 /**
@@ -49,9 +57,9 @@ export const AA_GUN_CONFIG = {
  * to the ground, so rounds fired from an aircraft on the runway hit it.
  */
 export const BASE_STRUCTURE_CONFIG = {
-  hangar: { hitRadius: 17, height: 7, maxHealth: 80 },
-  fuelDepot: { hitRadius: 12, height: 4, maxHealth: 40 },
-  radar: { hitRadius: 9, height: 7, maxHealth: 30 },
+  hangar: { hitRadius: 17 * BASE_UNIT_SCALE, height: 7 * BASE_UNIT_SCALE, maxHealth: 80 },
+  fuelDepot: { hitRadius: 12 * BASE_UNIT_SCALE, height: 4 * BASE_UNIT_SCALE, maxHealth: 40 },
+  radar: { hitRadius: 9 * BASE_UNIT_SCALE, height: 7 * BASE_UNIT_SCALE, maxHealth: 30 },
 } as const;
 
 /**
@@ -122,7 +130,11 @@ export const BASE_LAYOUT = {
    * of rudder and it can shoot it from the ground.
    */
   radar: { along: -450, across: -54 },
-  /** Two on each carrier: forward on the port side, aft on the starboard side (clear of the wires and the island). */
+  /**
+   * Two on each carrier: forward on the port side, aft on the starboard side
+   * (clear of the wires and the island), 1 m in from the deck's edge. (Their
+   * platforms are drawn narrower than an airfield's, to stay clear of the landing line.)
+   */
   carrierAaGuns: [
     { fromStern: 205, side: -1 },
     { fromStern: 60, side: 1 },

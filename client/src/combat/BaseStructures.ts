@@ -7,7 +7,7 @@ import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder';
 import type { Material } from '@babylonjs/core/Materials/material';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import { BASES, BASE_STRUCTURE_CONFIG, isTargetAlive, type BaseDefinition, type CombatTarget, type CombatWorld, type Team } from '@dogfight/shared';
+import { BASES, BASE_STRUCTURE_CONFIG, BASE_UNIT_SCALE, isTargetAlive, type BaseDefinition, type CombatTarget, type CombatWorld, type Team } from '@dogfight/shared';
 import { TEAM_PAINT } from '../config/aircraftVisuals';
 import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { degreesToRadians } from '../math/orientation';
@@ -51,6 +51,8 @@ export class BaseStructures {
         const node = new TransformNode(`${name}-${target.id}`, scene);
         node.position.set(target.position.x, target.position.y - BASE_STRUCTURE_CONFIG[kind].height, target.position.z);
         node.rotation.y = degreesToRadians(target.headingDegrees);
+        // Larger than life, to be found and aimed at from the air (the hit spheres match).
+        node.scaling.setAll(BASE_UNIT_SCALE);
         return node;
       };
       const alive = root(kind);
@@ -124,7 +126,7 @@ export class BaseStructures {
   private burn(target: CombatTarget, dt: number, smoulder = false): void {
     const since = target.destroyedSeconds;
     const flaming = !smoulder && since < BURN_CONFIG.wreckFlameSeconds * 1.5;
-    const size = target.kind === 'hangar' ? 3 : target.kind === 'fuelDepot' ? 2.6 : 1.6;
+    const size = (target.kind === 'hangar' ? 3 : target.kind === 'fuelDepot' ? 2.6 : 1.6) * BASE_UNIT_SCALE;
     const spread = target.radius * 0.6;
     const carry = (this.emitCarry.get(target.id) ?? 0) + (flaming ? 26 : smoulder ? 2 : 6) * dt;
     let count = Math.floor(carry);
