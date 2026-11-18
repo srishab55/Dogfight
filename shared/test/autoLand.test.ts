@@ -17,7 +17,9 @@ import {
   sanitizeControls,
   stepAircraft,
   stepAutoLand,
-  teamBase,
+  baseById,
+  homeBase,
+  BASES,
   type AircraftClassId,
   type AutoLandPhase,
   type BaseDefinition,
@@ -108,86 +110,128 @@ function expectCleanLanding(outcome: Outcome, maxSinkRate: number) {
   expect(outcome.lowestSpeedRatio).toBeGreaterThan(1.1);
 }
 
-const blueAirfield = teamBase('blue', 'airfield');
-const blueCarrier = teamBase('blue', 'carrier');
-const redAirfield = teamBase('red', 'airfield');
-const redCarrier = teamBase('red', 'carrier');
+const south = baseById('south-airfield');
+const central = baseById('central-airfield');
+const north = baseById('north-airfield');
+const blueCarrier = homeBase('blue');
+const redCarrier = homeBase('red');
+
+/** A point in a base's runway frame: `along` its heading from the centre, `across` to its right, `y` up (world). */
+function near(base: BaseDefinition, along: number, across: number, y: number): Vec3 {
+  const h = (base.runway.headingDegrees * Math.PI) / 180;
+  const c = base.runway.center;
+  return { x: c.x + along * Math.sin(h) + across * Math.cos(h), y, z: c.z + along * Math.cos(h) - across * Math.sin(h) };
+}
+
+/** Compass bearing from one point to another (deg). */
+const bearing = (from: Vec3, to: { x: number; z: number }) => ((Math.atan2(to.x - from.x, to.z - from.z) * 180) / Math.PI + 360) % 360;
 
 describe('auto-land: choosing the base', { timeout: 20_000 }, () => {
-  it('offers the nearest base within range, of either team', () => {
+  it('offers the nearest base within range, whoever holds it', () => {
     const fighter = AIRCRAFT_CLASSES.fighterBomber;
-    expect(autoLandBaseFor(fighter, { x: 0, y: 500, z: -6_000 })?.id).toBe('blue-airfield');
-    expect(autoLandBaseFor(fighter, { x: 500, y: 500, z: 6_000 })?.id).toBe('red-airfield');
+    expect(autoLandBaseFor(fighter, near(south, 0, 900, 500))?.id).toBe('south-airfield');
+    expect(autoLandBaseFor(fighter, near(north, 0, 900, 500))?.id).toBe('north-airfield');
+    expect(autoLandBaseFor(fighter, { x: 300, y: 500, z: -200 })?.id).toBe('central-airfield');
     // Beyond range of everything: no offer.
-    expect(autoLandBaseFor(fighter, { x: 0, y: 500, z: -6_000 - AUTO_LAND_CONFIG.offerRange - 500 })).toBeNull();
+    expect(autoLandBaseFor(fighter, { x: 0, y: 500, z: -AUTO_LAND_CONFIG.offerRange - 4_000 })).toBeNull();
   });
 
   it('carriers only for aircraft with a hook, and never a sinking one', () => {
     const nearBlueCarrier = { x: blueCarrier.runway.center.x - 300, y: 400, z: blueCarrier.runway.center.z };
     expect(autoLandBaseFor(AIRCRAFT_CLASSES.navalFighter, nearBlueCarrier)?.id).toBe('blue-carrier');
     expect(autoLandBaseFor(AIRCRAFT_CLASSES.fighterBomber, nearBlueCarrier)?.id).toBe('blue-carrier');
-    expect(autoLandBaseFor(AIRCRAFT_CLASSES.heavyBomber, nearBlueCarrier)?.id).toBe('blue-airfield');
+    expect(autoLandBaseFor(AIRCRAFT_CLASSES.heavyBomber, nearBlueCarrier)?.kind).toBe('airfield');
     const statuses = createCarrierStatuses();
     statuses.get('blue-carrier')!.sink = 3;
-    expect(autoLandBaseFor(AIRCRAFT_CLASSES.navalFighter, nearBlueCarrier, statuses)?.id).toBe('blue-airfield');
+    expect(autoLandBaseFor(AIRCRAFT_CLASSES.navalFighter, nearBlueCarrier, statuses)?.kind).toBe('airfield');
     const nearRedCarrier = { x: redCarrier.runway.center.x + 300, y: 400, z: redCarrier.runway.center.z };
     expect(autoLandBaseFor(AIRCRAFT_CLASSES.diveBomber, nearRedCarrier)?.id).toBe('red-carrier');
   });
 
-  it('lands a runway in whichever direction is nearer; a carrier always from astern', () => {
-    const fromSouth = planAutoLand(blueAirfield, createAirborneState(AIRCRAFT_CLASSES.fighterBomber, { x: 0, y: 600, z: -9_000 }, 0, 120));
-    const fromNorth = planAutoLand(blueAirfield, createAirborneState(AIRCRAFT_CLASSES.fighterBomber, { x: 0, y: 600, z: 1_000 }, 180, 120));
-    expect(fromSouth.runway.headingDegrees).toBe(blueAirfield.runway.headingDegrees);
-    expect(fromNorth.runway.headingDegrees).toBe((blueAirfield.runway.headingDegrees + 180) % 360);
+  it('lands a runway whichever way is the shorter way round; a carrier always from astern', () => {
+    const fighter = AIRCRAFT_CLASSES.fighterBomber;
+    const h = south.runway.headingDegrees;
+    // Before the threshold, already heading along the runway: straight in.
+    expect(planAutoLand(south, createAirborneState(fighter, near(south, -3_000, 0, 500), h, 120)).runway.headingDegrees).toBe(h);
+    // Beyond the far end, heading back towards it: straight in the other way.
+    expect(planAutoLand(south, createAirborneState(fighter, near(south, 3_000, 0, 500), (h + 180) % 360, 120)).runway.headingDegrees).toBe((h + 180) % 360);
+    // Abeam, heading the runway's way: it lands that way rather than turning round.
+    expect(planAutoLand(south, createAirborneState(fighter, near(south, -500, 2_500, 500), h, 120)).runway.headingDegrees).toBe(h);
     const ahead = { x: blueCarrier.runway.center.x + 2_000 * Math.sin((15 * Math.PI) / 180), y: 600, z: blueCarrier.runway.center.z + 2_000 * Math.cos((15 * Math.PI) / 180) };
     expect(planAutoLand(blueCarrier, createAirborneState(AIRCRAFT_CLASSES.navalFighter, ahead, 0, 120)).runway.headingDegrees).toBe(blueCarrier.runway.headingDegrees);
   });
 });
 
-describe('auto-land: runways', { timeout: 20_000 }, () => {
-  it.each(AIRCRAFT_CLASS_IDS)('%s: from 6 km out, lands and stops undamaged on the centreline, in under two minutes (longer for the slow old types)', (id) => {
+describe('auto-land: runways', { timeout: 30_000 }, () => {
+  it.each(AIRCRAFT_CLASS_IDS)('%s: from 4 km out, lands and stops undamaged on the centreline in about a minute (longer for the slow old types)', (id) => {
     const spec = AIRCRAFT_CLASSES[id];
-    const outcome = autoLand(id, blueAirfield, { x: 1_200, y: 800, z: -10_000 }, 20, Math.min(120, computePerformance(spec).topSpeed * 0.9));
+    const start = near(south, -4_200, 1_200, 600);
+    const outcome = autoLand(id, south, start, south.runway.headingDegrees - 20, Math.min(120, computePerformance(spec).topSpeed * 0.9));
     expectCleanLanding(outcome, 3);
-    // Two minutes at fighter speeds; slower aircraft take proportionally longer.
-    expect(outcome.seconds).toBeLessThan(120 * Math.max(1, 40 / computePerformance(spec).stallSpeed));
+    expect(outcome.seconds).toBeLessThan(75 * Math.max(1, 40 / computePerformance(spec).stallSpeed));
   });
 
-  it('just after take-off, over the runway, it flies out, turns back (a teardrop) and lands', () => {
-    expectCleanLanding(autoLand('interceptor', blueAirfield, { x: 0, y: 30, z: -3_500 }, 0, 80), 3);
-  });
-
-  it('turns round from the far side and lands the other way', () => {
-    const outcome = autoLand('fighterBomber', blueAirfield, { x: 1_500, y: 900, z: 1_500 }, 0, 140);
+  it('just after take-off, over the runway, it flies out, turns back (a teardrop) and lands, quickly', () => {
+    const outcome = autoLand('interceptor', south, near(south, 0, 0, 30), south.runway.headingDegrees, 80);
     expectCleanLanding(outcome, 3);
+    expect(outcome.seconds).toBeLessThan(120);
   });
 
-  it('from abeam, low and fast, it slows down, lines up and lands', () => {
+  it('turns round from the far side and lands', () => {
+    const outcome = autoLand('fighterBomber', central, near(central, 2_500, 1_500, 900), central.runway.headingDegrees, 140);
+    expectCleanLanding(outcome, 3);
+    expect(outcome.seconds).toBeLessThan(110);
+  });
+
+  it("from abeam, low and fast across the island's hills, it climbs over them, lines up and lands", () => {
     const spec = AIRCRAFT_CLASSES.interceptor;
-    const outcome = autoLand('interceptor', blueAirfield, { x: -5_000, y: 300, z: -4_000 }, 90, computePerformance(spec).topSpeed * 0.9);
+    const outcome = autoLand('interceptor', south, near(south, 0, 2_000, 150), (south.runway.headingDegrees + 270) % 360, computePerformance(spec).topSpeed * 0.9);
+    expect(outcome.lowestEnRoute).toBeGreaterThan(40);
     expectCleanLanding(outcome, 3);
   });
 
-  it('climbs over the central island\'s mountain rather than into it', () => {
-    const outcome = autoLand('fighterBomber', blueAirfield, { x: 6_000, y: 350, z: 500 }, 270, 120);
-    expect(outcome.lowestEnRoute).toBeGreaterThan(100);
+  it("climbs over the central island's mountain rather than into it", () => {
+    const peak = { x: 250, z: 360 };
+    const start = { x: peak.x - 300, y: 250, z: peak.z - 2_200 };
+    const outcome = autoLand('fighterBomber', north, start, 0, 120);
+    expect(outcome.lowestEnRoute).toBeGreaterThan(60);
     expectCleanLanding(outcome, 3);
   });
 
   it('the heavy bomber lands without running off the end', () => {
-    expectCleanLanding(autoLand('heavyBomber', blueAirfield, { x: 3_000, y: 1_200, z: -1_000 }, 270, 110), 3);
-  });
-
-  it('lands at an enemy airfield too', () => {
-    expectCleanLanding(autoLand('fighterBomber', redAirfield, { x: 0, y: 900, z: 0 }, 0, 140), 3);
+    expectCleanLanding(autoLand('heavyBomber', central, near(central, -1_500, 3_000, 1_000), 270, 110), 3);
   });
 });
 
-describe('auto-land: carriers', { timeout: 20_000 }, () => {
+describe('auto-land: from all round every base, it never hits the ground', { timeout: 120_000 }, () => {
+  const cases: [string, BaseDefinition, AircraftClassId, number][] = [];
+  for (const base of BASES) {
+    const id: AircraftClassId = base.kind === 'carrier' ? 'navalFighter' : 'fighterBomber';
+    for (let b = 0; b < 360; b += 45) cases.push([`${base.id} from ${b}°`, base, id, b]);
+  }
+  it.each(cases)('%s', (_label, base, id, fromBearing) => {
+    const c = base.runway.center;
+    const r = (fromBearing * Math.PI) / 180;
+    // 3.5 km out, 250 m up, flying across the line to the base (not at it).
+    const start = { x: c.x + Math.sin(r) * 3_500, y: 250, z: c.z + Math.cos(r) * 3_500 };
+    const heading = (bearing(start, c) + 70) % 360;
+    const outcome = autoLand(id, base, start, heading, 110);
+    expect(outcome.crashed, String(outcome.crashReason)).toBe(false);
+    expect(outcome.phase).toBe('done');
+    expect(outcome.stoppedOnRunway).toBe(true);
+    expect(outcome.lowestEnRoute).toBeGreaterThan(25);
+    expect(outcome.seconds).toBeLessThan(150);
+  });
+});
+
+describe('auto-land: carriers', { timeout: 30_000 }, () => {
+  const h = (blueCarrier.runway.headingDegrees * Math.PI) / 180;
+  const c = blueCarrier.runway.center;
+  const at = (ahead: number, right: number, y: number): Vec3 => ({ x: c.x + Math.sin(h) * ahead + Math.cos(h) * right, y, z: c.z + Math.cos(h) * ahead - Math.sin(h) * right });
   const starts: [string, Vec3, number][] = [
-    ['from the side', { x: -1_500, y: 700, z: -1_000 }, 240],
-    ['from ahead of the bow', { x: -3_300, y: 500, z: 1_500 }, 200],
-    ['from astern', { x: -5_500, y: 400, z: -6_500 }, 15],
+    ['from the side', at(0, 1_800, 700), (blueCarrier.runway.headingDegrees + 250) % 360],
+    ['from ahead of the bow', at(2_800, 0, 500), (blueCarrier.runway.headingDegrees + 180) % 360],
+    ['from astern', at(-4_500, 300, 400), blueCarrier.runway.headingDegrees],
   ];
   describe.each(['navalFighter', 'diveBomber', 'interceptor', 'fighterBomber'] as const)('%s', (id) => {
     it.each(starts)('%s: flies onto the deck and catches a wire', (_label, start, heading) => {
@@ -198,11 +242,14 @@ describe('auto-land: carriers', { timeout: 20_000 }, () => {
       expect(outcome.stoppedOnRunway).toBe(true);
       expect(outcome.damage).toBe(0);
       expect(outcome.lowestSpeedRatio).toBeGreaterThan(1.1);
+      expect(outcome.seconds).toBeLessThan(130);
     });
   });
 
   it('lands on the enemy carrier too', () => {
-    const outcome = autoLand('navalFighter', redCarrier, { x: 2_500, y: 700, z: 1_500 }, 90, 130);
+    const rh = (redCarrier.runway.headingDegrees * Math.PI) / 180;
+    const rc = redCarrier.runway.center;
+    const outcome = autoLand('navalFighter', redCarrier, { x: rc.x + Math.cos(rh) * 2_000, y: 700, z: rc.z - Math.sin(rh) * 2_000 }, 90, 130);
     expect(outcome.crashed, String(outcome.crashReason)).toBe(false);
     expect(outcome.hookEngaged).toBe(true);
   });

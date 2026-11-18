@@ -2,11 +2,24 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** The interface redesign is in (your brief): a design
-system, a zoned HUD, and the main menu, hangar (aircraft selection and
-respawn), pause menu, settings, lobby layout and after-action report.
-Remaining in Phase 4: bombs. Waiting for your test (FLIGHT_TEST.md card 40)
-and confirmation.
+**Current status:** The match is in (your requests): you against four Red
+AI pilots on a smaller map, island airfields to take, carriers as home bases,
+a timer, and the side holding more bases wins. Auto-land is faster and
+terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
+(FLIGHT_TEST.md card 41) and confirmation.
+
+## The match: bases, timer and Red AI pilots ✅ (your requests, 2026-11-18)
+
+- ✅ Map about half the size, point-symmetric: carriers 5.6 km apart (was 10.3), neighbouring bases 2.5–4 km (was 7–10); the islands smaller; terrain 10 km square at 40 m cells. Every runway east-west, so all approaches are over open sea and no approach clearance cuts another island's mountain (found by surveying the terrain)
+- ✅ Runways 60 m wide (were 40), each with a service lane beside it (yellow lines, white parking boxes) joined by two taxiways: paved ground with runway grip, inside the service and capture area
+- ✅ Each team's home is its carrier; the three island airfields (the central island has one now) start belonging to nobody: land and stop 5 s to take one, its AA gun is built for you 30 s later; a held field is retaken by destroying its AA gun, hangar, fuel depot and radar and landing. Carriers are captured the same way (their AA gun, then the deck), and can't be sunk in a match
+- ✅ Match rules (shared `match.ts`): 5 / 10 / 15 minutes (chosen in the hangar); at time-out the side holding more bases wins, equal is a draw; a side holding no base loses at once. The aircraft is locked for the match (cards disabled; base and paint can change); exiting to the main menu resets the world, the squadron and the scores
+- ✅ Red AI: four pilots (two hunters, two raiders) built as a state machine plus behaviour tree after `game-skills/GameAI` (stateful sequence and reactive selector, blackboard). In priority order: take off or wait out a capture/service, pull up from terrain, stay on the map (except chasing), fly its landing, break when attacked, go home to rearm, attack aircraft (lead pursuit, then a gun solution with an integral aim correction), take a base (land if open, strafe its defences if not; teammates spread out), patrol. Same flight model, guns and rules as you; deterministic
+- ✅ HUD: time left, bases held by each side, kills, objective (the nearest base you don't hold); Red aircraft marked with type and distance; every aircraft on the map. Messages for kills, who shot you down, and every capture. Report: Victory / Defeat / Draw / Abandoned, bases at the end, your figures. Lobby lists Red's AI pilots
+- ✅ Heavy Bomber: too big for the deck, so it is launched into the air over its carrier until its side holds an airfield
+- ✅ Auto-land faster and terrain-aware: shortest-way runway choice (turns counted), 1.3 km final (was 2 km), tighter teardrop, fast transit with an achievable air-braked slow-down, steep descents (12°, gentler for the Heavy Bomber), climb-out before turning after a go-around, no steep turns low down, and terrain checked along the arc it will fly and the next 6 s of its path in every phase (final had none). On 40 approaches from all round every base: mean 114 s → 81 s, 1 crash → 0
+- ✅ Interceptor's nose-wheel steering fades with speed like the vintage types' (it tipped onto a wingtip in a full-rudder taxi turn on the wider runway)
+- Verified: 497 tests (1 skipped by design; new: base rules incl. carrier capture and reset, behaviour tree, AI squadron takes all three fields in 5 minutes without losses, AI shoots down a target, breaks when attacked, rearms and relaunches, match rules, auto-land sweep), typecheck, build, and headless Chrome at 1366×768: a 5-minute match (start, Red airborne and on the map, aircraft locked, time-out report, reset), a dogfight (two hunters attacking a circling player, hull 180 → 67), every screen at 1366×768 and 1920×1080, HUD zones without overlaps; 60 FPS with four AI aircraft; no console errors
 
 ## Interface redesign ✅ (your brief, 2026-11-18)
 

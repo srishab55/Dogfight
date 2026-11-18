@@ -10,6 +10,8 @@ export interface LobbyEvents {
 export interface LobbyInfo {
   readonly callsign: string;
   readonly aircraft: string;
+  /** Red's AI pilots: their aircraft types. */
+  readonly redPilots: readonly string[];
 }
 
 /**
@@ -21,6 +23,7 @@ export interface LobbyInfo {
 export class LobbyScreen {
   private readonly root: HTMLElement;
   private readonly blueList: HTMLElement;
+  private readonly redList: HTMLElement;
   private readonly playerCount: HTMLElement;
   private readonly offlineButton: HTMLButtonElement;
 
@@ -74,7 +77,7 @@ export class LobbyScreen {
     );
     team.element.querySelectorAll('button')[1]?.setAttribute('aria-disabled', 'true');
     this.blueList = h('ul', 'roster');
-    const redList = h('ul', 'roster', h('li', 'roster__empty', 'No players: the enemy is the AI defences until Phase 5'));
+    this.redList = h('ul', 'roster');
     this.playerCount = h('span', 'section-head__hint');
     const ready = toggleSwitch('Ready', false, () => ready.set(false));
     (ready.element as HTMLButtonElement).disabled = true;
@@ -87,7 +90,7 @@ export class LobbyScreen {
         'div',
         'lobby__columns',
         h('div', 'lobby__team', h('div', 'lobby__team-head', dot('friendly'), h('span', '', 'Blue')), this.blueList),
-        h('div', 'lobby__team', h('div', 'lobby__team-head', dot('danger'), h('span', '', 'Red')), redList),
+        h('div', 'lobby__team', h('div', 'lobby__team-head', dot('danger'), h('span', '', 'Red')), this.redList),
       ),
       h('div', 'lobby__ready', h('span', 'setting__name', 'Ready'), h('span', 'setting__description', 'Not available offline'), ready.element),
     );
@@ -108,7 +111,8 @@ export class LobbyScreen {
   open(info: LobbyInfo): void {
     this.root.hidden = false;
     this.blueList.replaceChildren(h('li', 'roster__player', h('span', 'roster__name', info.callsign), tag('You', 'accent'), h('span', 'roster__detail', info.aircraft)));
-    setText(this.playerCount, '1 player');
+    this.redList.replaceChildren(...info.redPilots.map((type, i) => h('li', 'roster__player roster__player--red', h('span', 'roster__name', `Red ${i + 1}`), tag('AI', 'danger'), h('span', 'roster__detail', type))));
+    setText(this.playerCount, `1 player · ${info.redPilots.length} AI`);
     this.offlineButton.focus({ preventScroll: true });
   }
 

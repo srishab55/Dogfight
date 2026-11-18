@@ -1,6 +1,6 @@
 import { CARRIERS, RUNWAYS, WORLD_CONFIG, type Terrain } from '@dogfight/shared';
 import type { BaseView } from '../combat/baseViews';
-import { BASE_COLORS, MINIMAP_CONFIG } from '../config/map';
+import { BASE_COLORS, MINIMAP_CONFIG, baseColor } from '../config/map';
 
 export type MapMode = 'small' | 'large' | 'off';
 
@@ -9,6 +9,8 @@ export interface MapFrame {
   readonly player: { readonly x: number; readonly z: number; readonly headingDeg: number } | null;
   readonly bases: readonly BaseView[];
   readonly playerTeam: 'blue' | 'red';
+  /** Every other aircraft in the air: a small arrow in its team's colour. */
+  readonly aircraft?: ReadonlyArray<{ readonly x: number; readonly z: number; readonly headingDeg: number; readonly team: 'blue' | 'red' }>;
 }
 
 const MODES: readonly MapMode[] = ['small', 'large', 'off'];
@@ -40,7 +42,7 @@ export class MiniMap {
     this.context = context;
     this.legend = document.createElement('div');
     this.legend.className = 'minimap-legend';
-    this.legend.innerHTML = `<span style="color:${BASE_COLORS.blue}">● Blue</span><span style="color:${BASE_COLORS.red}">● Red</span><span style="color:${BASE_COLORS.open}">● Defenceless: land to capture</span><span>▲ You</span><span class="minimap-key">N: map size</span>`;
+    this.legend.innerHTML = `<span style="color:${BASE_COLORS.blue}">● Blue</span><span style="color:${BASE_COLORS.red}">● Red</span><span style="color:${BASE_COLORS.neutral}">● Nobody's: land to take</span><span style="color:${BASE_COLORS.open}">● Defenceless: land to capture</span><span>▲ You</span><span class="minimap-key">N: map size</span>`;
     this.root.append(this.canvas, this.legend);
     parent.append(this.root);
     this.background = background;
@@ -166,7 +168,7 @@ export function drawMap(ctx: CanvasRenderingContext2D, background: HTMLCanvasEle
       ctx.lineTo(x - r, y + r);
       ctx.stroke();
     } else {
-      const color = view.state === 'open' ? BASE_COLORS.open : BASE_COLORS[view.owner];
+      const color = baseColor(view.owner, view.state === 'open');
       if (view.state === 'open' && !blinkOn) ctx.globalAlpha *= 0.35;
       ctx.fillStyle = color;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
@@ -186,14 +188,27 @@ export function drawMap(ctx: CanvasRenderingContext2D, background: HTMLCanvasEle
       ctx.arc(x, y, r + (selected ? 7 + 2.5 * Math.sin(time * 6) : 5) * unit, 0, Math.PI * 2);
       ctx.stroke();
     }
-    if (large) {
-      const label = view.state === 'gone' ? `${view.base.name} (sunk)` : view.state === 'open' ? `${view.base.name}: defenceless` : view.owner !== view.base.team ? `${view.base.name}: captured by ${view.owner}` : view.base.name;
+    // Names on the big map; on the small base picker, only the selected base's (the row under it names it too).
+    if (large && (!choice || selected)) {
+      const label =
+        view.state === 'gone'
+          ? `${view.base.name} (sunk)`
+          : view.state === 'open'
+            ? `${view.base.name}: defenceless`
+            : view.owner === null
+              ? `${view.base.name}: nobody's`
+              : view.owner !== view.base.team
+                ? `${view.base.name}: ${view.owner}'s`
+                : view.base.name;
       ctx.font = `${selected ? 'bold ' : ''}${Math.round(11 * unit)}px ui-monospace, Menlo, monospace`;
       ctx.globalAlpha = selectable ? 1 : 0.5;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillText(label, x + unit, y - r - 9 * unit + unit);
+      // Keep the name inside the map.
+      ctx.textAlign = 'center';
+      const tx = Math.max(ctx.measureText(label).width / 2 + 2 * unit, Math.min(size - ctx.measureText(label).width / 2 - 2 * unit, x));
+      ctx.fillText(label, tx + unit, y - r - 9 * unit + unit);
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(label, x, y - r - 9 * unit);
+      ctx.fillText(label, tx, y - r - 9 * unit);
       ctx.globalAlpha = 1;
     }
   }
@@ -218,6 +233,26 @@ export function drawMap(ctx: CanvasRenderingContext2D, background: HTMLCanvasEle
     ctx.moveTo(p.x, p.y);
     ctx.lineTo(p.x + Math.cos(a) * reach, p.y + Math.sin(a) * reach);
     ctx.stroke();
+  }
+
+  // Other aircraft: small arrows in their team's colour.
+  for (const other of frame.aircraft ?? []) {
+    const p = mapPoint(other.x, other.z, size);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate((other.headingDeg * Math.PI) / 180);
+    const s = (large ? 6 : 4.5) * unit;
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.lineTo(s * 0.7, s * 0.7);
+    ctx.lineTo(-s * 0.7, s * 0.7);
+    ctx.closePath();
+    ctx.fillStyle = BASE_COLORS[other.team];
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.lineWidth = unit;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   // You: an arrow pointing where you're heading.

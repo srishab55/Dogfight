@@ -10,7 +10,20 @@ import {
   BASE_DEFENCE_KINDS,
   CARRIERS,
   CombatWorld,
-  RUNWAYS,
+  PAVED_AREAS,
+  AiForce,
+  createSquadron,
+  createMatch,
+  remainingSeconds,
+  stepMatch,
+  airStartBases,
+  basesHeld,
+  homeBase as teamHome,
+  MATCH_CONFIG,
+  type AiContact,
+  type AiWorld,
+  type MatchResult,
+  type MatchState,
   createCarrierStatuses,
   createTargets,
   friendlyBaseAt,
@@ -29,7 +42,6 @@ import {
   startingBases,
   computePerformance,
   hasTailhook,
-  teamBase,
   autoLandBaseFor,
   neutralControls,
   planAutoLand,
@@ -43,10 +55,12 @@ import {
   type GroundQuery,
   type GunState,
   type ServiceEvent,
+  type Shooter,
   type StickInputs,
   type Team,
 } from '@dogfight/shared';
 import { PlayerAircraft } from '../aircraft/PlayerAircraft';
+import { AiAircraftViews } from '../aircraft/AiAircraftViews';
 import { CameraManager } from '../camera/CameraManager';
 import { AudioSystem } from '../audio/AudioSystem';
 import { AUDIO_CONFIG } from '../config/audio';
@@ -83,7 +97,7 @@ import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type Ba
 import { MiniMap, renderMapBackground, type MapFrame } from '../ui/MiniMap';
 import type { BaseChoice } from '../ui/BaseMap';
 import { describeBases, type BaseView } from '../combat/baseViews';
-import { BASE_COLORS, BEACON_CONFIG } from '../config/map';
+import { BEACON_CONFIG, baseColor } from '../config/map';
 import { BaseBeacons } from '../world/BaseBeacons';
 import { Environment } from '../world/Environment';
 import { FixedTimestepLoop } from './FixedTimestepLoop';
@@ -108,6 +122,9 @@ const AIR_START_HEIGHT = 800;
 const RAD_TO_DEG = 180 / Math.PI;
 /** Identifies the local player's rounds in combat events. Phase 5 uses the server's player ids. */
 const PLAYER_ID = 1;
+
+/** The AI pilots' ids in combat events (the player is 1; AA guns 10 000 and up). */
+const AI_FIRST_ID = 100;
 
 /** The screens over the game. Any of them pauses it (single player). */
 type Screen = 'menu' | 'hangar' | 'pause' | 'settings' | 'lobby' | 'results';
@@ -138,6 +155,8 @@ export class Game {
   private readonly loop: FixedTimestepLoop;
   private readonly hud: FlightHud;
   private readonly debugOverlay: DebugOverlay;
+  /** This step's aircraft in the combat world: the player, then the AI (reused). */
+  private readonly shooters: Shooter[] = [];
   private readonly combat: CombatWorld;
   private readonly playerGuns: GunState;
   private readonly service = createServiceStatus();
@@ -185,12 +204,27 @@ export class Game {
   /** Seconds in the air and targets destroyed at the start of this sortie, for the respawn screen. */
   private sortieSeconds = 0;
   private sortieKillsAtStart = 0;
+  /** The Red AI pilots (shared behaviour trees) and their aircraft as drawn. A new match brings a new squadron. */
+  private aiForce: AiForce;
+  private readonly aiViews: AiAircraftViews;
+  /** Every aircraft in the fight this step, as the AI sees them. */
+  private readonly aiContacts: AiContact[] = [];
+  /** Seconds of play this match: the AI's clock (cooldowns, aim wander). */
+  private aiClock = 0;
+  /** The match being played (null at the main menu), and how it ended once it has. */
+  private match: MatchState | null = null;
+  private matchResult: MatchResult | null = null;
+  /** Match length chosen in the hangar (minutes), remembered. */
+  private matchMinutes = readMatchMinutes();
+  /** The aircraft type is fixed for the match once it starts; only the base can change. */
+  private lockedClassId: AircraftClassId | null = null;
+  /** Which hangar screen is open: FLY from 'select' starts a new match. */
+  private hangarKind: HangarMode['kind'] = 'select';
   /** The aircraft just lost: when, and what to say on the respawn screen. Cleared by the next flight. */
   private lostAt: number | null = null;
   private lostReport: RespawnReport | null = null;
   /** The respawn screen has parked a fresh aircraft: Resume in the pause menu goes back to it. */
   private awaitingRespawn = false;
-  private targetsDestroyed = 0;
   /** Camera shake from being hit (m), decaying. */
   private impactShake = 0;
   /** Smoke puffs owed to the player's damage trail (fractions carry between frames). */
@@ -246,7 +280,7 @@ export class Game {
     // The same terrain, sea and carriers the flight model collides with; the environment draws them.
     const terrain = createTerrain();
     this.carrierStatuses = createCarrierStatuses();
-    this.ground = createWorldGround(terrain, CARRIERS, RUNWAYS, this.carrierStatuses);
+    this.ground = createWorldGround(terrain, CARRIERS, PAVED_AREAS, this.carrierStatuses);
     this.environment = new Environment(this.scene, terrain, this.carrierStatuses);
 
     this.aircraft = new PlayerAircraft(this.scene, this.ground, PLAYER_TEAM, this.hangarSelection.classId);
@@ -295,6 +329,11 @@ export class Game {
     this.lobby = new LobbyScreen(uiRoot, { playOffline: () => this.openHangar('select', 'lobby'), back: () => this.openMainMenu() });
     this.results = new ResultsScreen(uiRoot, () => this.continueFromResults());
     this.beacons = new BaseBeacons(this.scene);
+    this.aiViews = new AiAircraftViews(this.scene, this.fireAndSmoke, (meshes) => this.environment.addShadowCasters(meshes), (x, y, z) => {
+      const ear = this.scene.activeCamera?.globalPosition ?? this.aircraft.renderPosition;
+      this.audio.playAt('explosion', { x, y, z }, ear, AUDIO_CONFIG.explosionVolume, 1);
+    });
+    this.aiForce = this.newSquadron();
     this.applySettings();
     // Start at the main menu, the aircraft parked at the remembered base if it's still yours.
     const savedBase = BASES.find((b) => b.id === this.hangarSelection.baseId) ?? null;
@@ -352,13 +391,22 @@ export class Game {
       }
       this.aircraft.step(controls, dt);
       const { state, spec } = this.aircraft;
-      this.combat.step(dt, [{ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire }]);
+      // The AI pilots decide and fly with the same flight model, then everyone fights.
+      this.aiViews.beforeStep();
+      this.aiClock += dt;
+      this.aiForce.fly(this.aiWorldFor(this.aiClock), dt);
+      this.shooters.length = 0;
+      this.shooters.push({ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire }, ...this.aiForce.shooters());
+      this.combat.step(dt, this.shooters);
       this.serviceEvent = stepService(this.service, state, spec, this.playerGuns, PLAYER_TEAM, dt, this.combat.ownerOf) ?? this.serviceEvent;
+      this.aiForce.service(this.combat.ownerOf, dt);
+      if (this.match) this.matchResult ??= stepMatch(this.match, this.combat.bases, dt);
     });
     this.handleCombatEvents();
     this.handleServiceEvent();
     this.updateAutoLand();
     this.updateSortie(deltaSeconds);
+    if (this.matchResult && this.screen === null) this.endMatch(this.matchResult);
     if (this.catapultBriefing && this.aircraft.state.catapult !== 'held') {
       this.catapultBriefing = false;
       this.hud.clearMessage();
@@ -390,6 +438,8 @@ export class Game {
     this.effects.update(deltaSeconds);
     this.balloons.update(deltaSeconds);
     this.enemyTargets.update(deltaSeconds);
+    this.aiViews.update(alpha, deltaSeconds);
+    this.environment.showCarrierOwners(this.combat.ownerOf);
     this.baseStructures.update(deltaSeconds);
     this.updateAircraftFire(deltaSeconds);
     this.fireAndSmoke.update(deltaSeconds, this.scene.activeCamera?.globalPosition ?? renderPosition);
@@ -417,8 +467,8 @@ export class Game {
       enemyMarkers: this.enemyMarkers(),
       baseLabels: this.baseLabels(baseViews),
       impactPoint: this.projectImpactPoint(),
-      targetsDestroyed: this.targetsDestroyed,
-      basesHeld: { held: baseViews.filter((v) => v.owner === PLAYER_TEAM && v.state !== 'gone').length, total: baseViews.length },
+      match: this.match ? { secondsLeft: remainingSeconds(this.match), blue: basesHeld(this.combat.bases, 'blue'), red: basesHeld(this.combat.bases, 'red'), open: this.combat.bases.filter((b) => b.owner === null).length } : null,
+      kills: this.stats.kills,
       prompt: this.promptLine(),
     });
     this.debugOverlay.update(deltaSeconds, this.debugLines);
@@ -453,10 +503,16 @@ export class Game {
           this.impactShake = Math.max(this.impactShake, DEFENCE_VISUAL_CONFIG.hitShake);
         }
         return;
-      case 'aircraftShotDown':
+      case 'aircraftShotDown': {
         this.fireAndSmoke.explosion(event.x, event.y, event.z, 1);
-        if (event.victim === PLAYER_ID) this.hud.showMessage('SHOT DOWN · you are going down', 'bad', 4);
+        if (event.victim === PLAYER_ID) {
+          this.hud.showMessage(`SHOT DOWN by ${this.describeShooter(event.owner)} · you are going down`, 'bad', 4);
+          return;
+        }
+        const victim = this.aiForce.pilots.find((p) => p.id === event.victim);
+        if (victim && event.owner === PLAYER_ID) this.hud.showMessage(`ENEMY DOWN · ${victim.spec.displayName.toUpperCase()}`, 'good', 3);
         return;
+      }
       case 'targetHit':
         this.effects.spawn('spark', event.x, event.y, event.z);
         if (event.kind === 'balloon') this.balloons.flash(event.targetId);
@@ -469,7 +525,8 @@ export class Game {
         this.targetDestroyed(event);
         return;
       case 'baseNeutralized':
-        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENCELESS · land and stop on its runway to capture it`, 'good', 6);
+        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENCELESS · land and stop on it to capture it`, 'good', 6);
+        else this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} HAS LOST ITS DEFENCES · Red can land and take it`, 'bad', 6);
         return;
       case 'baseDefended':
         // Only a capture repairs a base: this is the new owner's crews finishing.
@@ -478,14 +535,38 @@ export class Game {
         return;
       case 'baseCaptured':
         if (event.owner === PLAYER_TEAM) {
-          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} CAPTURED · it's yours: rearm here; your crews are repairing its defences`, 'good', 7);
+          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} TAKEN · it's yours: start and rearm here; your crews are building its AA gun`, 'good', 7);
           this.audio.play('cable', 0.4, 1.6);
+        } else {
+          this.hud.showMessage(`RED HAS TAKEN ${this.baseName(event.baseId).toUpperCase()}${event.previousOwner === PLAYER_TEAM ? ' from you' : ''}`, 'bad', 6);
         }
     }
   }
 
   private baseName(baseId: string): string {
     return BASES.find((b) => b.id === baseId)?.name ?? 'Base';
+  }
+
+  /** Who fired a round: an AI pilot's aircraft type, or a base's AA gun. */
+  private describeShooter(owner: number): string {
+    const pilot = this.aiForce.pilots.find((p) => p.id === owner);
+    if (pilot) return `a Red ${pilot.spec.displayName}`;
+    return this.combat.teamOfOwner(owner) === 'red' ? 'Red AA fire' : 'AA fire';
+  }
+
+  /** A fresh Red squadron (shared AI pilots), shown by the AI aircraft views. */
+  private newSquadron(): AiForce {
+    const force = new AiForce(createSquadron('red', AI_FIRST_ID, AIRCRAFT_CLASSES));
+    this.aiViews.setPilots(force.pilots);
+    return force;
+  }
+
+  /** What the AI pilots see this step: every aircraft, the targets and bases. */
+  private aiWorldFor(time: number): AiWorld {
+    this.aiContacts.length = 0;
+    this.aiContacts.push({ id: PLAYER_ID, team: PLAYER_TEAM, state: this.aircraft.state });
+    this.aiForce.contacts(this.aiContacts);
+    return { time, ground: this.ground, aircraft: this.aiContacts, targets: this.combat.targets, bases: this.combat.bases, ownerOf: this.combat.ownerOf, carrierStatuses: this.carrierStatuses, pilots: this.aiForce.pilots };
   }
 
   /**
@@ -496,19 +577,21 @@ export class Game {
     const p = this.aircraft.state.position;
     let best: BaseStatus | null = null;
     for (const control of this.combat.bases) {
-      if (control.base.kind !== 'airfield' || control.base.team === PLAYER_TEAM) continue;
       const r = control.base.runway.center;
       const distance = Math.hypot(r.x - p.x, r.z - p.z);
-      const captured = control.owner === PLAYER_TEAM;
-      if (distance > (captured ? 1_500 : 6_000) || (best && best.distance < distance)) continue;
       const defences = this.combat.targets.filter((t) => t.baseId === control.base.id && BASE_DEFENCE_KINDS.includes(t.kind));
+      const defencesLeft = defences.filter((t) => t.health > 0).length;
+      const ours = control.owner === PLAYER_TEAM;
+      // Ours: only while close, and while its crews are still building its defences (just taken).
+      if (ours && (distance > 1_500 || defencesLeft === defences.length)) continue;
+      if (distance > 6_000 || (best && best.distance < distance)) continue;
       best = {
         name: control.base.name,
         distance,
-        defencesLeft: defences.filter((t) => t.health > 0).length,
+        holder: ours ? 'yours' : control.owner === null ? 'nobody' : 'enemy',
+        defencesLeft,
         defencesTotal: defences.length,
         capturing: control.capturingTeam === PLAYER_TEAM ? control.captureProgress : null,
-        captured,
       };
     }
     return best;
@@ -516,7 +599,6 @@ export class Game {
 
   private targetDestroyed(event: Extract<CombatEvent, { type: 'targetDestroyed' }>): void {
     const byPlayer = event.owner === PLAYER_ID;
-    if (byPlayer) this.targetsDestroyed++;
     switch (event.kind) {
       case 'balloon':
         this.effects.spawn('burst', event.x, event.y, event.z);
@@ -720,8 +802,9 @@ export class Game {
     this.autoLand = planAutoLand(base, state);
     this.autoLandBase = base;
     this.autoLandEnd = null;
-    const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
-    this.hud.showMessage(`AUTO-LAND · ${base.name.toUpperCase()}${enemy ? ' · ENEMY BASE: no rearming there' : ''} · ${this.keyName('autoLand')} or any flight key takes over`, enemy ? 'ok' : 'good', 4);
+    const owner = this.combat.ownerOf(base);
+    const note = owner === PLAYER_TEAM ? '' : owner === null ? " · NOBODY'S: stop there to take it" : ' · ENEMY BASE: no rearming there';
+    this.hud.showMessage(`AUTO-LAND · ${base.name.toUpperCase()}${note} · ${this.keyName('autoLand')} or any flight key takes over`, owner === PLAYER_TEAM || owner === null ? 'good' : 'ok', 4);
   }
 
   /** After the physics steps: hand control back if auto-land finished, was overridden, or can't go on. */
@@ -743,10 +826,12 @@ export class Game {
       const message =
         owner === PLAYER_TEAM
           ? `LANDED · ${base.name.toUpperCase()} · stay stopped at idle: the ground crew rearms and repairs you`
-          : control?.neutralized
+          : owner === null
+            ? `LANDED · ${base.name.toUpperCase()} · nobody's: stay stopped to take it`
+            : control?.neutralized
             ? `LANDED · ${base.name.toUpperCase()} · it's defenceless: stay stopped to capture it`
             : `LANDED · ${base.name.toUpperCase()} · enemy base: no rearming here, and it can't be captured while defended`;
-      this.stopAutoLand(message, owner === PLAYER_TEAM || control?.neutralized ? 'good' : 'ok');
+      this.stopAutoLand(message, owner === PLAYER_TEAM || owner === null || control?.neutralized ? 'good' : 'ok');
     }
   }
 
@@ -791,8 +876,9 @@ export class Game {
     if (!base) return carrierNearby ? { active: false, text: `The ${spec.displayName} is too big to land on a carrier` } : null;
     const distance = Math.hypot(base.runway.center.x - p.x, base.runway.center.z - p.z);
     if (distance > AUTO_LAND_HUD.promptDistance && !carrierNearby) return null;
-    const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
-    return { active: false, text: `${this.keyName('autoLand')} · AUTO-LAND at ${base.name}${enemy ? ' (enemy)' : ''} · ${(distance / 1000).toFixed(1)} km${tooBig}` };
+    const owner = this.combat.ownerOf(base);
+    const whose = owner === PLAYER_TEAM ? '' : owner === null ? " (nobody's)" : ' (enemy)';
+    return { active: false, text: `${this.keyName('autoLand')} · AUTO-LAND at ${base.name}${whose} · ${(distance / 1000).toFixed(1)} km${tooBig}` };
   }
 
   /** Distance and compass bearing from the aircraft to the nearest friendly base. */
@@ -882,6 +968,16 @@ export class Game {
     const markers: EnemyMarker[] = [];
     if (!this.settings.gameplay.targetMarkers) return markers;
     const p = this.aircraft.state.position;
+    // Enemy aircraft first: they matter most, out to 5 km.
+    for (const pilot of this.aiForce.pilots) {
+      const s = pilot.state;
+      if (!pilot.spawned || s.crashed || pilot.team === PLAYER_TEAM) continue;
+      const distance = Math.hypot(s.position.x - p.x, s.position.y - p.y, s.position.z - p.z);
+      if (distance > 5_000) continue;
+      this.markerPoint.set(s.position.x, s.position.y, s.position.z);
+      const screen = this.projectToScreen(this.markerPoint);
+      if (screen) markers.push({ x: screen.x, y: screen.y, kind: 'aircraft', distance, label: pilot.spec.displayName.toUpperCase() });
+    }
     for (const target of this.combat.targets) {
       if (target.team === null || target.team === PLAYER_TEAM || target.health <= 0) continue;
       const sink = target.carrierId ? (this.carrierStatuses.get(target.carrierId)?.sink ?? 0) : 0;
@@ -893,7 +989,8 @@ export class Game {
       if (screen) markers.push({ x: screen.x, y: screen.y, kind: target.kind, distance });
     }
     // Nearest first; drop markers that would sit on top of a nearer one (the parked aircraft stand close together).
-    markers.sort((a, b) => a.distance - b.distance);
+    // Aircraft first, then nearest first.
+    markers.sort((a, b) => (a.kind === 'aircraft' ? 0 : 1) - (b.kind === 'aircraft' ? 0 : 1) || a.distance - b.distance);
     return markers.filter((m, i) => !markers.slice(0, i).some((n) => Math.hypot(m.x - n.x, m.y - n.y) < 26));
   }
 
@@ -951,7 +1048,10 @@ export class Game {
     const p = this.aircraft.renderPosition;
     const moving = Math.hypot(state.velocity.x, state.velocity.z) > 1;
     const heading = moving ? Math.atan2(state.velocity.x, state.velocity.z) : this.aircraftHeading();
-    return { player: state.crashed ? null : { x: p.x, z: p.z, headingDeg: ((heading * RAD_TO_DEG) % 360 + 360) % 360 }, bases: baseViews, playerTeam: PLAYER_TEAM };
+    const aircraft = this.aiForce.pilots
+      .filter((pilot) => pilot.spawned && !pilot.state.crashed)
+      .map((pilot) => ({ x: pilot.state.position.x, z: pilot.state.position.z, headingDeg: (((Math.atan2(pilot.state.velocity.x, pilot.state.velocity.z) * RAD_TO_DEG) % 360) + 360) % 360, team: pilot.team }));
+    return { player: state.crashed ? null : { x: p.x, z: p.z, headingDeg: ((heading * RAD_TO_DEG) % 360 + 360) % 360 }, bases: baseViews, playerTeam: PLAYER_TEAM, aircraft };
   }
 
   /** Which way the nose points, clockwise from north (rad). */
@@ -965,11 +1065,16 @@ export class Game {
   /** The bases an aircraft type could start from now (your own and any you've captured; carriers need a hook), as the hangar's map lists them. */
   private baseChoices(classId: AircraftClassId): BaseChoice[] {
     const p = this.aircraft.state.position;
-    return startingBases(PLAYER_TEAM, AIRCRAFT_CLASSES[classId], this.combat.ownerOf, this.carrierStatuses).map((base) => {
+    const spec = AIRCRAFT_CLASSES[classId];
+    const decks = startingBases(PLAYER_TEAM, spec, this.combat.ownerOf, this.carrierStatuses);
+    // Too big for a deck: it can still be launched into the air over a carrier.
+    const overCarriers = hasTailhook(spec) ? [] : airStartBases(PLAYER_TEAM, this.combat.ownerOf, this.carrierStatuses).filter((b) => b.kind === 'carrier');
+    return [...overCarriers, ...decks].map((base) => {
       const owner = this.combat.ownerOf(base);
       const distance = Math.hypot(base.runway.center.x - p.x, base.runway.center.z - p.z);
-      const parts = [base.kind === 'carrier' ? 'carrier · catapult launch' : 'airfield', owner !== base.team ? 'captured' : '', distance < 1_500 ? 'here' : `${(distance / 1000).toFixed(1)} km`].filter(Boolean);
-      return { base, name: base.name, detail: parts.join(' · '), color: BASE_COLORS[owner] };
+      const how = base.kind === 'carrier' ? (hasTailhook(spec) ? 'carrier · catapult launch' : 'carrier · air start (too big for the deck)') : 'airfield';
+      const parts = [how, owner !== base.team ? 'captured' : '', distance < 1_500 ? 'here' : `${(distance / 1000).toFixed(1)} km`].filter(Boolean);
+      return { base, name: base.name, detail: parts.join(' · '), color: baseColor(owner) };
     });
   }
 
@@ -1051,7 +1156,7 @@ export class Game {
 
   private openLobby(): void {
     this.enter('lobby');
-    this.lobby.open({ callsign: this.callsign, aircraft: this.aircraft.spec.displayName });
+    this.lobby.open({ callsign: this.callsign, aircraft: this.aircraft.spec.displayName, redPilots: this.aiForce.pilots.map((p) => p.spec.displayName) });
   }
 
   /**
@@ -1064,6 +1169,7 @@ export class Game {
     this.noticeLoss();
     this.hangarResumable = kind === 'change' && this.isFlightInProgress();
     this.hangarReturn = returnTo;
+    this.hangarKind = kind;
     const spec = this.aircraft.spec;
     this.hangarSelection = { ...this.hangarSelection, classId: spec.id, paintId: this.aircraft.paint.schemeFor(spec.id).id, baseId: this.aircraft.homeBase.id };
     if (kind === 'respawn') {
@@ -1073,7 +1179,11 @@ export class Game {
     this.enter('hangar');
     const report: RespawnReport = this.lostReport ?? { title: 'Aircraft lost', cause: '', lines: [] };
     const mode: HangarMode = kind === 'respawn' ? { kind, report } : kind === 'change' ? { kind, resumable: this.hangarResumable } : { kind };
-    this.hangar.open(mode, this.hangarSelection, this.baseChoices(this.hangarSelection.classId), this.mapFrame(describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM)));
+    this.hangar.open(mode, this.hangarSelection, this.baseChoices(this.hangarSelection.classId), this.mapFrame(describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM)), {
+      lockedClassId: this.lockedClassId,
+      matchMinutes: this.matchMinutes,
+      matchLengths: MATCH_CONFIG.lengthsMinutes,
+    });
   }
 
   private openPause(): void {
@@ -1127,18 +1237,62 @@ export class Game {
     },
   };
 
-  /** Exit to main menu: the session ends with the after-action report. The aircraft is parked at its base again. */
+  /** Exit to main menu mid-match: the match is abandoned; the report shows how it stood. */
   private exitToMainMenu(): void {
     this.noticeLoss();
     this.clearLoss();
-    this.parkForHangar();
-    this.enter('results');
-    this.results.open(this.stats, this.callsign, this.clock);
+    this.showReport(null);
   }
 
+  /** The clock ran out, or a side lost its last base: the match is over. */
+  private endMatch(result: MatchResult): void {
+    this.noticeLoss();
+    this.clearLoss();
+    this.showReport(result);
+  }
+
+  private showReport(result: MatchResult | null): void {
+    const match = this.match;
+    this.enter('results');
+    this.results.open({
+      stats: this.stats,
+      callsign: this.callsign,
+      clock: this.clock,
+      result,
+      bases: { blue: basesHeld(this.combat.bases, 'blue'), red: basesHeld(this.combat.bases, 'red') },
+      matchSeconds: match?.elapsed ?? 0,
+      playerTeam: PLAYER_TEAM,
+    });
+  }
+
+  /** After the report: everything resets (world, squadron, scores) and the aircraft is parked at its base for the menu. */
   private continueFromResults(): void {
-    this.stats = new SessionStats(PLAYER_ID, PLAYER_TEAM);
+    this.resetWorld();
+    this.parkForHangar();
     this.openMainMenu();
+  }
+
+  /**
+   * A new match: every base, gun and building as at the start, a fresh Red
+   * squadron, the clock and scores at zero, and the aircraft locked in.
+   */
+  private startMatch(): void {
+    this.resetWorld();
+    this.match = createMatch(this.matchMinutes);
+    this.lockedClassId = this.hangarSelection.classId;
+  }
+
+  private resetWorld(): void {
+    this.combat.reset();
+    this.aiForce = this.newSquadron();
+    this.aiClock = 0;
+    this.match = null;
+    this.matchResult = null;
+    this.lockedClassId = null;
+    this.stats = new SessionStats(PLAYER_ID, PLAYER_TEAM);
+    this.crashFire = null;
+    this.serviceEvent = null;
+    this.clearLoss();
   }
 
   /** Esc in flight: the pause menu; with the aircraft lost, straight to the respawn screen. */
@@ -1218,8 +1372,12 @@ export class Game {
 
   // ── The hangar ──────────────────────────────────────────────────────────
 
-  /** FLY: a new flight with the hangar's choices (also Enter on the crash screen). */
-  private flyFromHangar(): void {
+  /**
+   * FLY: a new flight with the hangar's choices (also Enter on the crash
+   * screen). From the hangar before a match (`newMatch`), it starts the match.
+   */
+  private flyFromHangar(newMatch = false): void {
+    if (newMatch) this.startMatch();
     const selection = this.hangarSelection;
     this.noticeLoss();
     this.clearLoss();
@@ -1231,7 +1389,12 @@ export class Game {
     this.sortieSeconds = 0;
     this.sortieKillsAtStart = this.stats.targetsDestroyed;
     if (this.screen !== null) this.enter(null);
-    this.startFlight(selection.start);
+    // Too big for the deck: launched into the air over the carrier, whatever the start chosen.
+    const base = this.aircraft.homeBase;
+    this.startFlight(base.kind === 'carrier' && !hasTailhook(this.aircraft.spec) ? 'air' : selection.start);
+    if (newMatch && this.match) {
+      this.hud.showMessage(`MATCH ON · ${this.matchMinutes}:00 · take the islands' airfields: the side holding more bases when time runs out wins`, 'good', 7);
+    }
   }
 
   /** Puts the aircraft where the chosen start says, with the right levers, and briefs the player. */
@@ -1304,10 +1467,14 @@ export class Game {
 
   private readonly hangarEvents: HangarEvents = {
     aircraft: (id) => {
+      // In a match the aircraft is fixed: only the base can change.
+      if (this.lockedClassId && id !== this.lockedClassId) {
+        this.hangar.flashLocked();
+        return;
+      }
       const choices = this.baseChoices(id);
       let baseId = this.hangarSelection.baseId;
-      // A carrier needs a hook: the Heavy Bomber falls back to an airfield.
-      if (!choices.some((c) => c.base.id === baseId)) baseId = choices.find((c) => c.base.id === teamBase(PLAYER_TEAM, AIRCRAFT_CLASSES[id].homeBase).id)?.base.id ?? choices[0]?.base.id ?? baseId;
+      if (!choices.some((c) => c.base.id === baseId)) baseId = choices.find((c) => c.base.id === teamHome(PLAYER_TEAM).id)?.base.id ?? choices[0]?.base.id ?? baseId;
       this.hangarSelection = { ...this.hangarSelection, classId: id, paintId: this.aircraft.paint.schemeFor(id).id, baseId };
       if (this.hangarResumable) this.aircraft.setPreview(id);
       else this.parkForHangar();
@@ -1329,7 +1496,11 @@ export class Game {
       this.hangarSelection = { ...this.hangarSelection, start };
       this.hangar.setSelection(this.hangarSelection);
     },
-    fly: () => this.flyFromHangar(),
+    matchLength: (minutes) => {
+      this.matchMinutes = minutes;
+      writeMatchMinutes(minutes);
+    },
+    fly: () => this.flyFromHangar(this.hangarKind === 'select'),
     back: () => {
       if (this.hangarReturn === 'pause') this.openPause();
       else if (this.hangarReturn === 'lobby') this.openLobby();
@@ -1347,7 +1518,7 @@ export class Game {
       const base = this.hangar.moveBase(direction);
       if (base) this.hangarEvents.base(base);
     }
-    if (enter) this.flyFromHangar();
+    if (enter) this.flyFromHangar(this.hangarKind === 'select');
     else if (esc) this.hangarEvents.back();
   }
 
@@ -1399,7 +1570,7 @@ export class Game {
   private promptLine(): HudFrame['prompt'] {
     const state = this.aircraft.state;
     if (state.crashed || state.shotDown) return null;
-    if (!this.autoLand && state.onGround) return this.isFlightInProgress() ? null : { active: false, text: 'Esc · pause menu: change aircraft, paint or base' };
+    if (!this.autoLand && state.onGround) return this.isFlightInProgress() ? null : { active: false, text: 'Esc · pause menu: change base or paint' };
     return this.autoLandLine();
   }
 
@@ -1471,12 +1642,12 @@ export class Game {
       const screen = this.projectToScreen(this.markerPoint);
       if (!screen) continue;
       const captured = view.owner !== view.base.team;
-      const status = view.state === 'open' ? ' · DEFENCELESS' : captured && view.owner === PLAYER_TEAM ? ' · YOURS' : '';
+      const status = view.state === 'open' ? ' · DEFENCELESS' : view.owner === null ? " · NOBODY'S" : captured && view.owner === PLAYER_TEAM ? ' · YOURS' : '';
       labels.push({
         x: screen.x,
         y: screen.y - 26,
         text: `${view.base.name.toUpperCase()}${status} ${(distance / 1000).toFixed(1)} km`,
-        color: view.state === 'open' ? BASE_COLORS.open : BASE_COLORS[view.owner],
+        color: baseColor(view.owner, view.state === 'open'),
       });
     }
     return labels;
@@ -1568,6 +1739,7 @@ export class Game {
       ['Rounds', `${this.combat.projectiles.activeCount} in flight, ${this.playerGuns.roundsFired} fired, ${this.playerGuns.ammo} left`],
       ['Sound', this.audio.started ? `${this.audio.isMuted ? 'muted' : 'on'}, level ${this.audio.level().toFixed(3)}` : 'waiting for a key press or click'],
       ['Stall speed', `${(this.aircraft.performance.stallSpeed * 3.6).toFixed(0)} km/h (1 g, sea level)`],
+      ...this.aiForce.pilots.map((p): DebugLine => [`AI ${p.id - AI_FIRST_ID + 1}`, `${p.spec.id}: ${p.activity}${p.spawned ? ` · ${(p.state.position.y).toFixed(0)} m` : ''}`]),
     ];
   };
 
@@ -1580,7 +1752,7 @@ export class Game {
 
 /** The hangar's choices from last time (the aircraft type, base and how to start); anything unknown falls back to the defaults. */
 function readHangarSelection(): HangarSelection {
-  const fallback: HangarSelection = { classId: DEFAULT_AIRCRAFT, paintId: 'olive', baseId: 'blue-airfield', start: 'runway' };
+  const fallback: HangarSelection = { classId: DEFAULT_AIRCRAFT, paintId: 'olive', baseId: 'blue-carrier', start: 'runway' };
   try {
     const saved = JSON.parse(localStorage.getItem(HANGAR_STORAGE_KEY) ?? '{}') as Partial<HangarSelection>;
     const classId = saved.classId && saved.classId in AIRCRAFT_CLASSES ? saved.classId : fallback.classId;
@@ -1597,6 +1769,25 @@ function writeHangarSelection(selection: HangarSelection): void {
     localStorage.setItem(HANGAR_STORAGE_KEY, JSON.stringify({ classId: selection.classId, baseId: selection.baseId, start: selection.start }));
   } catch {
     // Blocked storage: the choices just aren't remembered.
+  }
+}
+
+const MATCH_LENGTH_KEY = 'dogfight.matchMinutes';
+
+function readMatchMinutes(): number {
+  try {
+    const saved = Number(localStorage.getItem(MATCH_LENGTH_KEY));
+    return (MATCH_CONFIG.lengthsMinutes as readonly number[]).includes(saved) ? saved : MATCH_CONFIG.defaultMinutes;
+  } catch {
+    return MATCH_CONFIG.defaultMinutes;
+  }
+}
+
+function writeMatchMinutes(minutes: number): void {
+  try {
+    localStorage.setItem(MATCH_LENGTH_KEY, String(minutes));
+  } catch {
+    // Blocked storage: the choice lasts this visit only.
   }
 }
 

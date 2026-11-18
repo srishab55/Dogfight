@@ -12,7 +12,7 @@ import {
   createWorldGround,
   hasTailhook,
   runwayLocal,
-  teamBase,
+  homeBase,
   type AircraftClassId,
   type AircraftClassSpec,
 } from '../src/index';
@@ -49,7 +49,7 @@ describe('carrier operations', () => {
     const perf = computePerformance(spec);
 
     it('sits still on the catapult with the brakes on', () => {
-      const state = createParkedState(spec, baseSpawnPoint(teamBase('blue', 'carrier')), true);
+      const state = createParkedState(spec, baseSpawnPoint(homeBase('blue')), true);
       const start = { ...state.position };
       fly(state, spec, 5, () => ({ brake: 1 }), undefined, world);
       expect(state.crashed).toBe(false);
@@ -57,7 +57,7 @@ describe('carrier operations', () => {
     });
 
     it('is held on the catapult while the engine runs up, then launched off the bow into a climb', () => {
-      const state = createParkedState(spec, baseSpawnPoint(teamBase('blue', 'carrier')), true);
+      const state = createParkedState(spec, baseSpawnPoint(homeBase('blue')), true);
       const start = fromStern(state.position);
       // Half throttle: the holdback bar keeps it in place.
       fly(state, spec, 4, () => ({ throttle: 0.5 }), undefined, world);
@@ -90,7 +90,7 @@ describe('carrier operations', () => {
     });
 
     it('hands-off after a catapult launch with take-off flaps, it flies away instead of sinking into the sea', () => {
-      const state = createParkedState(spec, baseSpawnPoint(teamBase('blue', 'carrier')), true);
+      const state = createParkedState(spec, baseSpawnPoint(homeBase('blue')), true);
       state.flapPosition = 0.5;
       let lowest = Infinity;
       let launched = false;
@@ -182,7 +182,7 @@ describe('carrier operations', () => {
   });
 
   it('carrier aircraft spawn on the catapult, clear of the landing area and the island', () => {
-    const spawn = baseSpawnPoint(teamBase('blue', 'carrier'));
+    const spawn = baseSpawnPoint(homeBase('blue'));
     expect(fromStern(spawn.position)).toBeCloseTo(SPAWN_DISTANCE.carrier, 5);
     expect(SPAWN_DISTANCE.carrier).toBe(BLUE_CARRIER.catapult.from);
     expect(BLUE_CARRIER.catapult.from).toBeGreaterThan(BLUE_CARRIER.island.along + BLUE_CARRIER.island.length / 2);

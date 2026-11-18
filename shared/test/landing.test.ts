@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AIRCRAFT_CLASSES,
   AIRCRAFT_CLASS_IDS,
-  HOME_RUNWAY,
   groundClearance,
   computePerformance,
   createAirborneState,
@@ -13,20 +12,20 @@ import {
   type AircraftState,
 } from '../src/index';
 import { groundEffectInducedDragFactor, groundEffectLiftFactor, liftCoefficient, applyFlaps, maxLiftCoefficient } from '../src/flight/aerodynamics';
-import { fly, heightAboveGround, holdPitchAttitude, holdVerticalSpeed, rollToBank, type PilotView } from './testPilot';
+import { fly, heightAboveGround, holdPitchAttitude, holdVerticalSpeed, rollToBank, type PilotView, TEST_RUNWAY } from './testPilot';
 
 /*
  * Phase 2: take-off and landing. Flaps, ground effect, touchdown grading
  * and hard-landing damage, for every aircraft class.
  */
 
-const THRESHOLD_Z = HOME_RUNWAY.center.z - HOME_RUNWAY.length / 2;
-const RUNWAY_END_Z = HOME_RUNWAY.center.z + HOME_RUNWAY.length / 2;
+const THRESHOLD_Z = TEST_RUNWAY.center.z - TEST_RUNWAY.length / 2;
+const RUNWAY_END_Z = TEST_RUNWAY.center.z + TEST_RUNWAY.length / 2;
 const AIM_POINT = 300;
 const RAD_TO_DEG = 180 / Math.PI;
 
 function approach(spec: AircraftClassSpec, speed: number, flaps: number, distance = 2500): AircraftState {
-  return createApproachState(spec, HOME_RUNWAY, { distanceFromThreshold: distance, glideSlopeDeg: 3, aimPointPastThreshold: AIM_POINT, speed, throttle: 0.25, flaps });
+  return createApproachState(spec, TEST_RUNWAY, { distanceFromThreshold: distance, glideSlopeDeg: 3, aimPointPastThreshold: AIM_POINT, speed, throttle: 0.25, flaps });
 }
 
 /** After touchdown: stick forward until the aircraft sits level on all three wheels, limited to a moderate push. */
@@ -151,7 +150,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
     });
 
     it('lands itself from the landing-practice start: hands-off, it tracks the glide slope and touches down undamaged', () => {
-      const state = createApproachState(spec, HOME_RUNWAY, {
+      const state = createApproachState(spec, TEST_RUNWAY, {
         distanceFromThreshold: 2500,
         glideSlopeDeg: 3,
         aimPointPastThreshold: AIM_POINT,
@@ -224,7 +223,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
     });
 
     it('wheel skips during the take-off roll are not counted as touchdowns', () => {
-      const state = createParkedState(spec, getRunwaySpawnPoint(HOME_RUNWAY, 60));
+      const state = createParkedState(spec, getRunwaySpawnPoint(TEST_RUNWAY, 60));
       fly(state, spec, 120, (v) => ({ throttle: 1, roll: rollToBank(v, 0), pitch: v.state.telemetry.airspeed > perf.stallSpeed * 1.1 ? holdPitchAttitude(v, 10) : 0 }), (v) => heightAboveGround(v.state) > 60);
       expect(state.touchdownCount).toBe(0);
     });

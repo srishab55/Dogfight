@@ -4,26 +4,37 @@ A browser-based 3D multiplayer aerial combat game: Red vs Blue team base
 assault with dogfighting, bombing and territory capture. Inspired by Dogfight
 Squadron, rebuilt in full 3D.
 
-**Status:** Fly five aircraft types over a small stretch of sea with three
-islands and two aircraft carriers. Take off from an island airfield, or get
-catapulted off a carrier and land back on it with the arrestor hook. Attack
-Red's island and carrier: their anti-aircraft guns shoot back, parked
-aircraft burn, and the carrier can be sunk. Guns have limited ammunition:
-land at a friendly base to rearm. All sound is synthesised in the browser. Phase 3 (graphics)
-and Phase 4 (combat) are in progress. See [docs/PROGRESS.md](docs/PROGRESS.md),
-and fly the [full flight test](docs/FLIGHT_TEST.md).
+**Status:** A timed match, you against a squadron of four Red AI pilots,
+over a small stretch of sea with three islands and two aircraft carriers.
+Each side starts with its carrier; the three island airfields belong to
+nobody. Take them, hold them, and take Red's: when the clock runs out, the
+side holding more bases wins. Seven aircraft types, guns with limited
+ammunition, anti-aircraft guns that shoot back, auto-land, and sound
+synthesised in the browser. Phase 4 (combat) is in progress. See
+[docs/PROGRESS.md](docs/PROGRESS.md), and fly the [full flight test](docs/FLIGHT_TEST.md).
 
-**The map:** Blue holds the southern island (airfield) and the carrier to its
-west; Red the northern island and the carrier to its east. The central island,
-with a 760 m mountain, lies between them.
+**The map** is point-symmetric, so neither side is favoured: Blue's carrier
+in the south-west, Red's in the north-east, the south, central and north
+islands between them, each with an airfield (60 m runway, and a service lane
+beside it to pull off onto for rearming). Neighbouring bases are 2.5–4 km
+apart; carrier to carrier is 5.6 km.
 
-| Aircraft (key) | Home | Notes |
-|---|---|---|
-| Interceptor (1) | Island airfield | Fastest, best climb; light armour |
-| Fighter-Bomber (2) | Island airfield | All-rounder |
-| Heavy Bomber (3) | Island airfield | Four engines, 24 m wing; slow, heavily armoured |
-| Naval Fighter (4) | Carrier | Short take-off, slow approach, strong gear, tailhook |
-| Dive Bomber (5) | Carrier | Dive brakes (X), two-seat, tailhook |
+**The match** (5, 10 or 15 minutes, chosen in the hangar):
+
+- A field nobody holds is **taken by landing and stopping on it for 5 seconds**. Its AA gun is then built for you in 30 seconds, and you can start and rearm there.
+- A field the other side holds is defended: destroy its AA gun, hangar, fuel depot and radar, then land on it to take it. A **carrier is taken the same way** (shoot its AA gun, land on the deck with the hook, stop).
+- **When time is up, the side holding more bases wins**; the same number is a draw. A side left with **no base at all** has nowhere to start from and **loses at once**.
+- Your **aircraft is fixed for the match** (the base you start from can change). Exit to the main menu and everything resets.
+- **Red's four AI pilots** launch from their carrier: two hunt you, two take bases (and defend themselves). They land to capture fields, strafe defences, go home to rearm, and break when you get on their tail.
+
+| Aircraft (key) | Notes |
+|---|---|
+| Interceptor (1) | Fastest, best climb; light armour |
+| Fighter-Bomber (2) | All-rounder |
+| Heavy Bomber (3) | Four engines, 24 m wing; too big for a carrier deck: launched into the air over the carrier until your side holds an airfield |
+| Naval Fighter (4) | Short take-off, slow approach, strong gear |
+| Dive Bomber (5) | Dive brakes (X), two-seat |
+| Triplane (6) / Biplane (7) | Old-school, slow and nimble |
 
 | | |
 |---|---|
@@ -82,14 +93,17 @@ flight keys stay few:
 - **Paint**: ten schemes, remembered for each type; your team colour stays on the markings.
 - **Deploy**: a map of your bases, captured ones too (click one, or **← →**). Every type but the Heavy Bomber can start on a carrier's catapult.
 - **Start**: on the runway, in the air (800 m), or on final for landing practice.
-- **FLY** (**Enter**).
+- **Match**: 5, 10 or 15 minutes (before the match only).
+- **FLY** (**Enter**) starts the match. From then on the aircraft cards are locked.
 
-**Esc in flight pauses**: Resume, Change aircraft / base (the hangar: FLY
-starts a new flight, Back returns to the paused one), Settings, Controls,
-Audio, Return to lobby (Phase 5) and **Exit to main menu**, which ends the
-session with an **after-action report**: targets destroyed (by type), damage
-dealt, hit accuracy, deaths (shot down or crashed), bases captured, sorties
-and flying time. A winner and team scores arrive with the team rules (Phase 6).
+**Esc in flight pauses**: Resume, Change base (the hangar: FLY starts a new
+flight from the chosen base, Back returns to the paused one), Settings,
+Controls, Audio, Return to lobby (Phase 5) and **Exit to main menu**, which
+abandons the match. When the match ends, or you exit, the **after-action
+report** shows Victory, Defeat or Draw, the bases each side held, and your
+figures: aircraft shot down, deaths, bases captured, damage dealt, hit
+accuracy, sorties and flying time, ground targets by type. Continue resets
+everything.
 
 **After a crash** the HUD says what happened; **Enter** flies again at once
 with the same choices. Otherwise the **respawn screen** opens after 1.5 s
@@ -117,7 +131,7 @@ In flight (the default keys):
 | **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
 | **X** | Lock the Dive Bomber's dive brakes out / in |
 | **C** | Camera: chase → cockpit → orbit |
-| **P** | Auto-land at the nearest base within 10 km (any team; every type but the Heavy Bomber can land on a carrier). The HUD offers it within 5 km. **P** or any flight key takes over |
+| **P** | Auto-land at the nearest base (anyone's; every type but the Heavy Bomber can land on a carrier). It takes the shortest way in, comes down steeply with air brakes, and climbs over any hill on its path; about a minute from 4 km out. The HUD offers it within 5 km. **P** or any flight key takes over |
 | **N** | Map: corner → big → off (remembered) |
 | **Esc** | Pause menu |
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** lets go of the mouse and pauses |
@@ -144,30 +158,34 @@ the deck and the hook stops you in about 50 m; miss every wire and the crash
 barrier stops you (with some damage). Throttle to idle to be released.
 
 **Finding the bases:** a column of light rises from every base in its
-owner's colour (blue or red; blinking amber when an enemy base is
-defenceless), visible across the whole map, with the base's name and
+owner's colour (blue, red, white for nobody's; blinking amber when an enemy
+base is defenceless), visible across the whole map, with the base's name and
 distance on the HUD. The map (**N**) shows the islands, runways and
-carriers, every base in its owner's colour, and you.
+carriers, every base in its owner's colour, you, and every other aircraft
+(small arrows in their team's colour). The Status panel (top left) shows the
+time left, the bases each side holds, your kills, and the objective: the
+nearest base you don't hold.
 
-**Attacking and capturing Red's airfield:** it's defended by one big AA gun
-on a flak platform with a tall red flag, and has a hangar, a fuel depot and
-a radar station beside the north end of the runway (plus parked aircraft).
-Red brackets on the HUD mark them, and the Status panel (top left) counts
-the defences left. What you destroy stays destroyed. Destroy the AA
-gun, hangar, fuel depot and radar and the base is defenceless: land, stop on
-its runway for 5 seconds, and it's captured. (Landing heading north, the
-radar is a few hundred metres ahead: a touch of rudder and you can shoot it
-from the runway, then just stay stopped.) Its flag turns blue, you can
-rearm there, and 30 seconds later your crews have repaired its defences:
-its AA gun now defends it for you. When you dive at the ground, an orange circle
-shows where your rounds will hit; in mouse flight, the aim circle is where
-they land. The carrier has one big AA gun and can be sunk.
+**Taking and attacking bases:** every island airfield has one big AA gun on
+a flak platform (empty until somebody takes the field), a hangar, a fuel
+depot and a radar beside the runway. Red brackets mark enemy targets, and
+bigger ones mark Red aircraft with their type and distance. What you destroy
+stays destroyed. Destroy a Red field's AA gun, hangar, fuel depot and radar
+and it's defenceless: land, stop for 5 seconds, and it's yours. (The radar
+stands just off the runway near its far end: landing towards it, a touch of
+rudder and you can shoot it from the ground, then just stay stopped.) Its
+flag turns blue, you can rearm and start there, and 30 seconds later your
+crews have built its defences: its AA gun now defends it for you. When you
+dive at the ground, an orange circle shows where your rounds will hit; in
+mouse flight, the aim circle is where they land.
 
 **Ammunition:** the AMMO readout counts your rounds. When they run out, fly
-to a friendly base (the BASE readout gives distance and bearing), land, stop
-and idle: the ground crew rearms and repairs you in 6 seconds.
+to a friendly base (the HOME BASE readout gives distance and bearing), land,
+stop and idle: the ground crew rearms and repairs you in 6 seconds. On an
+airfield, pull off the runway onto the service lane (the yellow-lined strip
+beside it, with white parking boxes) to keep the runway clear.
 
-**Landing tip:** press **L**, then let go. With landing flaps and the briefed
+**Landing tip:** choose Start: Landing in the hangar, then let go. With landing flaps and the briefed
 throttle, the aircraft flies the glide slope by itself; idle the throttle just
 before touchdown. Keep the PAPI lights (left of the runway) at 2 red, 2 white,
 and the flight-path marker (circle with wings) on the touchdown zone.

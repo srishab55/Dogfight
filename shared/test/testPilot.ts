@@ -10,6 +10,7 @@ import {
   type Attitude,
   type FlightControls,
   type GroundQuery,
+  type RunwayDefinition,
 } from '../src/index';
 
 /*
@@ -20,7 +21,14 @@ import {
  */
 
 export const STEP = 1 / SIMULATION_CONFIG.physicsHz;
-export const GROUND = createFlatGround();
+/**
+ * The flat-ground tests' runway: at the origin, facing north (+z), so take-off
+ * runs, approaches and stopping distances read straight off z. Independent of
+ * the map's runways, which can move and turn.
+ */
+export const TEST_RUNWAY: RunwayDefinition = { id: 'test-runway', center: { x: 0, y: 0, z: 0 }, headingDegrees: 0, length: 1_200, width: 60 };
+
+export const GROUND = createFlatGround([TEST_RUNWAY]);
 
 export interface PilotView {
   readonly state: AircraftState;

@@ -1,3 +1,4 @@
+import { BASE_COLORS } from '../config/map';
 import type { Scene } from '@babylonjs/core/scene';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
@@ -25,8 +26,9 @@ const BASE_FLAG_SPOT = { along: 60, across: -105 };
  */
 export class BaseStructures {
   private readonly structures: Array<{ target: CombatTarget; alive: TransformNode; wreck: TransformNode; dish: Mesh | null }> = [];
-  private readonly flags: Array<{ base: BaseDefinition; cloth: Mesh; owner: Team | null }> = [];
-  private readonly flagMaterials: Readonly<Record<Team, Material>>;
+  private readonly flags: Array<{ base: BaseDefinition; cloth: Mesh; owner: Team | null | undefined }> = [];
+  /** Team flags, and a white one for a field nobody holds. */
+  private readonly flagMaterials: Readonly<Record<Team | 'neutral', Material>>;
   private readonly emitCarry = new Map<number, number>();
   private time = 0;
 
@@ -73,7 +75,10 @@ export class BaseStructures {
       material.emissiveColor = Color3.FromHexString(TEAM_PAINT[team].accent);
       return material;
     };
-    this.flagMaterials = { blue: flagMaterial('blue'), red: flagMaterial('red') };
+    const neutral = new StandardMaterial('base-flag-neutral', scene);
+    neutral.disableLighting = true;
+    neutral.emissiveColor = Color3.FromHexString(BASE_COLORS.neutral);
+    this.flagMaterials = { blue: flagMaterial('blue'), red: flagMaterial('red'), neutral };
     for (const base of BASES.filter((b) => b.kind === 'airfield')) {
       const r = base.runway;
       const h = degreesToRadians(r.headingDegrees);
@@ -85,7 +90,7 @@ export class BaseStructures {
       const cloth = CreateBox(`${base.id}-flag`, { width: 0.1, height: 3.6, depth: 6 }, scene);
       cloth.position.set(x, r.center.y + 20, z + 3);
       cloth.isPickable = pole.isPickable = false;
-      this.flags.push({ base, cloth, owner: null });
+      this.flags.push({ base, cloth, owner: undefined });
     }
   }
 
@@ -110,7 +115,7 @@ export class BaseStructures {
       const owner = this.combat.ownerOf(flag.base);
       if (owner !== flag.owner) {
         flag.owner = owner;
-        flag.cloth.material = this.flagMaterials[owner];
+        flag.cloth.material = this.flagMaterials[owner ?? 'neutral'];
       }
     }
   }

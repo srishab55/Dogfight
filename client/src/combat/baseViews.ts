@@ -6,7 +6,8 @@ import { BASES, type BaseDefinition, type CarrierStatusMap, type CombatWorld, ty
  */
 export interface BaseView {
   readonly base: BaseDefinition;
-  readonly owner: Team;
+  /** Null: nobody holds it yet (land on it to take it). */
+  readonly owner: Team | null;
   /**
    * 'defended': as normal. 'open': an enemy base with no defences left (land
    * on it to capture it). 'gone': a carrier that is sinking or sunk.
@@ -26,7 +27,7 @@ export function describeBases(combat: CombatWorld, carrierStatuses: CarrierStatu
     const sink = base.kind === 'carrier' ? (carrierStatuses.get(base.id)?.sink ?? 0) : 0;
     const carrierTarget = base.kind === 'carrier' ? combat.targets.find((t) => t.kind === 'carrier' && t.carrierId === base.id) : undefined;
     const gone = sink > 0 || (carrierTarget !== undefined && carrierTarget.health <= 0);
-    const state = gone ? 'gone' : control?.neutralized && owner !== playerTeam ? 'open' : 'defended';
+    const state = gone ? 'gone' : control?.neutralized && owner !== null && owner !== playerTeam ? 'open' : 'defended';
     const c = base.runway.center;
     return { base, owner, state, x: c.x, y: c.y - sink, z: c.z };
   });

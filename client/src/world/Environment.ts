@@ -2,13 +2,16 @@ import type { Scene } from '@babylonjs/core/scene';
 import type { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
-import { CARRIERS, RUNWAYS, carrierDeckRunway, type CarrierDefinition, type CarrierStatusMap, type Terrain } from '@dogfight/shared';
+import { CARRIERS, RUNWAYS, baseById, carrierDeckRunway, serviceLaneAreas, type BaseOwnerLookup, type CarrierDefinition, type CarrierStatusMap, type Team, type Terrain } from '@dogfight/shared';
+import type { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { TEAM_PAINT } from '../config/aircraftVisuals';
+import { srgbHexToLinear } from '../rendering/materials';
 import { degreesToRadians } from '../math/orientation';
 import { CLOUD_CONFIG, SHADOW_CONFIG } from '../config/graphics';
 import { LANDING_PRACTICE, PAPI_CONFIG } from '../config/landing';
 import { createCarrierModel } from './CarrierModel';
 import { Clouds } from './Clouds';
-import { createRunway } from './ground';
+import { createRunway, createTaxiway } from './ground';
 import { createLighting } from './lighting';
 import { Ocean } from './Ocean';
 import { PapiLights } from './PapiLights';
@@ -28,7 +31,7 @@ export class Environment {
   private readonly clouds: Clouds | null;
   private readonly ocean: Ocean;
   /** Each carrier's model and approach lights, moved as it sinks. */
-  private readonly carriers: Array<{ carrier: CarrierDefinition; root: TransformNode; lights: PapiLights }> = [];
+  private readonly carriers: Array<{ carrier: CarrierDefinition; root: TransformNode; lights: PapiLights; owner: Team | null }> = [];
 
   constructor(
     scene: Scene,
@@ -44,6 +47,7 @@ export class Environment {
     createTerrainMesh(scene, terrain);
     for (const runway of RUNWAYS) {
       createRunway(scene, runway);
+      for (const area of serviceLaneAreas(runway)) createTaxiway(scene, area, area.id.endsWith('-lane'));
       this.approachLights.push(new PapiLights(scene, runway, LANDING_PRACTICE.airfield.aimPointPastThreshold));
     }
     const carrierMeshes: AbstractMesh[] = [];
@@ -53,11 +57,23 @@ export class Environment {
       // Approach lights beside the deck, where the carrier glide slope meets it.
       const lights = new PapiLights(scene, carrierDeckRunway(carrier), LANDING_PRACTICE.carrier.aimPointPastThreshold, { edgeOffset: PAPI_CONFIG.carrierEdgeOffset, spacing: PAPI_CONFIG.carrierSpacing });
       this.approachLights.push(lights);
-      this.carriers.push({ carrier, root, lights });
+      this.carriers.push({ carrier, root, lights, owner: carrier.team });
     }
     this.clouds = CLOUD_CONFIG.enabled ? new Clouds(scene) : null;
     this.shadows = SHADOW_CONFIG.enabled ? new SunShadows(sun) : null;
     this.shadows?.addCasters(carrierMeshes);
+  }
+
+  /** A captured carrier wears its new owner's colours on its funnel band. */
+  showCarrierOwners(ownerOf: BaseOwnerLookup): void {
+    for (const entry of this.carriers) {
+      const owner = ownerOf(baseById(entry.carrier.id));
+      if (owner === entry.owner) continue;
+      entry.owner = owner;
+      const band = entry.root.getChildMeshes().find((mesh) => mesh.name === `${entry.carrier.id}-team-colours`);
+      const material = band?.material as PBRMaterial | null | undefined;
+      if (material) material.albedoColor = srgbHexToLinear(TEAM_PAINT[owner ?? entry.carrier.team].accent);
+    }
   }
 
   setShadowQuality(quality: 'off' | 'medium' | 'high'): void {

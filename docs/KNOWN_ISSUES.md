@@ -59,11 +59,16 @@ None known.
 | L58 | Taking off from another base (J) moves you there at once in a fresh, rearmed aircraft, rather than you flying there; it's offered only when stopped or crashed | Quick relocation | By design (your request) |
 | L59 | The Triplane and Biplane have tricycle gear like every type (history: tail-draggers), and the Triplane has an invisible "flap" lever that adds lift | Easier ground handling and landings | By design (D29) |
 | L60 | The new types share the fighters' guns and hit model; the Fighter-Bomber's bombs are only to look at | No bombs yet | Phase 4 bombs |
-| L61 | Every screen (pause, hangar, settings) pauses the game: fine on your own, but a shared world can't stop | Nothing yet | Phase 5 (the menus won't pause; you leave your aircraft safe at a base, or it keeps flying) |
+| L61 | Every screen (pause, hangar, settings) pauses the game and the match clock: fine on your own, but a shared world can't stop | Nothing yet | Phase 5 (the menus won't pause; you leave your aircraft safe at a base, or it keeps flying) |
 | L62 | With mouse flight, the browser uses the first Esc to let go of the mouse; the game opens the pause menu on that same press | One press | By design |
 | L63 | The lobby is a layout only: rooms, room codes, the Red team, ready checks and "Return to lobby" are disabled with the reason, and the server status says offline | No online play | Phase 5 (game server), Phase 6 (teams) |
-| L64 | The after-action report has no winner, team score, assists or bombing damage ("—" with the phase) | Personal figures only | Phase 4 (bombs), 5 (other players), 6 (team rules) |
-| L65 | Exiting to the main menu ends the session's figures but not the world: destroyed targets and captured bases stay as they are until the page is reloaded | The next session starts where the last left off | Phase 6 (matches with a start and an end) |
+| L64 | The after-action report has no assists or bombing damage ("—" with the phase) | | Phase 4 (bombs), 5 (other players) |
+| L67 | After landing to capture or rearm, an AI aircraft is moved (towed) to the start of the runway or the catapult before it takes off, rather than taxiing there | It appears there at once | By design (D57) |
+| L68 | No mid-air collisions: aircraft fly through each other (AI pilots break away inside 130 m) | Rare in practice | Phase 7 (with traffic) |
+| L69 | AI aircraft make no engine sound, and their gunfire is silent unless it hits you | You hear them only when they explode | Later, with spatial engine voices |
+| L70 | Carriers can't be sunk in a match (they're captured instead); the sinking code is kept behind `createTargets({ carrierHulls: true })` | No carrier sinking | By design (D53) |
+| L71 | The Red squadron takes undefended fields fast (all three within about 3 minutes if unopposed) and then goes for your carrier: alone against four, you need to defend as well as attack | A hard match | Tune `AI_CONFIG` (roles, ranges, aim) if it's too hard |
+| L72 | The map edge isn't enforced for you (the AI turns back at 4.2 km, further when chasing) | You can fly off the map | Later |
 | L66 | The shadow map covers 160 m around the aircraft, so buildings further away cast no shadow, and the runways show only shadows cast within that square | Fine from the air | By design (D51) |
 | L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
@@ -89,6 +94,11 @@ None known.
 
 | Issue | Found | Fix |
 |---|---|---|
+| Auto-land often crashed into terrain: final approach had no terrain check (it could start 25° off the centreline, over hills outside the cut corridor), and the intercept looked only straight ahead | Your report | Terrain checked along the turn it will fly and its next 6 s, in every phase; climb-out after a go-around; no steep turns low down. 40-approach sweep test, no ground contact |
+| Auto-land slow (90 s to 3 min) | Your report | Shorter final, shortest-way runway choice, fast transit with air-braked slow-down, steep descents: mean 114 s → 81 s |
+| The Interceptor tipped onto a wingtip in a full-rudder taxi turn on the wider (grippier) runway | Taxi test after widening the runways | Nose-wheel steering fades with speed, as on the vintage types |
+| Approach clearances flattened the central mountain and clipped the other islands' peaks (north-south runways pointed at them) | Terrain survey on the new map | Runways east-west, approaches over the sea |
+| AI hunter sat 800 m behind a turning target, never firing | AI tests | Pursuit steers the flight path; gun solution with a stiff gain and an integral aim correction (D56) |
 | The aircraft cast no visible shadow: base buildings, guns and carriers had joined the casters, and the map fitted around all of them stretched across the whole 12 km map | Testing the Shadows setting (UI redesign) | Fixed 160 m shadow square around the aircraft (D51) |
 | Turning shadows off tripped WebGL "sampler type" errors for a few frames | Testing the Shadows setting | Off renders an empty map once instead of switching the light's shadows off |
 | Orbit camera could be dragged underground | Phase 0 browser test (camera at y = −4.9 m) | Beta limit computed per frame from target height and zoom (`CameraManager.keepOrbitAboveGround`) |

@@ -21,6 +21,7 @@ const COLORS = {
   blue: Color3.FromHexString(BASE_COLORS.blue),
   red: Color3.FromHexString(BASE_COLORS.red),
   open: Color3.FromHexString(BASE_COLORS.open),
+  neutral: Color3.FromHexString(BASE_COLORS.neutral),
 } as const;
 
 /**
@@ -74,7 +75,7 @@ export class BaseBeacons {
       beacon.mesh.scaling.set(radius, c.height, radius);
       beacon.mesh.position.set(view.x, view.y + c.height / 2, view.z);
       beacon.material.setVector3('cameraPosition', cameraPosition);
-      beacon.material.setColor3('color', open ? COLORS.open : COLORS[view.owner]);
+      beacon.material.setColor3('color', open ? COLORS.open : COLORS[view.owner ?? 'neutral']);
       beacon.material.setFloat('intensity', intensity);
     }
   }

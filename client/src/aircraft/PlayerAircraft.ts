@@ -14,7 +14,7 @@ import {
   createParkedState,
   hasTailhook,
   stepAircraft,
-  teamBase,
+  homeBase as teamHome,
   type AircraftClassId,
   type AircraftClassSpec,
   type AircraftPerformance,
@@ -51,6 +51,9 @@ const CATAPULT_FLAPS = 0.5;
  * One model is built per airframe type up front (four), and only the one
  * being flown is enabled, so switching aircraft is instant.
  */
+/** An aircraft too big for a carrier's deck starts this high over it (m). */
+const HEAVY_CARRIER_LAUNCH_HEIGHT = 400;
+
 export class PlayerAircraft {
   spec: AircraftClassSpec;
   performance: AircraftPerformance;
@@ -126,15 +129,12 @@ export class PlayerAircraft {
   }
 
   /**
-   * Where this aircraft starts, respawns and practises landings: the base you
-   * chose to take off from (J), if this class can use it (a carrier needs a
-   * hook), else the class's usual home: the team's island airfield, or its
-   * carrier for carrier aircraft.
+   * Where this aircraft starts, respawns and practises landings: the base
+   * chosen in the hangar, else its team's home, the carrier. (An aircraft too
+   * big for the deck starts in the air over a carrier: see parkedAtHome.)
    */
   get homeBase(): BaseDefinition {
-    const chosen = this.chosenBase;
-    if (chosen && (chosen.kind !== 'carrier' || hasTailhook(this.spec))) return chosen;
-    return teamBase(this.team, this.spec.homeBase);
+    return this.chosenBase ?? teamHome(this.team);
   }
 
   /** The base you chose to take off from, or null for the class's usual one. */
@@ -234,6 +234,11 @@ export class PlayerAircraft {
    */
   private parkedAtHome(): AircraftState {
     const base = this.homeBase;
+    // Too big for the deck (the Heavy Bomber): launched into the air over the carrier instead.
+    if (base.kind === 'carrier' && !hasTailhook(this.spec)) {
+      const spawn = baseSpawnPoint(base);
+      return createAirborneState(this.spec, { x: spawn.position.x, y: spawn.position.y + HEAVY_CARRIER_LAUNCH_HEIGHT, z: spawn.position.z }, spawn.headingDegrees, this.performance.stallSpeed * 1.8, 0.8);
+    }
     const onCatapult = base.kind === 'carrier';
     const state = createParkedState(this.spec, baseSpawnPoint(base), onCatapult);
     if (onCatapult) state.flapPosition = CATAPULT_FLAPS;

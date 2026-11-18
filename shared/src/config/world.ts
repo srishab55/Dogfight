@@ -7,12 +7,14 @@ import type { Vec3 } from '../types/vector';
  * visual settings (colours, fog, texture sizes) live in the client's config.
  *
  * The map is a small stretch of sea: three islands and two aircraft carriers.
- * Blue holds the southern island and its carrier, Red the northern ones;
- * the mountainous central island lies between them.
+ * Each team's home is its carrier (Blue in the south-west, Red in the
+ * north-east). Each island has an airfield that belongs to nobody when a
+ * match starts: land on one to take it. The layout is point-symmetric about
+ * the origin, so both teams are the same distance from everything.
  */
 export const WORLD_CONFIG = {
   /** Side length of the square playable area in metres, centred on the origin. */
-  playableAreaSize: 14_000,
+  playableAreaSize: 8_000,
   /**
    * World height datum (m): the island airfields' elevation. Flat test
    * ground sits here too. Altitudes in the game are measured from it.
@@ -35,29 +37,84 @@ export interface RunwayDefinition {
   readonly width: number;
 }
 
-/** Blue's airfield, on the southern island, facing north towards the enemy. */
-export const BLUE_RUNWAY: RunwayDefinition = {
-  id: 'blue-airfield',
-  center: { x: 0, y: WORLD_CONFIG.groundHeight, z: -4_000 },
-  headingDegrees: 0,
+/** Island runways are this wide (m): room to land a little off the centreline. */
+const RUNWAY_WIDTH = 60;
+
+/**
+ * The south island's airfield, nearest Blue's carrier. Every runway lies
+ * east-west, so every approach is over open sea (and none crosses another
+ * island's mountain, which the approach clearances would cut down).
+ */
+export const SOUTH_RUNWAY: RunwayDefinition = {
+  id: 'south-airfield',
+  center: { x: -300, y: WORLD_CONFIG.groundHeight, z: -2_100 },
+  headingDegrees: 90,
   length: 1_200,
-  width: 40,
+  width: RUNWAY_WIDTH,
 };
 
-/** Red's airfield, on the northern island, facing south. */
-export const RED_RUNWAY: RunwayDefinition = {
-  id: 'red-airfield',
-  center: { x: 500, y: WORLD_CONFIG.groundHeight, z: 4_300 },
-  headingDegrees: 180,
+/** The north island's airfield, nearest Red's carrier (the south one turned about the centre). */
+export const NORTH_RUNWAY: RunwayDefinition = {
+  id: 'north-airfield',
+  center: { x: 300, y: WORLD_CONFIG.groundHeight, z: 2_100 },
+  headingDegrees: 270,
   length: 1_200,
-  width: 40,
+  width: RUNWAY_WIDTH,
 };
 
-/** The player's home runway until teams arrive in Phase 6. */
-export const HOME_RUNWAY = BLUE_RUNWAY;
+/** The central island's airfield, east-west along its southern side, between the two carriers. */
+export const CENTRAL_RUNWAY: RunwayDefinition = {
+  id: 'central-airfield',
+  center: { x: 0, y: WORLD_CONFIG.groundHeight, z: -180 },
+  headingDegrees: 90,
+  length: 1_100,
+  width: RUNWAY_WIDTH,
+};
+
+/** Landing practice, the practice balloons and flat-ground tests use this runway. */
+export const HOME_RUNWAY = SOUTH_RUNWAY;
 
 /** Every island runway. */
-export const RUNWAYS: readonly RunwayDefinition[] = [BLUE_RUNWAY, RED_RUNWAY];
+export const RUNWAYS: readonly RunwayDefinition[] = [SOUTH_RUNWAY, CENTRAL_RUNWAY, NORTH_RUNWAY];
+
+/**
+ * Each airfield's service lane: a paved strip parallel to the runway on its
+ * hangar side, joined to it by a taxiway at each end. Pull off the runway
+ * onto it to be rearmed and repaired, leaving the runway clear. Positions in
+ * the runway's own frame (m).
+ */
+export const SERVICE_LANE = {
+  /** Centreline of the lane, to the right of the runway's centreline. */
+  across: 72,
+  width: 18,
+  /** It runs between these points along the runway; the taxiways join at both ends. */
+  from: -380,
+  to: 380,
+  taxiwayWidth: 18,
+} as const;
+
+/** A runway's service lane and its two taxiways, as paved rectangles. */
+export function serviceLaneAreas(runway: RunwayDefinition): RunwayDefinition[] {
+  const s = SERVICE_LANE;
+  const h = (runway.headingDegrees * Math.PI) / 180;
+  const at = (along: number, across: number) => ({
+    x: runway.center.x + along * Math.sin(h) + across * Math.cos(h),
+    y: runway.center.y,
+    z: runway.center.z + along * Math.cos(h) - across * Math.sin(h),
+  });
+  const laneLength = s.to - s.from;
+  // Each taxiway spans from the runway's edge to the lane's far edge.
+  const taxiFrom = runway.width / 2 - 2;
+  const taxiTo = s.across + s.width / 2;
+  const taxiCentre = (taxiFrom + taxiTo) / 2;
+  return [
+    { id: `${runway.id}-lane`, center: at((s.from + s.to) / 2, s.across), headingDegrees: runway.headingDegrees, length: laneLength, width: s.width },
+    ...[s.from, s.to].map((along, i) => ({ id: `${runway.id}-taxiway-${i}`, center: at(along, taxiCentre), headingDegrees: (runway.headingDegrees + 90) % 360, length: taxiTo - taxiFrom, width: s.taxiwayWidth })),
+  ];
+}
+
+/** Every paved surface: the runways, their service lanes and taxiways. Wheels roll on these with runway friction. */
+export const PAVED_AREAS: readonly RunwayDefinition[] = [...RUNWAYS, ...RUNWAYS.flatMap(serviceLaneAreas)];
 
 /**
  * An aircraft carrier, anchored. Its flight deck is a short runway with
@@ -124,20 +181,20 @@ const CARRIER_SHAPE = {
   freeboard: CARRIER_FREEBOARD,
 } as const;
 
-/** Blue's carrier lies west of the Blue island, bow to the north-north-east. */
+/** Blue's carrier, its home: west of the south island, bow to the north-north-east. */
 export const BLUE_CARRIER: CarrierDefinition = {
   id: 'blue-carrier',
   team: 'blue',
-  center: { x: -4_300, y: CARRIER_DECK_HEIGHT, z: -2_300 },
+  center: { x: -2_700, y: CARRIER_DECK_HEIGHT, z: -700 },
   headingDegrees: 15,
   ...CARRIER_SHAPE,
 };
 
-/** Red's carrier lies east of the Red island, bow to the south-south-west. */
+/** Red's carrier, its home: east of the north island, bow to the south-south-west. */
 export const RED_CARRIER: CarrierDefinition = {
   id: 'red-carrier',
   team: 'red',
-  center: { x: 4_600, y: CARRIER_DECK_HEIGHT, z: 2_700 },
+  center: { x: 2_700, y: CARRIER_DECK_HEIGHT, z: 700 },
   headingDegrees: 195,
   ...CARRIER_SHAPE,
 };
@@ -214,11 +271,12 @@ export const SURFACE_FRICTION: Readonly<Record<SurfaceType, SurfaceFriction>> = 
 
 /**
  * Somewhere a team's aircraft can land to rearm and repair: an island
- * airfield (its runway plus taxiways and aprons) or a carrier's deck.
+ * airfield (its runway plus service lane and aprons) or a carrier's deck.
  */
 export interface BaseDefinition {
   readonly id: string;
-  readonly team: Team;
+  /** Who holds it when a match starts: a team's carrier is its own; island airfields belong to nobody (null). */
+  readonly team: Team | null;
   readonly name: string;
   readonly kind: 'airfield' | 'carrier';
   /** The runway, or for a carrier its flight deck. */
@@ -227,25 +285,36 @@ export interface BaseDefinition {
   readonly serviceMargin: number;
 }
 
+/** Airfield service areas reach this far beyond the runway's edges: over the service lane and the aprons (m). */
+const AIRFIELD_SERVICE_MARGIN = SERVICE_LANE.across + SERVICE_LANE.width / 2 - RUNWAY_WIDTH / 2 + 5;
+
 export const BASES: readonly BaseDefinition[] = [
-  { id: 'blue-airfield', team: 'blue', name: 'Blue airfield', kind: 'airfield', runway: BLUE_RUNWAY, serviceMargin: 60 },
   { id: 'blue-carrier', team: 'blue', name: 'Blue carrier', kind: 'carrier', runway: carrierDeckRunway(BLUE_CARRIER), serviceMargin: 0 },
-  { id: 'red-airfield', team: 'red', name: 'Red airfield', kind: 'airfield', runway: RED_RUNWAY, serviceMargin: 60 },
   { id: 'red-carrier', team: 'red', name: 'Red carrier', kind: 'carrier', runway: carrierDeckRunway(RED_CARRIER), serviceMargin: 0 },
+  { id: 'south-airfield', team: null, name: 'South airfield', kind: 'airfield', runway: SOUTH_RUNWAY, serviceMargin: AIRFIELD_SERVICE_MARGIN },
+  { id: 'central-airfield', team: null, name: 'Central airfield', kind: 'airfield', runway: CENTRAL_RUNWAY, serviceMargin: AIRFIELD_SERVICE_MARGIN },
+  { id: 'north-airfield', team: null, name: 'North airfield', kind: 'airfield', runway: NORTH_RUNWAY, serviceMargin: AIRFIELD_SERVICE_MARGIN },
 ];
 
-/** Who holds a base now: its original team unless it's been captured (see combat/baseControl.ts). */
-export type BaseOwnerLookup = (base: BaseDefinition) => Team;
+/** Who holds a base now (null: nobody yet); see combat/baseControl.ts. */
+export type BaseOwnerLookup = (base: BaseDefinition) => Team | null;
 
 /** The team's base containing world point (x, z), or null. Captured bases count for their new owner. */
 export function friendlyBaseAt(team: Team, x: number, z: number, ownerOf: BaseOwnerLookup = (base) => base.team): BaseDefinition | null {
   return BASES.find((base) => ownerOf(base) === team && isOnRunway(base.runway, x, z, base.serviceMargin)) ?? null;
 }
 
-/** The team's base of the given kind (each team has one airfield and one carrier). */
-export function teamBase(team: Team, kind: BaseDefinition['kind']): BaseDefinition {
-  const base = BASES.find((b) => b.team === team && b.kind === kind);
-  if (!base) throw new Error(`No ${kind} base for team ${team}`);
+/** A team's home: its carrier. */
+export function homeBase(team: Team): BaseDefinition {
+  const base = BASES.find((b) => b.team === team && b.kind === 'carrier');
+  if (!base) throw new Error(`No carrier for team ${team}`);
+  return base;
+}
+
+/** A base by id (throws if there's none: ids are fixed data). */
+export function baseById(id: string): BaseDefinition {
+  const base = BASES.find((b) => b.id === id);
+  if (!base) throw new Error(`No base ${id}`);
   return base;
 }
 

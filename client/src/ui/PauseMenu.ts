@@ -41,13 +41,13 @@ export class PauseMenu {
       'nav',
       'nav',
       this.resumeItem,
-      navItem('Change aircraft / base', () => events.changeAircraft()),
+      navItem('Change base', () => events.changeAircraft(), { meta: 'Aircraft fixed for the match' }),
       navItem('Settings', () => events.settings('graphics')),
       navItem('Controls', () => events.settings('controls')),
       navItem('Audio', () => events.settings('audio')),
       h('hr', 'nav__divider'),
       navItem('Return to lobby', () => undefined, { meta: 'Phase 5', disabled: true, tooltip: 'Online lobbies arrive with the game server in Phase 5.' }),
-      navItem('Exit to main menu', () => events.exit(), { meta: 'Ends the session' }),
+      navItem('Exit to main menu', () => events.exit(), { meta: 'Ends the match: all resets' }),
     );
     nav.setAttribute('aria-label', 'Pause menu');
     arrowNavigation(nav, 'button');

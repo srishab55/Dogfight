@@ -21,9 +21,9 @@ export interface IslandDefinition {
 
 export const TERRAIN_CONFIG = {
   /** Side length of the terrain square, centred on the origin (m). Open sea continues beyond it. */
-  size: 16_000,
-  /** Grid cells per side: 50 m cells. Physics and rendering use the same triangles. */
-  resolution: 320,
+  size: 10_000,
+  /** Grid cells per side: 40 m cells. Physics and rendering use the same triangles. */
+  resolution: 250,
   seed: 1942,
   /** Depth of the open sea floor (m below sea level). The sea hides it. */
   seaFloorDepth: 60,
@@ -35,33 +35,37 @@ export const TERRAIN_CONFIG = {
   coastalPlainHeight: 7,
   /** The beach rises to the plain over this fraction of the island's radius. */
   beachWidth: 0.08,
+  // Point-symmetric about the origin: the south and north islands mirror
+  // each other, so each team's carrier is as far from everything as the other's.
   islands: [
     {
-      id: 'blue-island',
-      center: { x: 300, z: -4_050 },
-      radiusX: 1_350,
-      radiusZ: 2_100,
+      id: 'south-island',
+      center: { x: -300, z: -2_300 },
+      radiusX: 1_100,
+      radiusZ: 750,
       rotationDeg: 0,
-      hills: { amplitude: 110, wavelength: 900 },
-      peak: { x: 950, z: -4_500, height: 280, radius: 900 },
+      hills: { amplitude: 80, wavelength: 700 },
+      // South of the east-west runway, off its approaches.
+      peak: { x: 100, z: -2_700, height: 260, radius: 380 },
     },
     {
-      id: 'red-island',
-      center: { x: 250, z: 4_350 },
-      radiusX: 1_350,
-      radiusZ: 2_100,
+      id: 'north-island',
+      center: { x: 300, z: 2_300 },
+      radiusX: 1_100,
+      radiusZ: 750,
       rotationDeg: 0,
-      hills: { amplitude: 120, wavelength: 900 },
-      peak: { x: -350, z: 4_750, height: 320, radius: 900 },
+      hills: { amplitude: 80, wavelength: 700 },
+      peak: { x: -100, z: 2_700, height: 260, radius: 380 },
     },
     {
       id: 'central-island',
-      center: { x: 2_900, z: 0 },
-      radiusX: 1_650,
-      radiusZ: 1_250,
-      rotationDeg: 35,
-      hills: { amplitude: 150, wavelength: 700 },
-      peak: { x: 3_050, z: 100, height: 760, radius: 1_150 },
+      center: { x: 0, z: 0 },
+      radiusX: 1_450,
+      radiusZ: 650,
+      rotationDeg: 0,
+      hills: { amplitude: 70, wavelength: 600 },
+      // North of the east-west runway, off its approaches.
+      peak: { x: 250, z: 360, height: 420, radius: 460 },
     },
   ] satisfies readonly IslandDefinition[],
   /**

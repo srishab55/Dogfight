@@ -99,6 +99,36 @@ export function createRunwayTexture(scene: Scene, runwayLength: number, runwayWi
   return texture;
 }
 
+/**
+ * Asphalt for a service lane or taxiway: a yellow centreline and edge lines
+ * (taxiway colours, so it reads as "not a runway"); the service lane also
+ * gets white parking boxes every 60 m.
+ */
+export function createTaxiwayTexture(scene: Scene, length: number, width: number, serviceLane: boolean): DynamicTexture {
+  const w = 64;
+  const h = Math.min(2048, Math.max(64, Math.round(length * 2)));
+  const texture = new DynamicTexture('taxiway-texture', { width: w, height: h }, scene, true);
+  const ctx = texture.getContext();
+  const random = createSeededRandom(11);
+  const across = w / width;
+  const along = h / length;
+  ctx.fillStyle = RUNWAY_VISUAL_CONFIG.asphaltColor;
+  ctx.fillRect(0, 0, w, h);
+  addBrightnessNoise(ctx, w, h, 10, random);
+  ctx.fillStyle = '#d9a91f';
+  ctx.fillRect(w / 2 - 0.25 * across, 0, 0.5 * across, h);
+  ctx.fillRect(0.6 * across, 0, 0.35 * across, h);
+  ctx.fillRect(w - 0.95 * across, 0, 0.35 * across, h);
+  if (serviceLane) {
+    ctx.strokeStyle = RUNWAY_VISUAL_CONFIG.markingColor;
+    ctx.lineWidth = Math.max(1, 0.4 * across);
+    for (let y = 30; y < length - 20; y += 60) ctx.strokeRect(2.5 * across, (y - 9) * along, w - 5 * across, 18 * along);
+  }
+  texture.update(false);
+  texture.anisotropicFilteringLevel = 8;
+  return texture;
+}
+
 interface Rect {
   x: number;
   y: number;

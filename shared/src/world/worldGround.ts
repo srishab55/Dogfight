@@ -1,4 +1,4 @@
-import { CARRIERS, WORLD_CONFIG, carrierPartAt, isOnRunway, RUNWAYS, type CarrierDefinition, type RunwayDefinition, type SurfaceType } from '../config/world';
+import { CARRIERS, WORLD_CONFIG, carrierPartAt, isOnRunway, PAVED_AREAS, type CarrierDefinition, type RunwayDefinition, type SurfaceType } from '../config/world';
 import type { GroundQuery } from '../flight/ground';
 import type { CarrierStatusMap } from './carrierStatus';
 
@@ -17,7 +17,8 @@ import type { CarrierStatusMap } from './carrierStatus';
 export function createWorldGround(
   terrain: GroundQuery,
   carriers: readonly CarrierDefinition[] = CARRIERS,
-  runways: readonly RunwayDefinition[] = RUNWAYS,
+  /** Paved surfaces (runways, service lanes, taxiways): runway friction. */
+  runways: readonly RunwayDefinition[] = PAVED_AREAS,
   statuses: CarrierStatusMap | null = null,
 ): GroundQuery {
   const sea = WORLD_CONFIG.seaLevel;

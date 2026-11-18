@@ -4,9 +4,8 @@ import {
   AIRCRAFT_CLASSES,
   CARRIER_DAMAGE_CONFIG,
   CombatWorld,
-  PARKED_AIRCRAFT_CONFIG,
   RED_CARRIER,
-  RED_RUNWAY,
+  BASES,
   WORLD_CONFIG,
   createAirborneState,
   createCarrierStatuses,
@@ -48,41 +47,49 @@ function run(world: CombatWorld, ground: GroundQuery, shooters: Shooter[], secon
   return events;
 }
 
-const firstOf = (targets: CombatTarget[], kind: CombatTarget['kind'], onCarrier = false) => {
-  const target = targets.find((t) => t.kind === kind && (t.carrierId !== null) === onCarrier);
-  if (!target) throw new Error(`no ${kind}`);
-  return target;
-};
 
-describe("Red's defences", () => {
-  it("Red's airfield has one big AA gun, a hangar, a fuel depot, a radar and four parked aircraft; its carrier one AA gun; Blue has none", () => {
+describe("every base's defences", () => {
+  it('each island airfield has an AA gun (not built while nobody holds it), a hangar, a fuel depot and a radar; each carrier an AA gun', () => {
     const targets = createTargets();
-    const red = targets.filter((t) => t.team === 'red');
-    const at = (kind: CombatTarget['kind'], onCarrier: boolean) => red.filter((t) => t.kind === kind && (t.carrierId !== null) === onCarrier);
-    expect(at('aaGun', false)).toHaveLength(1);
-    expect(at('aaGun', true)).toHaveLength(1);
-    for (const kind of ['hangar', 'fuelDepot', 'radar'] as const) expect(at(kind, false)).toHaveLength(1);
-    expect(at('parkedAircraft', false)).toHaveLength(4);
-    expect(at('carrier', true)).toHaveLength(1);
-    expect(targets.some((t) => t.team === 'blue')).toBe(false);
+    for (const base of BASES) {
+      const at = (kind: CombatTarget['kind']) => targets.filter((t) => t.baseId === base.id && t.kind === kind);
+      expect(at('aaGun')).toHaveLength(1);
+      if (base.kind === 'airfield') {
+        for (const kind of ['hangar', 'fuelDepot', 'radar'] as const) expect(at(kind)).toHaveLength(1);
+        expect(at('aaGun')[0]?.built).toBe(false);
+      } else {
+        expect(at('aaGun')[0]?.team).toBe(base.team);
+        expect(at('aaGun')[0]?.health).toBe(AA_GUN_CONFIG.maxHealth);
+      }
+    }
+    // In a match carriers are captured, not sunk: no hull targets unless asked for.
+    expect(targets.some((t) => t.kind === 'carrier' || t.kind === 'parkedAircraft')).toBe(false);
+    expect(createTargets({ carrierHulls: true }).filter((t) => t.kind === 'carrier')).toHaveLength(2);
     // Everything stands on its island (on the flat airfield pad) or deck.
     const world = createWorldGround(terrain);
-    for (const t of red.filter((t) => t.kind !== 'carrier')) {
+    for (const t of targets.filter((t) => t.baseId !== null)) {
       const ground = world.heightAt(t.position.x, t.position.z);
       expect(ground).toBeGreaterThan(WORLD_CONFIG.seaLevel);
       expect(t.position.y - ground).toBeGreaterThan(0.5);
       expect(t.position.y - ground).toBeLessThan(10);
-      if (!t.carrierId) expect(Math.abs(ground - RED_RUNWAY.center.y)).toBeLessThan(0.5);
+      if (!t.carrierId) expect(Math.abs(ground - WORLD_CONFIG.groundHeight)).toBeLessThan(0.5);
     }
   });
 });
+
+/** The Red carrier's AA gun: built and manned from the start. */
+const redGun = (targets: CombatTarget[]) => {
+  const gun = targets.find((t) => t.kind === 'aaGun' && t.carrierId === RED_CARRIER.id);
+  if (!gun) throw new Error('no Red carrier gun');
+  return gun;
+};
 
 describe('anti-aircraft guns', () => {
   const flat = createFlatGround();
 
   it('engage an enemy aircraft flying past within range, and hit it', () => {
     const targets = createTargets();
-    const gun = firstOf(targets, 'aaGun');
+    const gun = redGun(targets);
     const world = new CombatWorld(flat, targets);
     // Crossing east, 500 m to one side of the gun at 300 m up, at 120 m/s.
     const state = createAirborneState(spec, { x: gun.position.x - 1_300, y: 300, z: gun.position.z + 500 }, 90, 120, 0.75);
@@ -95,7 +102,7 @@ describe('anti-aircraft guns', () => {
 
   it('hold fire at aircraft out of range', () => {
     const targets = createTargets();
-    const gun = firstOf(targets, 'aaGun');
+    const gun = redGun(targets);
     const world = new CombatWorld(flat, targets);
     const state = createAirborneState(spec, { x: gun.position.x - 2_500, y: 2_400, z: gun.position.z }, 270, 120, 0.75);
     const events = run(world, flat, [blueShooter(state)], 10, 2_400);
@@ -104,7 +111,7 @@ describe('anti-aircraft guns', () => {
 
   it('are destroyed by strafing, stop firing, and stay destroyed (nothing at a base rebuilds itself)', () => {
     const targets = createTargets();
-    const gun = firstOf(targets, 'aaGun');
+    const gun = redGun(targets);
     const world = new CombatWorld(flat, targets);
     // Hits straight on the gun: as many as it takes.
     let destroyed = false;
@@ -143,7 +150,7 @@ describe('anti-aircraft guns', () => {
   it('an aircraft whose hull is shot away goes out of control, falls and crashes as "shot down"', () => {
     const sea = createWorldGround(terrain);
     const targets = createTargets();
-    const gun = firstOf(targets, 'aaGun', true); // on the Red carrier, over open sea
+    const gun = redGun(targets); // on the Red carrier, over open sea
     const world = new CombatWorld(sea, targets);
     const state = createAirborneState(spec, { x: gun.position.x - 1_200, y: 250, z: gun.position.z + 400 }, 90, 110, 0.75);
     state.hullHealth = AA_GUN_CONFIG.damagePerRound; // one hit is enough
@@ -163,20 +170,7 @@ describe('anti-aircraft guns', () => {
   });
 });
 
-describe('parked aircraft', () => {
-  it('are destroyed by gunfire and stay wrecks', () => {
-    const targets = createTargets();
-    const parked = firstOf(targets, 'parkedAircraft');
-    const world = new CombatWorld(createFlatGround(), targets);
-    for (let i = 0; i < PARKED_AIRCRAFT_CONFIG.maxHealth; i++) world.applyHit(parked, 1, 1);
-    expect(world.drainEvents().some((e) => e.type === 'targetDestroyed' && e.targetId === parked.id)).toBe(true);
-    expect(parked.health).toBe(0);
-    for (let t = 0; t < 300; t += STEP) world.step(STEP, []);
-    expect(parked.health).toBe(0);
-  });
-});
-
-describe('the Red carrier', () => {
+describe('the Red carrier, when hulls can be sunk', () => {
   /** A point on the Red carrier's deck, `fromStern` metres from its stern. */
   const deckPoint = (fromStern: number) => {
     const h = (RED_CARRIER.headingDegrees * Math.PI) / 180;
@@ -187,8 +181,8 @@ describe('the Red carrier', () => {
   it('a Blue aircraft strafing the deck damages it (through its armour)', () => {
     const statuses = createCarrierStatuses();
     const ground = createWorldGround(terrain, undefined, undefined, statuses);
-    const targets = createTargets();
-    const carrier = firstOf(targets, 'carrier', true);
+    const targets = createTargets({ carrierHulls: true });
+    const carrier = targets.find((t) => t.kind === 'carrier' && t.carrierId === RED_CARRIER.id)!;
     const world = new CombatWorld(ground, targets, statuses);
     // 1.5 km astern, 300 m up, diving at the deck with guns firing.
     const aim = deckPoint(100);
@@ -217,8 +211,8 @@ describe('the Red carrier', () => {
   it('destroyed, it sinks (its deck becomes sea and its guns are lost), then a fresh carrier returns', () => {
     const statuses = createCarrierStatuses();
     const ground = createWorldGround(terrain, undefined, undefined, statuses);
-    const targets = createTargets();
-    const carrier = firstOf(targets, 'carrier', true);
+    const targets = createTargets({ carrierHulls: true });
+    const carrier = targets.find((t) => t.kind === 'carrier' && t.carrierId === RED_CARRIER.id)!;
     const guns = targets.filter((t) => t.kind === 'aaGun' && t.carrierId === RED_CARRIER.id);
     const world = new CombatWorld(ground, targets, statuses);
     const p = deckPoint(180);
@@ -248,8 +242,8 @@ describe('the Red carrier', () => {
   it('a carrier gun shot off stays down while the ship floats, and returns only with a new carrier', () => {
     const statuses = createCarrierStatuses();
     const ground = createWorldGround(terrain, undefined, undefined, statuses);
-    const targets = createTargets();
-    const carrier = firstOf(targets, 'carrier', true);
+    const targets = createTargets({ carrierHulls: true });
+    const carrier = targets.find((t) => t.kind === 'carrier' && t.carrierId === RED_CARRIER.id)!;
     const gun = targets.find((t) => t.kind === 'aaGun' && t.carrierId === RED_CARRIER.id)!;
     const world = new CombatWorld(ground, targets, statuses);
     while (gun.health > 0) world.applyHit(gun, 5, 1);
@@ -264,8 +258,8 @@ describe('the Red carrier', () => {
   });
 
   it('Red AA shells hitting its own carrier do no damage', () => {
-    const targets = createTargets();
-    const carrier = firstOf(targets, 'carrier', true);
+    const targets = createTargets({ carrierHulls: true });
+    const carrier = targets.find((t) => t.kind === 'carrier' && t.carrierId === RED_CARRIER.id)!;
     const world = new CombatWorld(createWorldGround(terrain), targets);
     const p = deckPoint(120);
     for (let i = 0; i < 50; i++) world.onGroundImpact(p.x, RED_CARRIER.center.y, p.z, 10_000, 1, 6);

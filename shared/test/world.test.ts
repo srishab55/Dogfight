@@ -48,7 +48,7 @@ describe('island terrain', () => {
 
   it('heightAt matches the grid exactly at the vertices (render mesh = physics ground)', () => {
     const { origin, cellSize, resolution } = terrain;
-    for (const [i, j] of [[10, 10], [160, 80], [200, 250], [3, 299]] as const) {
+    for (const [i, j] of [[10, 10], [160, 80], [200, 240], [3, 249]] as const) {
       const expected = terrain.heights[j * (resolution + 1) + i] ?? NaN;
       expect(terrain.heightAt(origin + i * cellSize, origin + j * cellSize)).toBeCloseTo(expected, 4);
     }
@@ -62,15 +62,16 @@ describe('island terrain', () => {
       }
       return top - SEA;
     });
-    const [blue, red, central] = tops as [number, number, number];
-    expect(blue).toBeGreaterThan(150);
-    expect(red).toBeGreaterThan(150);
-    expect(central).toBeGreaterThan(550);
-    expect(central).toBeLessThan(900);
-    expect(central).toBeGreaterThan(Math.max(blue, red));
-    // Sea between the islands, and the deep sea floor beyond the terrain.
+    const [south, north, central] = tops as [number, number, number];
+    expect(south).toBeGreaterThan(150);
+    expect(north).toBeGreaterThan(150);
+    expect(central).toBeGreaterThan(300);
+    expect(central).toBeLessThan(600);
+    expect(central).toBeGreaterThan(Math.max(south, north));
+    // Sea between the islands (and around the carriers), and the deep sea floor beyond the terrain.
     expect(terrain.heightAt(-2_500, 0)).toBeLessThan(SEA - 20);
-    expect(terrain.heightAt(0, -500)).toBeLessThan(SEA - 20);
+    expect(terrain.heightAt(0, -1_150)).toBeLessThan(SEA - 20);
+    expect(terrain.heightAt(0, 1_150)).toBeLessThan(SEA - 20);
     expect(terrain.heightAt(TERRAIN_CONFIG.size, 0)).toBe(SEA_FLOOR_HEIGHT);
   });
 

@@ -1,5 +1,5 @@
 import { TERRAIN_CONFIG, type IslandDefinition } from '../config/terrain';
-import { RUNWAYS, WORLD_CONFIG, isOnRunway, runwayLocal, type RunwayDefinition } from '../config/world';
+import { PAVED_AREAS, RUNWAYS, WORLD_CONFIG, isOnRunway, runwayLocal, type RunwayDefinition } from '../config/world';
 import type { GroundQuery } from '../flight/ground';
 
 /**
@@ -66,7 +66,7 @@ export function createTerrain(runways: readonly RunwayDefinition[] = RUNWAYS): T
     origin,
     cellSize,
     heightAt,
-    surfaceAt: (x, z) => (runways.some((runway) => isOnRunway(runway, x, z)) ? 'runway' : heightAt(x, z) < WORLD_CONFIG.seaLevel ? 'water' : 'grass'),
+    surfaceAt: (x, z) => (PAVED_AREAS.some((area) => isOnRunway(area, x, z)) ? 'runway' : heightAt(x, z) < WORLD_CONFIG.seaLevel ? 'water' : 'grass'),
   };
 }
 

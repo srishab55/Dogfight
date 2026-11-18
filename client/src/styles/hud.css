@@ -74,6 +74,31 @@
   text-align: right;
 }
 
+.hud-row__value[data-tone] {
+  color: var(--tone);
+}
+
+/* Bases held: Blue's – Red's, and how many nobody holds. */
+.hud-score__blue {
+  color: var(--color-friendly);
+  font-weight: 600;
+}
+
+.hud-score__red {
+  color: var(--color-enemy);
+  font-weight: 600;
+}
+
+.hud-score__dash {
+  margin: 0 4px;
+  color: var(--color-text-muted);
+}
+
+.hud-score__open {
+  color: var(--color-text-2);
+  font-size: var(--text-xs);
+}
+
 .hud-hint {
   display: flex;
   align-items: center;
@@ -540,6 +565,13 @@
 .hud-enemy[data-kind='carrier'] {
   width: 48px;
   height: 26px;
+}
+
+/* Enemy aircraft: a bigger, heavier bracket, the thing to watch. */
+.hud-enemy[data-kind='aircraft'] {
+  width: 32px;
+  height: 32px;
+  border-width: 2px;
 }
 
 .hud-enemy__label {

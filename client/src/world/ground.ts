@@ -5,7 +5,7 @@ import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import type { RunwayDefinition } from '@dogfight/shared';
 import { RUNWAY_VISUAL_CONFIG } from '../config/graphics';
 import { degreesToRadians } from '../math/orientation';
-import { createRunwayTexture } from './proceduralTextures';
+import { createRunwayTexture, createTaxiwayTexture } from './proceduralTextures';
 
 export function createRunway(scene: Scene, runway: RunwayDefinition): Mesh {
   const mesh = CreateGround(`runway-${runway.id}`, { width: runway.width, height: runway.length, subdivisions: 1 }, scene);
@@ -23,6 +23,28 @@ export function createRunway(scene: Scene, runway: RunwayDefinition): Mesh {
   material.zOffset = -2;
   mesh.material = material;
 
+  mesh.freezeWorldMatrix();
+  return mesh;
+}
+
+/**
+ * A service lane or taxiway: asphalt with a yellow centreline and edge
+ * lines; the service lane also has white parking boxes where the ground
+ * crew rearms and repairs you. It sits a hair below the runway, so where a
+ * taxiway meets the runway the runway's markings win.
+ */
+export function createTaxiway(scene: Scene, area: RunwayDefinition, serviceLane: boolean): Mesh {
+  const mesh = CreateGround(`paved-${area.id}`, { width: area.width, height: area.length, subdivisions: 1 }, scene);
+  mesh.position.set(area.center.x, area.center.y + RUNWAY_VISUAL_CONFIG.surfaceOffset * 0.7, area.center.z);
+  mesh.rotation.y = degreesToRadians(area.headingDegrees);
+  mesh.isPickable = false;
+  mesh.receiveShadows = true;
+  const material = new PBRMaterial(`paved-${area.id}-material`, scene);
+  material.albedoTexture = createTaxiwayTexture(scene, area.length, area.width, serviceLane);
+  material.roughness = 0.9;
+  material.metallic = 0;
+  material.zOffset = -1;
+  mesh.material = material;
   mesh.freezeWorldMatrix();
   return mesh;
 }

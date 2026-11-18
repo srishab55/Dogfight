@@ -95,14 +95,16 @@ export class EnemyTargets {
       const mount = target.carrierId ? AA_GUN_CONFIG.mountHeight * 0.6 : AA_GUN_CONFIG.mountHeight;
       const groundY = p.y - sink - mount;
       scratchPos.set(p.x, groundY, p.z);
-      setMatrix(this.gunBases, i, alive ? scratchPos : null, 0, 0, (mount - 1.2) / PLATFORM_HEIGHT);
+      // A gun nobody has built yet (at a field nobody holds): just its empty platform.
+      const unbuilt = !target.built;
+      setMatrix(this.gunBases, i, alive || unbuilt ? scratchPos : null, 0, 0, (mount - 1.2) / PLATFORM_HEIGHT);
       setMatrix(this.gunFlags.red, i, alive && target.team !== 'blue' ? scratchPos : null, 0, 0);
       setMatrix(this.gunFlags.blue, i, alive && target.team === 'blue' ? scratchPos : null, 0, 0);
       scratchPos.y = p.y - sink;
       setMatrix(this.gunBarrels, i, alive ? scratchPos : null, gun.yaw, gun.pitch);
       scratchPos.y = groundY;
       // On a carrier that's going down, the wreck goes with it; under water it isn't drawn.
-      const showWreck = !alive && groundY > -6;
+      const showWreck = !alive && !unbuilt && groundY > -6;
       setMatrix(this.wrecks, wreck++, showWreck ? scratchPos : null, degreesToRadians(target.id * 47), 0, 2);
       if (showWreck) this.burn(target, p.x, groundY + 1, p.z, 1.6, deltaSeconds);
     });

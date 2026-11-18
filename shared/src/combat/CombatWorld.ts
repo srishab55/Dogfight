@@ -13,7 +13,7 @@ import type { BaseDefinition, BaseOwnerLookup } from '../config/world';
 import { stepGuns, type GunState } from './guns';
 import { airframeHitSpheres, placeHitSpheres, type PlacedSphere } from './hitShapes';
 import { ProjectilePool, teamCode, type ImpactListener, type SphereTarget } from './projectiles';
-import { createTargets, damageTarget, isTargetAlive, updateTargets, type CombatTarget, type TargetKind } from './targets';
+import { createTargets, damageTarget, isTargetAlive, updateTargets, type CombatTarget, type TargetKind, type TargetOptions } from './targets';
 
 /** Something that happened this step, for effects, sound and the HUD. */
 export type CombatEvent =
@@ -80,6 +80,8 @@ export class CombatWorld implements ImpactListener {
     private readonly carrierStatuses: CarrierStatusMap | null = null,
     capacity = DEFAULT_CAPACITY,
     carriers: readonly CarrierDefinition[] = CARRIERS,
+    /** How the targets were made, so `reset()` makes them the same way. */
+    private readonly targetOptions: TargetOptions = {},
   ) {
     this.projectiles = new ProjectilePool(capacity);
     this.targets = targets;
@@ -114,8 +116,37 @@ export class CombatWorld implements ImpactListener {
     this.pending.push(...this.baseEvents);
   }
 
-  /** Who holds a base now (captured bases have changed sides). Pass to services such as rearming. */
-  readonly ownerOf: BaseOwnerLookup = (base: BaseDefinition) => this.bases.find((b) => b.base.id === base.id)?.owner ?? base.team;
+  /** Who holds a base now (captured bases have changed sides; null: nobody yet). Pass to services such as rearming. */
+  readonly ownerOf: BaseOwnerLookup = (base: BaseDefinition) => {
+    const control = this.bases.find((b) => b.base.id === base.id);
+    return control ? control.owner : base.team;
+  };
+
+  /** The team that fired a round, from its owner id: an aircraft in this step, or an AA gun (its base's side). */
+  teamOfOwner(owner: number): Team | null {
+    if (owner >= AA_OWNER_BASE) return this.targets[owner - AA_OWNER_BASE]?.team ?? null;
+    return this.shooters.find((s) => s.id === owner)?.team ?? null;
+  }
+
+  /**
+   * Back to the start of a match: every target, base, gun and carrier as
+   * created, no rounds in flight, no events. Objects are reset in place, so
+   * whatever holds a reference to a target (visuals) sees the fresh state.
+   */
+  reset(targets: readonly CombatTarget[] = createTargets(this.targetOptions)): void {
+    targets.forEach((fresh, i) => {
+      const target = this.targets[i];
+      if (target) Object.assign(target, fresh);
+    });
+    createBaseControls().forEach((fresh, i) => {
+      const control = this.bases[i];
+      if (control) Object.assign(control, fresh);
+    });
+    this.aaGuns.forEach((gun) => Object.assign(gun, createAaGun(gun.target, gun.owner)));
+    this.projectiles.clear();
+    this.carrierStatuses?.forEach((status) => Object.assign(status, { sink: 0, sternDownDeg: 0, listDeg: 0 }));
+    this.pending.length = 0;
+  }
 
   /** Returns the events since the last call and clears them. */
   drainEvents(): CombatEvent[] {

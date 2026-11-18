@@ -439,6 +439,31 @@
   box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
 }
 
+.aircraft-card[aria-disabled='true'] {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aircraft-card[aria-disabled='true']:hover {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: var(--color-border);
+}
+
+.hangar__match {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hangar__match:empty {
+  display: none;
+}
+
+.screen-footer__note[data-tone] {
+  color: var(--tone);
+}
+
 /* Respawn: what happened, over the 3D view between the columns. */
 .hangar__report {
   position: absolute;
@@ -718,6 +743,15 @@
   border-left: 2px solid var(--color-friendly);
 }
 
+.roster__player--red {
+  background: var(--color-enemy-soft);
+  border-left-color: var(--color-enemy);
+}
+
+.roster__player + .roster__player {
+  margin-top: 2px;
+}
+
 .roster__name {
   font-weight: 600;
 }
@@ -768,16 +802,65 @@
 
 .results__outcome {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
   padding: var(--space-4) 0;
+}
+
+.results__outcome-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
 .results__outcome-value {
   font-family: var(--font-heading);
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: 700;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-2);
+}
+
+.results__outcome-value[data-outcome='victory'] {
+  color: var(--color-accent);
+}
+
+.results__outcome-value[data-outcome='defeat'] {
+  color: var(--color-danger);
+}
+
+.results__score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.results__score-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.results__score-blue {
+  color: var(--color-friendly);
+}
+
+.results__score-red {
+  color: var(--color-enemy);
+}
+
+.results__team,
+.results__dash {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-2);
 }

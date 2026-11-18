@@ -61,8 +61,18 @@ export interface HangarEvents {
   paint(id: PaintId): void;
   base(base: BaseDefinition): void;
   start(mode: StartMode): void;
+  /** Before a match: its length (minutes). */
+  matchLength(minutes: number): void;
   fly(): void;
   back(): void;
+}
+
+/** What the hangar may change: in a match the aircraft is fixed (only the base and paint change). */
+export interface HangarOptions {
+  /** The aircraft locked in for the match, or null before it starts. */
+  readonly lockedClassId: AircraftClassId | null;
+  readonly matchMinutes: number;
+  readonly matchLengths: readonly number[];
 }
 
 const START_OPTIONS = [
@@ -98,6 +108,11 @@ export class Hangar {
   private readonly baseDetail: HTMLElement;
   private readonly baseDot: HTMLElement;
   private readonly start: Control<StartMode>;
+  private readonly lockTag: HTMLElement;
+  private matchLength: Control<string> | null = null;
+  private readonly matchSlot: HTMLElement;
+  private noteText = '';
+  private noteTimer: number | null = null;
   private readonly map: BaseMap;
   /** The best of each rating in the fleet, to scale the bars. */
   private readonly ratingMax: number[];
@@ -143,10 +158,13 @@ export class Hangar {
     this.baseDetail = h('span', 'hangar__base-detail');
     this.start = segmented<StartMode>('How to start', START_OPTIONS, 'runway', (mode) => this.events.start(mode));
     this.start.element.classList.add('segmented--block');
+    this.lockTag = tag('Locked for this match', 'caution');
+    this.lockTag.dataset['tooltip'] = 'Your aircraft is fixed for the match. Exit to the main menu to choose another.';
+    this.lockTag.hidden = true;
     const left = h(
       'aside',
       'screen-panel hangar__column hangar__left',
-      h('div', 'section-head', label('Aircraft'), h('span', 'section-head__hint', kbd('1'), '–', kbd(String(aircraft.length)))),
+      h('div', 'section-head', label('Aircraft'), h('span', 'section-head__hint', kbd('1'), '–', kbd(String(aircraft.length))), this.lockTag),
       cardGrid,
       h('div', 'section-head', label('Deploy'), h('span', 'section-head__hint', kbd('←'), kbd('→'))),
       h('div', 'hangar__map', this.map.canvas),
@@ -195,8 +213,9 @@ export class Hangar {
 
     // ── Bottom: go ──
     this.note = h('p', 'screen-footer__note');
+    this.matchSlot = h('div', 'hangar__match');
     this.flyButton = button('Fly', { variant: 'primary', size: 'lg', hint: 'Enter', onClick: () => this.events.fly() });
-    const footer = h('footer', 'screen-footer', this.note, this.flyButton);
+    const footer = h('footer', 'screen-footer', this.note, this.matchSlot, this.flyButton);
 
     this.root.append(bar, left, this.report, right, footer);
     parent.append(this.root);
@@ -206,23 +225,43 @@ export class Hangar {
     return !this.root.hidden;
   }
 
-  open(mode: HangarMode, selection: HangarSelection, bases: readonly BaseChoice[], frame: MapFrame): void {
+  open(mode: HangarMode, selection: HangarSelection, bases: readonly BaseChoice[], frame: MapFrame, options: HangarOptions): void {
     this.root.hidden = false;
     this.root.dataset['mode'] = mode.kind;
+    // In a match: only the locked type can be chosen.
+    const locked = options.lockedClassId;
+    this.lockTag.hidden = locked === null;
+    for (const [id, card] of this.cards) {
+      const off = locked !== null && id !== locked;
+      card.toggleAttribute('aria-disabled', off);
+      if (off) card.setAttribute('aria-disabled', 'true');
+      if (off) card.dataset['tooltip'] = 'Locked for this match';
+      else delete card.dataset['tooltip'];
+    }
+    // Before a match: how long it lasts.
+    this.matchSlot.replaceChildren();
+    if (mode.kind === 'select') {
+      this.matchLength = segmented<string>(
+        'Match length',
+        options.matchLengths.map((m) => ({ value: String(m), label: `${m} min` })),
+        String(options.matchMinutes),
+        (value) => this.events.matchLength(Number(value)),
+      );
+      this.matchSlot.append(label('Match'), this.matchLength.element);
+    }
     setText(this.eyebrow, mode.kind === 'respawn' ? 'Aircraft lost' : 'Hangar');
-    setText(this.title, mode.kind === 'respawn' ? 'Respawn' : mode.kind === 'change' ? 'Change aircraft' : 'Select aircraft');
+    setText(this.title, mode.kind === 'respawn' ? 'Respawn' : mode.kind === 'change' ? 'Change base' : 'Select aircraft');
     setText(this.backButton.firstElementChild as HTMLElement, mode.kind === 'respawn' ? 'Menu' : 'Back');
     setText(this.flyButton.firstElementChild as HTMLElement, mode.kind === 'respawn' ? 'Fly again' : 'Fly');
-    setText(
-      this.note,
+    this.noteText =
       mode.kind === 'change'
         ? mode.resumable
-          ? 'FLY starts a new flight with these choices. Back returns to your paused flight.'
+          ? 'FLY starts a new flight from the chosen base. Back returns to your paused flight.'
           : 'Your choices apply straight away. FLY takes off.'
         : mode.kind === 'respawn'
-          ? 'Choose an aircraft and base, then fly again.'
-          : 'Choose an aircraft, its paint and where to start. Drag the view to look round.',
-    );
+          ? 'Choose where to start, then fly again.'
+          : 'Choose your aircraft for the match (it can\'t be changed once you fly), its paint and where to start.';
+    setText(this.note, this.noteText);
     this.report.hidden = mode.kind !== 'respawn';
     if (mode.kind === 'respawn') {
       const r = mode.report;
@@ -238,6 +277,18 @@ export class Hangar {
 
   close(): void {
     this.root.hidden = true;
+  }
+
+  /** Someone tried to pick another type mid-match: say why it can't be. */
+  flashLocked(): void {
+    setText(this.note, 'Your aircraft is fixed for this match. Exit to the main menu to choose another; the base can change.');
+    this.note.dataset['tone'] = 'caution';
+    if (this.noteTimer !== null) window.clearTimeout(this.noteTimer);
+    this.noteTimer = window.setTimeout(() => {
+      setText(this.note, this.noteText);
+      delete this.note.dataset['tone'];
+      this.noteTimer = null;
+    }, 3_500);
   }
 
   /** Highlights the chosen aircraft, paint and start, and shows the aircraft's figures. */

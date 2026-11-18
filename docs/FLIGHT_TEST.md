@@ -422,10 +422,11 @@ and radar are back, with a blue flag on the gun, and no red markers over them.
 
 ## Card 33: Auto-land
 
-**Do:** Air start (**T**). Press **P**. Watch it land. Then air start again,
-press **P**, and after a few seconds press **W**. Then select the Naval
-Fighter (**4**), air start, and press **P**.
-**Expect:** "P · AUTO-LAND at Blue airfield" shows while within 5 km. After P
+**Do:** Start in the air (hangar: Start → In the air). Press **P**. Watch it land. Then air start again,
+press **P**, and after a few seconds press **W**. Then fly low across an
+island's hills towards its airfield and press **P**. Then the Naval Fighter
+(**4**) from the carrier, and press **P**.
+**Expect:** "P · AUTO-LAND at Blue carrier" (or an airfield, "(nobody's)") shows while within 5 km. It lands in about a minute from 4 km out, climbing over hills in its way. After P
 the status line says what it is doing: flying out, joining the approach, on
 final (flaps and gear come down), flare, braking. It touches down gently on
 the centreline, stops, and tells you the ground crew is rearming you. W
@@ -516,6 +517,22 @@ shows the after-action report with your real figures, then the main menu.
 **Pass:** Everything you change in a menu changes the game, and every menu
 can be left with Esc.
 
+## Card 41: A match against the Red squadron
+
+**Do:** PLAY; choose an aircraft and 5 min; FLY. Take the nearest island
+airfield (land and stop on it). Find a Red aircraft (brackets, map arrows)
+and fight it. Press **Esc** → Change base: try to pick another type, then
+choose your new field and FLY. Let the clock run out (or exit to the main
+menu).
+**Expect:** The Status panel counts down and shows the bases each side holds
+(Blue–Red, and how many are open). Landing on a field nobody holds takes it
+in 5 s ("TAKEN"), and its AA gun appears 30 s later. Red's four pilots
+launch from their carrier: two come for you (they lead their shots and
+break when you get behind them), two take fields ("RED HAS TAKEN …"). Other
+types can't be picked mid-match; the base can. At time-out the report says
+Victory, Defeat or Draw by the bases held; Continue resets everything.
+**Pass:** The side with more bases wins, and the AI is a real opponent.
+
 ## Card 34: Retractable gear
 
 **Do:** Take off from the airfield. Fly around, then come back and land by hand.
@@ -553,10 +570,11 @@ ALT, AoA, G), plus the debug overlay if possible.
 | 16 | `combat.test.ts`: rate of fire, overheating, ballistics, convergence, hit detection, ground impacts, respawn, determinism |
 | 16b | `directionPilot.test.ts`: turns to 90°, turns round to 180°, climbs, can't stall, no wobble |
 | all | flies a complete sortie · determinism · reaches its top speed · thin air at 6 km |
-| 33 | `autoLand.test.ts`: base choice · every class from 6 km · U-turn · abeam · over the mountain · teardrop · enemy airfield · carrier traps from three directions |
+| 33 | `autoLand.test.ts`: base choice · shortest-way runway · every class from 4 km in about a minute · teardrop · far side · across the hills · over the mountain · heavy bomber · 40 approaches from all round every base without touching the ground · carrier traps from three directions |
 | 32 | `bases.test.ts`: capture rules · nothing rebuilds itself · repaired for the new owner · the repaired gun fires at Red only · the radar shot from the runway, then captured |
 | 35 | headless Chrome (client only): labels, map modes, amber when defenceless |
 | 36 | `bases.test.ts`: where you can start from · `carrier.test.ts`: land fighters on the catapult and wires |
 | 39 | headless Chrome (client only): hangar at load, choices, FLY, Esc pause and RESUME, preview, settings, Enter after a crash, old keys inert |
+| 41 | `bases.test.ts`, `ai.test.ts`: neutral fields taken by landing, carrier capture, reset, match rules, AI squadron takes the fields without losses, AI shoots down a target, breaks, rearms; headless Chrome: a 5-minute match end to end, a dogfight with the hunters, 60 FPS |
 | 40 | headless Chrome (client only), 1366×768 and 1920×1080: every screen's layout (inside the window, no overlaps), keyboard focus and arrows, presets applied (shadow casters, samples, bloom, resolution), rebinding and Esc while capturing, HUD scale capped to fit (no zone overlap at the largest), reduced motion, lobby disabled, pause stops physics, respawn after 1.5 s counting the loss once, report, 60 FPS, no console errors |
 | 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

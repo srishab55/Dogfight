@@ -14,7 +14,10 @@ import {
   gunMounts,
   stepGuns,
   stepService,
-  teamBase,
+  baseById,
+  serviceLaneAreas,
+  homeBase,
+  type BaseOwnerLookup,
   type AircraftState,
   type GunState,
   type ServiceEvent,
@@ -34,10 +37,14 @@ function emptyTheGuns(guns: GunState, aircraft: AircraftState): number {
 }
 
 /** Runs the service for `seconds`, returning the events that happened. */
+/** Mid-match: Blue has taken the south airfield and Red the north one; the central one is still nobody's. */
+const owners: BaseOwnerLookup = (base) => (base.id === 'south-airfield' ? 'blue' : base.id === 'north-airfield' ? 'red' : base.team);
+const AIRFIELDS = { blue: 'south-airfield', red: 'north-airfield' } as const;
+
 function service(state: AircraftState, guns: GunState, seconds: number, status = createServiceStatus(), team: 'blue' | 'red' = 'blue'): ServiceEvent[] {
   const events: ServiceEvent[] = [];
   for (let t = 0; t < seconds; t += STEP) {
-    const event = stepService(status, state, spec, guns, team, STEP);
+    const event = stepService(status, state, spec, guns, team, STEP, owners);
     if (event) events.push(event);
   }
   return events;
@@ -66,7 +73,7 @@ describe('limited ammunition', () => {
 });
 
 describe('rearming and repair at a base', () => {
-  const parkedAt = (kind: 'airfield' | 'carrier', team: 'blue' | 'red' = 'blue') => createParkedState(spec, baseSpawnPoint(teamBase(team, kind)));
+  const parkedAt = (kind: 'airfield' | 'carrier', team: 'blue' | 'red' = 'blue') => createParkedState(spec, baseSpawnPoint(kind === 'carrier' ? homeBase(team) : baseById(AIRFIELDS[team])));
 
   it.each(['airfield', 'carrier'] as const)('stopped at idle at a friendly %s, the crew rearms and repairs in the service time', (kind) => {
     const state = parkedAt(kind);
@@ -118,8 +125,24 @@ describe('rearming and repair at a base', () => {
     expect(guns.ammo).toBe(0);
   });
 
+  it('no airfield service at a field nobody holds yet', () => {
+    const state = createParkedState(spec, baseSpawnPoint(baseById('central-airfield')));
+    const guns = createGunState(spec);
+    guns.ammo = 0;
+    expect(service(state, guns, 10)).toEqual([]);
+  });
+
+  it('pulled off the runway onto the service lane, it is serviced there', () => {
+    const base = baseById(AIRFIELDS.blue);
+    const lane = serviceLaneAreas(base.runway)[0]!;
+    const state = createParkedState(spec, { position: lane.center, headingDegrees: lane.headingDegrees });
+    const guns = createGunState(spec);
+    guns.ammo = 0;
+    expect(service(state, guns, SERVICE_CONFIG.durationSeconds + 1)).toEqual(['started', 'completed']);
+  });
+
   it('no service in the air, even over a base', () => {
-    const base = teamBase('blue', 'airfield');
+    const base = baseById(AIRFIELDS.blue);
     const state = createAirborneState(spec, { ...base.runway.center, y: 100 }, 0, 60);
     const guns = createGunState(spec);
     guns.ammo = 0;

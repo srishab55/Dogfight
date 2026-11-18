@@ -19,7 +19,8 @@ import { computePerformance, type AircraftPerformance } from './performance';
  *      way an ILS localizer is followed (closing on it at up to 75 degrees),
  *      at the glide slope's height; from too close or the wrong side, fly out
  *      past the entry, offset to one side, and turn back in (a teardrop).
- *      Clear of terrain on the way; quick far out, slowing near the entry.
+ *      Fast far out, slowing only over the last stretch; a runway is landed
+ *      in whichever direction is the shorter way round (turns counted).
  *   2. FINAL: follow the 3-degree glide slope down the centreline (chasing a
  *      point a few hundred metres ahead on it), with landing flaps, at the
  *      class's approach speed (throttle holds the speed).
@@ -27,8 +28,14 @@ import { computePerformance, type AircraftPerformance } from './performance';
  *      Carriers are flown onto the deck without a flare, with power on.
  *   4. ROLL-OUT: brake on the centreline to a stop (or let the wire stop it).
  *
+ * Terrain: in every phase before the flare it looks along the path it will
+ * really fly (the arc of the turn it's making, and the next few seconds along
+ * its velocity), not just straight ahead, and climbs over what it finds.
+ * Only the ground under the runway's own approach corridor, which the
+ * terrain generator keeps below the glide slope, is left out.
+ *
  * It only chooses control positions; the flight model flies the aircraft.
- * Deterministic, so the Phase 5 server and Phase 7 AI can use it too.
+ * Deterministic, so the Phase 5 server and the AI pilots use it too.
  */
 
 export type AutoLandPhase = 'intercept' | 'final' | 'flare' | 'rollout' | 'done';
@@ -44,6 +51,8 @@ export interface AutoLand {
   leg: 'outside' | 'entry';
   /** Times it has abandoned a final approach and gone round again. */
   goArounds: number;
+  /** Going around: climbing straight ahead, wings level, until safely high, before turning. */
+  climbOut: boolean;
   /** Integral of the speed error, for the throttle (m). */
   speedIntegral: number;
   /** Last step's airspeed and the smoothed rate it is changing at (m/s, m/s^2). */
@@ -55,33 +64,47 @@ export const AUTO_LAND_CONFIG = {
   /** Auto-land is offered within this distance of a base (m). */
   offerRange: 10_000,
   glideSlopeDeg: 3,
-  /** The entry point is this far before the aim point on the extended centreline (m). */
-  entryDistance: { airfield: 2_000, carrier: 1_800 },
+  /** The entry point is this far before the aim point on the extended centreline (m): a short final. */
+  entryDistance: { airfield: 1_300, carrier: 1_100 },
   /** On final it chases a point this far ahead along the glide path (m). */
   lookahead: 320,
   /** ...shrinking to half the distance to go, but no closer than this (m). */
   minLookahead: 60,
   /** From too close in, it flies out to a point this much beyond the entry, offset this far to the side, then turns in (m). */
-  outsideDistance: 1_200,
-  offsetDistance: 1_000,
+  outsideDistance: 650,
+  offsetDistance: 700,
   /** Joining the extended centreline: the heading closes on it at atan(offset / lead), at most this angle (m, deg). */
-  interceptLead: 800,
+  interceptLead: 650,
   maxInterceptAngleDeg: 75,
-  /** It checks the terrain this far ahead on the way (m). */
+  /** It checks the terrain this far ahead on the way (m), and over the next few seconds along its velocity (s). */
   terrainLookahead: 3_000,
+  terrainGuardSeconds: 6,
+  /** If its flight path over the next few seconds would bring the wheels within this of the ground or sea (outside the corridor), it climbs as steeply as it can (m). */
+  terrainEmergencyHeight: 20,
+  /** On final, before the go-around point, it keeps this far above ground off the corridor (m). */
+  finalTerrainMargin: 30,
+  /** For choosing which way to land a runway: a turn of one radian costs this much distance (m). */
+  turnCostPerRadian: 450,
   /** Final starts inside this cone around the extended centreline, heading within this of the runway (deg)... */
-  captureAngleDeg: 25,
+  captureAngleDeg: 22,
   captureHeadingDeg: 40,
   /** ...and no higher than this above the glide slope (more, the further out it is) (m). */
   captureHeightMargin: 40,
   /** Close in (m), it goes around if this high above the slope (m) or this much faster than its approach speed. */
   goAround: { distance: 450, tooHigh: 15, tooFastFactor: 1.4 },
-  /** Steepest descent on final, and on the way to the approach; steepest climb (deg). */
-  maxDescentDeg: 7,
-  interceptMaxDescentDeg: 10,
-  maxClimbDeg: 12,
+  /**
+   * Steepest descent on final, and on the way to the approach; steepest
+   * climb (deg). Steep, with the air brakes holding the speed: from high up
+   * it comes straight down onto the approach instead of flying a loop to
+   * lose height. A sluggish aircraft (the Heavy Bomber) gets the gentler
+   * `heavy` figures, blended by its turn rate (see `agilityOf`).
+   */
+  maxDescentDeg: 12,
+  interceptMaxDescentDeg: 18,
+  heavy: { maxDescentDeg: 5, interceptMaxDescentDeg: 10, slowDownRateFactor: 0.45, transitTopSpeedShare: 0.6 },
+  maxClimbDeg: 14,
   /** Keeps at least this high above the terrain on the way in (m). */
-  terrainClearance: 180,
+  terrainClearance: 150,
   /** Runway landings flare from this wheel height, aiming for this sink rate (m, m/s). */
   flareHeight: 6,
   /** ...but no higher than this many metres per m/s of airspeed (slow aircraft flare lower). */
@@ -93,9 +116,21 @@ export const AUTO_LAND_CONFIG = {
   flareLeadSeconds: 1.6,
   /** Intercept speed as a multiple of the clean stall speed: fast while far from the next point, slowing near it. */
   interceptSpeedFactor: 1.55,
-  transitSpeedFactor: 2.4,
-  /** Slows from transit to intercept speed over this distance, ending 1.5 km before the entry (m). */
-  slowDownDistance: 3_500,
+  transitSpeedFactor: 2.9,
+  /** ...but no faster than this share of its top speed. */
+  transitTopSpeedShare: 0.85,
+  /**
+   * Slowing for the next point: the speed it holds is what it can lose at
+   * this deceleration (throttle back, air brakes out) by `slowDownEnd`
+   * metres before it (m/s^2, m).
+   */
+  slowDownRate: 1.6,
+  slowDownEnd: 600,
+  /** After a go-around it climbs straight ahead to this height before turning (m). */
+  climbOutHeight: 90,
+  /** Below this height above the ground it turns only gently (at most this far off its track) (m, deg). */
+  lowTurnHeight: 60,
+  lowTurnMaxDeg: 15,
   /** Throttle gains on the speed error (per m/s, and per m of integrated error). */
   speedGain: 0.06,
   speedIntegralGain: 0.004,
@@ -155,18 +190,37 @@ export function planAutoLand(base: BaseDefinition, state: Readonly<AircraftState
   let runway = base.runway;
   if (kind === 'airfield') {
     const reversed: RunwayDefinition = { ...runway, headingDegrees: (runway.headingDegrees + 180) % 360 };
-    const entry = (r: RunwayDefinition) => pointOnApproach(r, aimPastThreshold, AUTO_LAND_CONFIG.entryDistance.airfield);
-    const a = entry(runway);
-    const b = entry(reversed);
-    const p = state.position;
-    if (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z)) runway = reversed;
+    if (pathCost(reversed, kind, aimPastThreshold, state) < pathCost(runway, kind, aimPastThreshold, state)) runway = reversed;
   }
-  // Already out on the approach side: join the centreline directly; otherwise fly out first.
+  const leg = distanceToGo(runway, aimPastThreshold, state.position) >= AUTO_LAND_CONFIG.entryDistance[kind] ? 'entry' : 'outside';
+  return { runway, kind, aimPastThreshold, phase: 'intercept', leg, goArounds: 0, climbOut: false, speedIntegral: 0, lastSpeed: 0, speedRate: 0 };
+}
+
+/** How far it is from the aircraft to the aim point along the approach (negative once past it, m). */
+function distanceToGo(runway: RunwayDefinition, aimPastThreshold: number, p: Readonly<Vec3>): number {
   const h = runway.headingDegrees * DEG;
   const along0 = -runway.length / 2 + aimPastThreshold;
-  const toGo = -((state.position.x - runway.center.x) * Math.sin(h) + (state.position.z - runway.center.z) * Math.cos(h) - along0);
-  const leg = toGo >= AUTO_LAND_CONFIG.entryDistance[kind] ? 'entry' : 'outside';
-  return { runway, kind, aimPastThreshold, phase: 'intercept', leg, goArounds: 0, speedIntegral: 0, lastSpeed: 0, speedRate: 0 };
+  return -((p.x - runway.center.x) * Math.sin(h) + (p.z - runway.center.z) * Math.cos(h) - along0);
+}
+
+/**
+ * A rough length of the way in to land on `runway` in its direction: to the
+ * entry point, plus the turns there and onto the centreline (each radian
+ * costs a turn radius), plus the trip out and back when it's already too
+ * close in or on the wrong side.
+ */
+function pathCost(runway: RunwayDefinition, kind: 'airfield' | 'carrier', aimPastThreshold: number, state: Readonly<AircraftState>): number {
+  const c = AUTO_LAND_CONFIG;
+  const p = state.position;
+  const entry = pointOnApproach(runway, aimPastThreshold, c.entryDistance[kind]);
+  const dx = entry.x - p.x;
+  const dz = entry.z - p.z;
+  const moving = Math.hypot(state.velocity.x, state.velocity.z) > 5;
+  const heading = moving ? Math.atan2(state.velocity.x, state.velocity.z) : runway.headingDegrees * DEG;
+  const bearing = Math.atan2(dx, dz);
+  const turns = Math.abs(wrap(bearing - heading)) + Math.abs(wrap(runway.headingDegrees * DEG - bearing));
+  const outAndBack = distanceToGo(runway, aimPastThreshold, p) < c.entryDistance[kind] ? 2 * (c.outsideDistance + c.offsetDistance) : 0;
+  return Math.hypot(dx, dz) + turns * c.turnCostPerRadian + outAndBack;
 }
 
 /**
@@ -200,8 +254,32 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
   const wheelHeight = p.y - clearance - r.center.y;
   const speed = airspeedOf(state);
   const glide = Math.tan(c.glideSlopeDeg * DEG);
+  // How steeply it may come down, and how hard it can slow: less for a heavy, sluggish aircraft.
+  const agility = agilityOf(perf);
+  const maxDescent = (c.heavy.maxDescentDeg + (c.maxDescentDeg - c.heavy.maxDescentDeg) * agility) * DEG;
+  const interceptMaxDescent = (c.heavy.interceptMaxDescentDeg + (c.interceptMaxDescentDeg - c.heavy.interceptMaxDescentDeg) * agility) * DEG;
+  const slowDownRate = c.slowDownRate * (c.heavy.slowDownRateFactor + (1 - c.heavy.slowDownRateFactor) * agility);
 
   if (state.onGround && auto.phase !== 'intercept') auto.phase = 'rollout';
+
+  // The approach corridor (kept below the glide slope by the terrain
+  // generator; for a carrier, the line in to its deck) doesn't count as terrain.
+  const corridor = scratchCorridor;
+  corridor.aimX = aimX;
+  corridor.aimZ = aimZ;
+  corridor.fx = fx;
+  corridor.fz = fz;
+  corridor.runwayLength = r.length;
+  if (auto.kind === 'airfield') {
+    corridor.length = TERRAIN_CONFIG.airfield.approachLength + auto.aimPastThreshold;
+    corridor.halfWidth = TERRAIN_CONFIG.airfield.approachHalfWidth;
+  } else {
+    corridor.length = c.entryDistance.carrier + 600;
+    corridor.halfWidth = 120;
+  }
+  // The ground under the next few seconds of its actual flight path: the
+  // highest, and how close the wheels would come to it on the present climb or sink.
+  const path = terrainAlongVelocity(ground, state, c.terrainGuardSeconds, corridor, clearance);
 
   switch (auto.phase) {
     case 'intercept': {
@@ -213,8 +291,8 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
       // more height it can lose).
       const headingError = Math.abs(wrap(Math.atan2(state.velocity.x, state.velocity.z) - h));
       const inbound = headingError < c.captureHeadingDeg * DEG;
-      const inCone = toGo > 600 && toGo < outsideDistance + 1_000 && Math.abs(Math.atan2(across, toGo)) < c.captureAngleDeg * DEG;
-      const lowEnough = wheelHeight - toGo * glide < Math.max(c.captureHeightMargin, (Math.tan(c.maxDescentDeg * DEG) - glide) * (toGo - 800));
+      const inCone = toGo > 500 && toGo < entryDistance + 500 && Math.abs(Math.atan2(across, toGo)) < c.captureAngleDeg * DEG;
+      const lowEnough = wheelHeight - toGo * glide < Math.max(c.captureHeightMargin, (Math.tan(maxDescent) - glide) * (toGo - 500));
       if (inCone && inbound && lowEnough) {
         auto.phase = 'final';
         break;
@@ -225,6 +303,7 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
 
       let heading: number;
       let goalY: number;
+      /** Distance to the next point on the way in (m). */
       let legDistance: number;
       if (auto.leg === 'entry') {
         // Out on the approach side: like following an ILS localizer, steer a
@@ -243,36 +322,36 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
         const gz = out0.z - fx * c.offsetDistance * side;
         heading = Math.atan2(gx - p.x, gz - p.z);
         goalY = r.center.y + clearance + outsideDistance * glide;
-        legDistance = Math.hypot(gx - p.x, gz - p.z) + c.offsetDistance + c.outsideDistance;
+        // It slows for the turn back in at that point, so the turn is tight.
+        legDistance = Math.hypot(gx - p.x, gz - p.z);
       }
-      // Height: high enough for the terrain over the next few kilometres; it
-      // heads for it promptly (climbing at most 12 degrees, descending at most 10).
-      const lookX = p.x + Math.sin(heading) * c.terrainLookahead;
-      const lookZ = p.z + Math.cos(heading) * c.terrainLookahead;
-      // (Ground under the approach corridor itself is kept below the glide
-      // slope by the terrain generator, so it doesn't count.)
-      let corridor: Corridor | null = null;
-      if (auto.kind === 'airfield') {
-        corridor = scratchCorridor;
-        corridor.aimX = aimX;
-        corridor.aimZ = aimZ;
-        corridor.fx = fx;
-        corridor.fz = fz;
-        corridor.length = TERRAIN_CONFIG.airfield.approachLength + auto.aimPastThreshold;
-        corridor.halfWidth = TERRAIN_CONFIG.airfield.approachHalfWidth;
-        corridor.runwayLength = r.length;
-      }
-      const safeY = Math.max(goalY, highestTerrain(ground, p.x, p.z, lookX, lookZ, corridor) + c.terrainClearance);
-      const climb = Math.max(-c.interceptMaxDescentDeg * DEG, Math.min(c.maxClimbDeg * DEG, Math.atan2(safeY - p.y, 500)));
+      // Low down, no steep turns: after a go-around, straight ahead to a safe
+      // height first; and close to the ground, only gentle heading changes.
+      const track = Math.atan2(state.velocity.x, state.velocity.z);
+      const aboveGround = p.y - clearance - ground.heightAt(p.x, p.z);
+      if (auto.climbOut && aboveGround > c.climbOutHeight) auto.climbOut = false;
+      if (auto.climbOut) heading = track;
+      else if (aboveGround < c.lowTurnHeight) heading = track + Math.max(-c.lowTurnMaxDeg * DEG, Math.min(c.lowTurnMaxDeg * DEG, wrap(heading - track)));
+      // Height: high enough for the terrain along the way it's really going
+      // to fly (the arc of the turn onto the new heading, then on to the
+      // next point; beyond that it's the corridor), and along its velocity's
+      // next few seconds; it heads for that promptly.
+      const lookahead = Math.max(600, Math.min(c.terrainLookahead, legDistance));
+      const terrain = Math.max(highestOnTurn(ground, state, heading, lookahead, corridor), path.highest);
+      const safeY = Math.max(goalY, terrain + c.terrainClearance);
+      const emergency = auto.climbOut || path.closest < c.terrainEmergencyHeight;
+      const climb = emergency ? c.maxClimbDeg * DEG : Math.max(-interceptMaxDescent, Math.min(c.maxClimbDeg * DEG, Math.atan2(safeY - p.y, 450)));
       setDirection(target, heading, climb);
       steerTowards(state, spec, target, sticks, TUNING);
-      // Quick while far out; slowing over the last few kilometres to the
-      // entry, to a speed the first stage of flap can take.
+      // Fast while far out; slowing only over the last stretch before the
+      // next point, to a speed the first stage of flap can take.
       const interceptSpeed = Math.min(perf.stallSpeed * c.interceptSpeedFactor, spec.flaps.maxExtensionSpeed - 8);
-      const transitSpeed = Math.min(perf.stallSpeed * c.transitSpeedFactor, perf.topSpeed * 0.8);
-      const toSlow = Math.min(1, Math.max(0, (legDistance - 1_500) / c.slowDownDistance));
-      holdSpeed(auto, state, interceptSpeed + (transitSpeed - interceptSpeed) * toSlow, perf.approachThrottle + 0.2, out, dt);
-      out.flaps = legDistance < 4_000 && speed < spec.flaps.maxExtensionSpeed - 3 ? 0.5 : 0;
+      const topShare = c.heavy.transitTopSpeedShare + (c.transitTopSpeedShare - c.heavy.transitTopSpeedShare) * agility;
+      const transitSpeed = Math.max(interceptSpeed, Math.min(perf.stallSpeed * c.transitSpeedFactor, perf.topSpeed * topShare));
+      const brakingRoom = Math.max(0, legDistance - c.slowDownEnd);
+      const targetSpeed = Math.min(transitSpeed, Math.sqrt(interceptSpeed * interceptSpeed + 2 * slowDownRate * brakingRoom));
+      holdSpeed(auto, state, targetSpeed, perf.approachThrottle + 0.2, out, dt);
+      out.flaps = legDistance < 2_000 && speed < spec.flaps.maxExtensionSpeed - 3 ? 0.5 : 0;
       break;
     }
     case 'final': {
@@ -287,6 +366,7 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
         auto.phase = 'intercept';
         auto.leg = 'outside';
         auto.goArounds++;
+        auto.climbOut = true;
         break;
       }
       // Chase a point on the glide path a little ahead, back on the centreline.
@@ -294,13 +374,17 @@ export function stepAutoLand(auto: AutoLand, state: Readonly<AircraftState>, spe
       // point instead of lagging above it. A carrier landing has no flare: the
       // glide line carries on into the deck, so it arrives at the wires
       // descending (the hook catches; floating would miss them all).
-      const lookahead = Math.max(c.minLookahead, Math.min(c.lookahead, toGo * 0.5));
+      // A sluggish aircraft looks further ahead, so it eases onto the slope rather than overshooting it.
+      const lookahead = Math.max(c.minLookahead, Math.min(c.lookahead * (1 + (1 - agility) * 1.5), toGo * 0.5));
       const carrotToGo = toGo - lookahead;
       const carrotX = aimX - fx * carrotToGo;
       const carrotZ = aimZ - fz * carrotToGo;
       const slopeY = r.center.y + clearance + (auto.kind === 'carrier' ? carrotToGo : Math.max(0, carrotToGo)) * glide;
-      // Never dive at the slope more steeply than the maximum descent angle.
-      const carrotY = Math.max(slopeY, p.y - lookahead * Math.tan(c.maxDescentDeg * DEG));
+      // Never dive at the slope more steeply than the maximum descent angle,
+      // nor towards ground ahead off the corridor (then it climbs; still too
+      // high close in, it goes around).
+      let carrotY = Math.max(slopeY, p.y - lookahead * Math.tan(maxDescent));
+      if (toGo > c.goAround.distance && path.closest < c.finalTerrainMargin) carrotY = Math.max(carrotY, path.highest + clearance + c.finalTerrainMargin);
       target.x = carrotX - p.x;
       target.y = carrotY - p.y;
       target.z = carrotZ - p.z;
@@ -362,7 +446,10 @@ function holdSpeed(auto: AutoLand, state: Readonly<AircraftState>, targetSpeed: 
   const unclamped = trim + error * c.speedGain + auto.speedIntegral * c.speedIntegralGain;
   if (!((unclamped <= 0 && error < 0) || (unclamped >= 1 && error > 0))) auto.speedIntegral = Math.max(-150, Math.min(150, auto.speedIntegral + error * dt));
   out.throttle = Math.max(0, Math.min(1, trim + error * c.speedGain + auto.speedIntegral * c.speedIntegralGain));
-  out.airbrake = error < -10 ? Math.min(1, (-error - 10) / 15) : 0;
+  // Air brakes on the speed it has now (not the predicted one: a heavy
+  // aircraft slows more slowly than its trend says), out fully by 20 m/s too fast.
+  const excess = speed - targetSpeed;
+  out.airbrake = Math.max(0, Math.min(1, (excess - 8) / 12));
 }
 
 /** World point `distance` metres before a runway's aim point on its extended centreline (written into `out`). */
@@ -385,23 +472,63 @@ interface Corridor {
   runwayLength: number;
 }
 
-/** The highest ground between two points (sampled every couple of hundred metres), ignoring any inside the approach corridor. */
-function highestTerrain(ground: GroundQuery, x0: number, z0: number, x1: number, z1: number, corridor: Corridor | null = null): number {
+function inCorridor(corridor: Corridor, x: number, z: number): boolean {
+  const dx = x - corridor.aimX;
+  const dz = z - corridor.aimZ;
+  const toGo = -(dx * corridor.fx + dz * corridor.fz);
+  return toGo > -corridor.runwayLength && toGo < corridor.length && Math.abs(dx * corridor.fz - dz * corridor.fx) < corridor.halfWidth;
+}
+
+/**
+ * The highest ground (outside the corridor) under the path of a turn from
+ * the current track onto `heading`, at a typical approach turn radius, then
+ * straight on to `distance` metres: where the aircraft will actually be,
+ * rather than a straight line from where it is now.
+ */
+function highestOnTurn(ground: GroundQuery, state: Readonly<AircraftState>, heading: number, distance: number, corridor: Corridor): number {
+  const p = state.position;
+  const speed = Math.max(40, Math.hypot(state.velocity.x, state.velocity.z));
+  // About a 40-degree banked turn: r = v^2 / (g tan 40).
+  const radius = (speed * speed) / (9.81 * 0.84);
+  let track = Math.hypot(state.velocity.x, state.velocity.z) > 5 ? Math.atan2(state.velocity.x, state.velocity.z) : heading;
+  let x = p.x;
+  let z = p.z;
   let highest = -Infinity;
-  const steps = 16;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const x = x0 + (x1 - x0) * t;
-    const z = z0 + (z1 - z0) * t;
-    if (corridor) {
-      const dx = x - corridor.aimX;
-      const dz = z - corridor.aimZ;
-      const toGo = -(dx * corridor.fx + dz * corridor.fz);
-      if (toGo > -corridor.runwayLength && toGo < corridor.length && Math.abs(dx * corridor.fz - dz * corridor.fx) < corridor.halfWidth) continue;
-    }
-    highest = Math.max(highest, ground.heightAt(x, z));
+  const step = 150;
+  for (let travelled = 0; travelled <= distance; travelled += step) {
+    const turn = wrap(heading - track);
+    const maxTurn = step / radius;
+    track += Math.max(-maxTurn, Math.min(maxTurn, turn));
+    x += Math.sin(track) * step;
+    z += Math.cos(track) * step;
+    if (!inCorridor(corridor, x, z)) highest = Math.max(highest, ground.heightAt(x, z));
   }
   return highest === -Infinity ? 0 : highest;
+}
+
+const scratchPath = { highest: 0, closest: 0 };
+
+/**
+ * Along the next `seconds` of flight on the current velocity (outside the
+ * corridor): the highest ground, and the closest the wheels come to the
+ * ground or sea on the present climb or sink (m). Written into a scratch object.
+ */
+function terrainAlongVelocity(ground: GroundQuery, state: Readonly<AircraftState>, seconds: number, corridor: Corridor, clearance: number): { highest: number; closest: number } {
+  const p = state.position;
+  const v = state.velocity;
+  let highest = -Infinity;
+  let closest = Infinity;
+  for (let t = 0.5; t <= seconds; t += 0.5) {
+    const x = p.x + v.x * t;
+    const z = p.z + v.z * t;
+    if (inCorridor(corridor, x, z)) continue;
+    const h = ground.heightAt(x, z);
+    highest = Math.max(highest, h);
+    closest = Math.min(closest, p.y + v.y * t - clearance - h);
+  }
+  scratchPath.highest = highest === -Infinity ? 0 : highest;
+  scratchPath.closest = closest;
+  return scratchPath;
 }
 
 /** Horizontal direction from `p` to the centreline point `along` metres past the aim point. */
@@ -424,6 +551,11 @@ function airspeedOf(state: Readonly<AircraftState>): number {
 
 function wrap(angle: number): number {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+/** 0 for a sluggish heavy aircraft (turning at 15 deg/s or less) to 1 for a fighter (35 deg/s and more). */
+function agilityOf(perf: AircraftPerformance): number {
+  return Math.max(0, Math.min(1, (perf.maxTurnRateDeg - 15) / 20));
 }
 
 function performance(spec: AircraftClassSpec): AircraftPerformance {

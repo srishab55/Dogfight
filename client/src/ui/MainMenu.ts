@@ -49,7 +49,7 @@ export class MainMenu {
       navItem('Controls', () => this.events.controls()),
     );
     nav.setAttribute('aria-label', 'Main menu');
-    const column = h('div', 'main-menu__column', logo, h('p', 'main-menu__tagline', 'Take off, take the airfields, sink the carrier.'), this.playButton, nav);
+    const column = h('div', 'main-menu__column', logo, h('p', 'main-menu__tagline', 'Take the islands’ airfields; hold more than Red when the clock runs out.'), this.playButton, nav);
     arrowNavigation(column);
 
     // ── Top right: who you are, and the connection ──

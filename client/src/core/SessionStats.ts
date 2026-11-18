@@ -1,9 +1,8 @@
 import type { CombatEvent, TargetKind } from '@dogfight/shared';
 
 /**
- * What the player did this session, for the after-action report: counted
+ * What the player did this match, for the after-action report: counted
  * from the combat events and the flight's own state, never estimated.
- * A session runs from the first sortie to "Exit to main menu".
  */
 export class SessionStats {
   /** Game clock at the first sortie (s), or null before it. */
@@ -20,6 +19,8 @@ export class SessionStats {
   /** Rounds that hit a target (each round hits at most one). */
   hits = 0;
   basesCaptured = 0;
+  /** Enemy aircraft the player shot down. */
+  kills = 0;
 
   constructor(
     private readonly playerId: number,
@@ -42,6 +43,9 @@ export class SessionStats {
         return;
       case 'baseCaptured':
         if (event.owner === this.playerTeam) this.basesCaptured++;
+        return;
+      case 'aircraftShotDown':
+        if (event.owner === this.playerId && event.victim !== this.playerId) this.kills++;
         return;
       default:
     }

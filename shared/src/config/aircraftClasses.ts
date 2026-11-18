@@ -252,7 +252,9 @@ const INTERCEPTOR: AircraftClassSpec = {
     gLimit: 9,
     negativeGLimit: 4,
   },
-  landingGear: COMMON_GEAR,
+  // Light and quick to accelerate on a narrow track: like the vintage types, nose-wheel steering fades
+  // early with speed, so a full-rudder turn on the (wide, grippy) runway can't tip it onto a wingtip.
+  landingGear: { ...COMMON_GEAR, steeringFadeSpeed: 8 },
   combat: { maxHullHealth: 100, gunCount: 4, bombCapacity: 0 },
 };
 

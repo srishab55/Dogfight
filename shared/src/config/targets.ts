@@ -55,11 +55,12 @@ export const BASE_STRUCTURE_CONFIG = {
 } as const;
 
 /**
- * Capturing: stop on a defenceless enemy base's runway (or aprons) for this
- * long. Nothing at a base rebuilds itself: what's destroyed stays destroyed
+ * Capturing: stop on a base nobody holds, or a defenceless enemy one, for
+ * this long (on an airfield's runway, service lane or aprons; on a carrier's
+ * deck). Nothing at a base rebuilds itself: what's destroyed stays destroyed
  * until the base is captured. Then everything there changes sides, and its
- * destroyed defences (AA gun, hangar, fuel depot, radar) are repaired for
- * the new owner after `repairSeconds`.
+ * destroyed or never-built defences (AA gun, hangar, fuel depot, radar) are
+ * built for the new owner after `repairSeconds`.
  */
 export const CAPTURE_CONFIG = {
   seconds: 5,
@@ -69,7 +70,7 @@ export const CAPTURE_CONFIG = {
   repairSeconds: 30,
 } as const;
 
-/** Aircraft parked on an airfield's apron: soft targets. */
+/** Aircraft parked on an airfield's apron: soft targets (none are placed on the current map). */
 export const PARKED_AIRCRAFT_CONFIG = {
   /** Destroyed, they stay wrecks; on a capture, any left intact are captured with the base. */
   maxHealth: 14,
@@ -78,10 +79,11 @@ export const PARKED_AIRCRAFT_CONFIG = {
 } as const;
 
 /**
- * Carriers. Rounds that strike the hull, deck or island damage them; armour
- * stops half of each round. Destroyed, a carrier burns, settles by the stern
- * and sinks over about a minute, then (practice rules until Phase 6) a fresh
- * one takes its place.
+ * Carrier hulls, when they can be sunk (`createTargets({ carrierHulls: true })`;
+ * not in a match, where carriers are captured instead, like airfields).
+ * Rounds that strike the hull, deck or island damage them; armour stops
+ * half of each round. Destroyed, a carrier burns, settles by the stern and
+ * sinks over about a minute, then a fresh one takes its place.
  */
 export const CARRIER_DAMAGE_CONFIG = {
   maxHealth: 800,
@@ -99,30 +101,23 @@ export const CARRIER_DAMAGE_CONFIG = {
 } as const;
 
 /**
- * Where the defences are. Airfield positions are relative to the runway's
- * centre in its own frame (`along` towards its heading, `across` to its
- * right, m), all on the flattened airfield pad; carrier positions are
- * distance from the stern and side (+1 starboard, -1 port).
+ * Where each base's defences are. Every island airfield has the same
+ * layout, relative to its runway's centre in the runway's own frame
+ * (`along` towards its heading, `across` to its right, m), all on the
+ * flattened pad: the AA gun on the left, the hangar and fuel depot on the
+ * right behind the service lane (which runs at across 63-81). Carrier
+ * positions are distance from the stern and side (+1 starboard, -1 port).
  */
-export const ENEMY_LAYOUT = {
-  team: 'red',
+export const BASE_LAYOUT = {
   airfieldAaGun: { along: -20, across: -98 },
-  hangar: { along: -250, across: 100 },
-  fuelDepot: { along: 160, across: 98 },
+  hangar: { along: -250, across: 108 },
+  fuelDepot: { along: 160, across: 102 },
   /**
-   * Beside the runway near its north end (Red's runway points south, so
-   * that's along -450), 25 m off its edge. An aircraft that lands heading
-   * north, the way in from Blue's side, stops a few hundred metres short of
-   * it, nearly in line: a touch of rudder and it can shoot it from the ground.
+   * Beside the runway near its far end, 15 m off its edge: an aircraft that
+   * lands stops a few hundred metres short of it, nearly in line, so a touch
+   * of rudder and it can shoot it from the ground.
    */
-  radar: { along: -450, across: -45 },
-  /** Parked in front of the hangar, nose towards the runway. */
-  parkedAircraft: [
-    { along: -287, across: 66 },
-    { along: -262, across: 66 },
-    { along: -237, across: 66 },
-    { along: -212, across: 66 },
-  ],
+  radar: { along: -450, across: -54 },
   carrierAaGun: { fromStern: 205, side: -1 },
 } as const;
 

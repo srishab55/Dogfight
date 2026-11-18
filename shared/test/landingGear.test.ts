@@ -11,7 +11,8 @@ import {
   createTerrain,
   createWorldGround,
   groundClearance,
-  teamBase,
+  baseById,
+  homeBase,
   type AircraftState,
 } from '../src/index';
 import { fly, holdVerticalSpeed, rollToBank, type PilotView } from './testPilot';
@@ -27,7 +28,7 @@ const wheelHeight = (state: AircraftState, spec = AIRCRAFT_CLASSES.fighterBomber
 describe('landing gear', () => {
   it.each(AIRCRAFT_CLASS_IDS.filter((id) => AIRCRAFT_CLASSES[id].homeBase === 'airfield' && !AIRCRAFT_CLASSES[id].airframe.fixedGear))('%s: retracts within a few seconds of lifting off', (id) => {
     const spec = AIRCRAFT_CLASSES[id];
-    const state = createParkedState(spec, baseSpawnPoint(teamBase('blue', 'airfield')));
+    const state = createParkedState(spec, baseSpawnPoint(baseById('south-airfield')));
     expect(state.gearPosition).toBe(1);
     let liftOff = -1;
     let retracted = -1;
@@ -59,7 +60,7 @@ describe('landing gear', () => {
 
   it('a catapult launch raises it once clear of the deck', () => {
     const spec = AIRCRAFT_CLASSES.navalFighter;
-    const state = createParkedState(spec, baseSpawnPoint(teamBase('blue', 'carrier')), true);
+    const state = createParkedState(spec, baseSpawnPoint(homeBase('blue')), true);
     fly(state, spec, 25, (v) => ({ throttle: 1, flaps: 0.5, roll: rollToBank(v, 0), pitch: v.state.onGround ? 0 : holdVerticalSpeed(v, 6) }), undefined, world);
     expect(state.crashed).toBe(false);
     expect(state.gearPosition).toBe(0);
@@ -68,7 +69,7 @@ describe('landing gear', () => {
   it('comes down by itself on a descent towards a runway, and is locked before touchdown', () => {
     const spec = AIRCRAFT_CLASSES.fighterBomber;
     const perf = computePerformance(spec);
-    const state = createApproachState(spec, teamBase('blue', 'airfield').runway, { distanceFromThreshold: 2_500, glideSlopeDeg: 3, aimPointPastThreshold: 300, speed: perf.approachSpeed, throttle: perf.approachThrottle, flaps: 1 });
+    const state = createApproachState(spec, baseById('south-airfield').runway, { distanceFromThreshold: 2_500, glideSlopeDeg: 3, aimPointPastThreshold: 300, speed: perf.approachSpeed, throttle: perf.approachThrottle, flaps: 1 });
     state.gearPosition = 0; // as if it had arrived with it up
     let lockedAt = Infinity;
     fly(state, spec, 120, (v) => ({ throttle: perf.approachThrottle, flaps: 1, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, -perf.approachSpeed * Math.tan((3 * Math.PI) / 180)) }), (v) => {
@@ -83,7 +84,7 @@ describe('landing gear', () => {
   it('stays down through a short climb on an approach (getting back onto the glide slope)', () => {
     const spec = AIRCRAFT_CLASSES.fighterBomber;
     const perf = computePerformance(spec);
-    const state = createApproachState(spec, teamBase('blue', 'airfield').runway, { distanceFromThreshold: 2_500, glideSlopeDeg: 3, aimPointPastThreshold: 300, speed: perf.approachSpeed, throttle: perf.approachThrottle, flaps: 1 });
+    const state = createApproachState(spec, baseById('south-airfield').runway, { distanceFromThreshold: 2_500, glideSlopeDeg: 3, aimPointPastThreshold: 300, speed: perf.approachSpeed, throttle: perf.approachThrottle, flaps: 1 });
     fly(state, spec, 6, (v) => ({ throttle: 0.9, flaps: 1, roll: rollToBank(v, 0), pitch: holdVerticalSpeed(v, 4) }), undefined, world);
     expect(state.velocity.y).toBeGreaterThan(2);
     expect(state.gearPosition).toBe(1);
@@ -113,7 +114,7 @@ describe('landing gear', () => {
 
   it('touching down with it up is a belly landing', () => {
     const spec = AIRCRAFT_CLASSES.fighterBomber;
-    const runway = teamBase('blue', 'airfield').runway;
+    const runway = baseById('south-airfield').runway;
     const state = createAirborneState(spec, { x: runway.center.x, y: runway.center.y + groundClearance(spec) + 0.4, z: runway.center.z }, runway.headingDegrees, 55, 0);
     state.velocity.y = -1.5;
     fly(state, spec, 3, () => ({ throttle: 0 }), undefined, world);

@@ -40,12 +40,12 @@ export interface HudFrame {
   readonly impactPoint: ScreenPoint | null;
   /** Approach guidance to a friendly base while on final with landing flaps, else null. */
   readonly approach: ApproachGuide | null;
-  /** The nearest enemy base you're attacking or capturing, or null. */
+  /** The nearest base you don't hold (to take or attack), or one you've just taken; or null. */
   readonly baseStatus: BaseStatus | null;
-  /** Targets destroyed this session. */
-  readonly targetsDestroyed: number;
-  /** How many of the bases your team holds. */
-  readonly basesHeld: { readonly held: number; readonly total: number };
+  /** The match: time left, and the bases each side holds (open: nobody's); null outside a match. */
+  readonly match: { readonly secondsLeft: number; readonly blue: number; readonly red: number; readonly open: number } | null;
+  /** Enemy aircraft you've shot down this match. */
+  readonly kills: number;
   /** Bases on screen and far enough away to need finding, with their labels. */
   readonly baseLabels: readonly BaseLabel[];
   /** The assist line: auto-land flying a landing (`active`) or on offer (P); on the ground, a pointer to the hangar. Null: nothing to say. */
@@ -75,25 +75,28 @@ export interface BaseLabel {
   readonly color: string;
 }
 
-/** A red bracket over an enemy target, with what it is and how far. */
+/** A red bracket over an enemy target or aircraft, with what it is and how far. */
 export interface EnemyMarker {
   readonly x: number;
   readonly y: number;
-  readonly kind: TargetKind;
+  readonly kind: TargetKind | 'aircraft';
   readonly distance: number;
+  /** For an aircraft: its type ("INTERCEPTOR"). */
+  readonly label?: string;
 }
 
-const MARKER_LABELS: Readonly<Record<TargetKind, string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '', hangar: 'HANGAR', fuelDepot: 'FUEL', radar: 'RADAR' };
+const MARKER_LABELS: Readonly<Record<TargetKind | 'aircraft', string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '', hangar: 'HANGAR', fuelDepot: 'FUEL', radar: 'RADAR', aircraft: 'AIRCRAFT' };
 
-/** The nearest enemy (or newly captured) base's state, for the objective. */
+/** The base you're after (or have just taken), for the objective. */
 export interface BaseStatus {
   readonly name: string;
   readonly distance: number;
+  /** 'nobody': nobody holds it (land to take it); 'enemy': the other side's; 'yours': just captured. */
+  readonly holder: 'nobody' | 'enemy' | 'yours';
   readonly defencesLeft: number;
   readonly defencesTotal: number;
   /** Capture progress 0-1 while you're capturing it, else null. */
   readonly capturing: number | null;
-  readonly captured: boolean;
 }
 
 export interface ScreenPoint {
@@ -120,6 +123,12 @@ function readout(name: string, unit: string, className = ''): Readout {
 }
 
 /** A label-value row in a HUD panel. */
+/** 75 -> "1:15". */
+function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function row(name: string): { element: HTMLElement; value: HTMLElement } {
   const value = h('span', 'ui-value hud-row__value');
   return { element: h('div', 'hud-row', label(name), value), value };
@@ -129,7 +138,7 @@ function row(name: string): { element: HTMLElement; value: HTMLElement } {
  * The flight HUD, drawn in HTML/CSS over the 3D view and organised in zones
  * that keep the middle of the screen clear:
  *
- *   top-left      STATUS: team, bases held, objective (an enemy base), home base, targets
+ *   top-left      STATUS: match time left, bases held by each side, kills, home base, objective
  *   top-centre    the radar map (MiniMap), approach calls under it
  *   bottom-left   AIRFRAME: hull integrity, damage, gear, flaps, what the aircraft is doing
  *   bottom-centre instruments: airspeed, altitude, heading tape, vertical speed, throttle
@@ -143,9 +152,12 @@ function row(name: string): { element: HTMLElement; value: HTMLElement } {
 export class FlightHud {
   private readonly root: HTMLElement;
   // Status (top-left)
-  private readonly basesHeld: HTMLElement;
+  private readonly timeLeft: HTMLElement;
+  private readonly basesBlue: HTMLElement;
+  private readonly basesRed: HTMLElement;
+  private readonly basesOpen: HTMLElement;
+  private readonly kills: HTMLElement;
   private readonly home: HTMLElement;
-  private readonly targets: HTMLElement;
   private readonly objective: HTMLElement;
   private readonly objectiveName: HTMLElement;
   private readonly objectiveState: HTMLElement;
@@ -214,12 +226,17 @@ export class FlightHud {
     this.root = h('div', 'flight-hud');
 
     // ── Top-left: status ──
-    const basesHeld = row('Bases held');
+    const time = row('Time left');
+    this.timeLeft = time.value;
+    // Bases held: Blue's, Red's, and how many nobody holds.
+    this.basesBlue = h('span', 'hud-score__blue');
+    this.basesRed = h('span', 'hud-score__red');
+    this.basesOpen = h('span', 'hud-score__open');
+    const bases = h('div', 'hud-row', label('Bases'), h('span', 'ui-value hud-row__value hud-score', this.basesBlue, h('span', 'hud-score__dash', '–'), this.basesRed, this.basesOpen));
+    const kills = row('Kills');
     const home = row('Home base');
-    const targets = row('Targets');
-    this.basesHeld = basesHeld.value;
+    this.kills = kills.value;
     this.home = home.value;
-    this.targets = targets.value;
     this.objectiveName = h('div', 'hud-objective__name');
     this.objectiveState = h('div', 'hud-objective__state');
     this.objectiveBar = progress();
@@ -229,7 +246,7 @@ export class FlightHud {
       'section',
       'panel panel--hud hud-panel hud-zone hud-zone--tl',
       h('header', 'panel__header', label('Status'), tag('Blue · you', 'friendly')),
-      h('div', 'panel__body', basesHeld.element, home.element, targets.element, this.objective, h('div', 'hud-hint', kbd(menuKey), h('span', '', 'pause menu'))),
+      h('div', 'panel__body', time.element, bases, kills.element, home.element, this.objective, h('div', 'hud-hint', kbd(menuKey), h('span', '', 'pause menu'))),
     );
     status.setAttribute('aria-label', 'Status');
 
@@ -439,7 +456,7 @@ export class FlightHud {
       placeMarker(marker.box, enemy ?? null);
       if (!enemy) return;
       marker.box.dataset['kind'] = enemy.kind;
-      const text = `${MARKER_LABELS[enemy.kind]} ${formatDistance(enemy.distance)}`;
+      const text = `${enemy.label ?? MARKER_LABELS[enemy.kind]} ${formatDistance(enemy.distance)}`;
       if (text !== marker.text) {
         marker.text = text;
         marker.label.textContent = text;
@@ -545,10 +562,16 @@ export class FlightHud {
     setText(this.weaponNote, frame.guns.ammo === 0 && frame.serviceProgress === null ? 'Land and stop at a friendly base to rearm' : '');
 
     // Status.
-    setText(this.basesHeld, `${frame.basesHeld.held} / ${frame.basesHeld.total}`);
+    const match = frame.match;
+    setText(this.timeLeft, match ? formatClock(match.secondsLeft) : '—');
+    if (match && match.secondsLeft < 60) this.timeLeft.dataset['tone'] = 'caution';
+    else delete this.timeLeft.dataset['tone'];
+    setText(this.basesBlue, match ? String(match.blue) : '—');
+    setText(this.basesRed, match ? String(match.red) : '—');
+    setText(this.basesOpen, match && match.open > 0 ? ` · ${match.open} open` : '');
+    setText(this.kills, String(frame.kills));
     const base = frame.nearestBase;
-    setText(this.home, !base ? '—' : base.distance === 0 ? 'ON BASE' : `${formatDistance(base.distance)} · ${base.bearingDeg.toFixed(0).padStart(3, '0')}°`);
-    setText(this.targets, String(frame.targetsDestroyed));
+    setText(this.home, !base ? 'none' : base.distance === 0 ? 'ON BASE' : `${formatDistance(base.distance)} · ${base.bearingDeg.toFixed(0).padStart(3, '0')}°`);
     this.updateObjective(frame.baseStatus);
   }
 
@@ -558,15 +581,19 @@ export class FlightHud {
     let text: string;
     let fill: number;
     let tone: Tone;
-    if (status.captured) {
+    if (status.holder === 'yours') {
       const repairing = status.defencesLeft < status.defencesTotal;
-      text = repairing ? 'Captured · crews repairing its defences' : 'Yours · its AA gun defends it for you';
+      text = repairing ? 'Yours · crews building its defences' : 'Yours · its AA gun defends it for you';
       fill = status.defencesTotal > 0 ? status.defencesLeft / status.defencesTotal : 1;
       tone = 'friendly';
     } else if (status.capturing !== null) {
       text = `Capturing ${Math.round(status.capturing * 100)}% · stay stopped`;
       fill = status.capturing;
       tone = 'caution';
+    } else if (status.holder === 'nobody') {
+      text = `Nobody's · land and stop on it to take it · ${formatDistance(status.distance)}`;
+      fill = 0;
+      tone = 'accent';
     } else if (status.defencesLeft === 0) {
       text = 'Defenceless · land and stop on its runway';
       fill = 0;
@@ -579,7 +606,7 @@ export class FlightHud {
     setText(this.objectiveName, status.name);
     setText(this.objectiveState, text);
     this.objectiveBar.set(fill, tone);
-    this.objective.dataset['state'] = status.captured ? 'captured' : status.defencesLeft === 0 ? 'open' : 'defended';
+    this.objective.dataset['state'] = status.holder === 'yours' ? 'captured' : status.holder === 'nobody' || status.defencesLeft === 0 ? 'open' : 'defended';
   }
 
   /**

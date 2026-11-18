@@ -6,11 +6,18 @@ export const BASE_COLORS = {
   red: '#ff4a3d',
   /** An enemy base with no defences left: land on it to capture it. */
   open: '#ffb020',
+  /** A base nobody holds yet: land and stop on it to take it. */
+  neutral: '#d8dee6',
 } as const;
 
+/** A base's colour on the map, its beacon and its label. */
+export function baseColor(owner: 'blue' | 'red' | null, open = false): string {
+  return open ? BASE_COLORS.open : owner === null ? BASE_COLORS.neutral : BASE_COLORS[owner];
+}
+
 export const MINIMAP_CONFIG = {
-  /** World area shown: a square this many metres either side of the map centre (covers both carriers). */
-  halfExtent: 7_600,
+  /** World area shown: a square this many metres either side of the map centre (covers both carriers and the AI's patrol area). */
+  halfExtent: 4_400,
   /** Size of the terrain picture drawn once at start (px). */
   backgroundResolution: 256,
   /** On-screen size (CSS px): the corner map, and the big map. */
@@ -26,7 +33,7 @@ export const MINIMAP_CONFIG = {
   highland: '#7b7a52',
   peak: '#b3ad9a',
   /** Highest point (m), for the land colour ramp; the shading comes from the slope. */
-  peakHeight: 760,
+  peakHeight: 420,
   storageKey: 'dogfight.map',
 } as const;
 

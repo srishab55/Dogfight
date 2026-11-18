@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AIRCRAFT_CLASSES,
   AIRCRAFT_CLASS_IDS,
-  HOME_RUNWAY,
   cloneAircraftState,
   computePerformance,
   createAirborneState,
@@ -15,7 +14,7 @@ import {
   type AircraftState,
 } from '../src/index';
 import { quatFromAxisAngle, multiplyQuat, quatIdentity, rotateVec3 } from '../src/math/quat';
-import { angleDifference, fly, heightAboveGround, holdPitchAttitude, holdVerticalSpeed, horizontalDistance, rollToBank, type PilotView } from './testPilot';
+import { angleDifference, fly, heightAboveGround, holdPitchAttitude, holdVerticalSpeed, horizontalDistance, rollToBank, type PilotView, TEST_RUNWAY } from './testPilot';
 
 /*
  * ─── Automated flight test ────────────────────────────────────────────────
@@ -27,9 +26,9 @@ import { angleDifference, fly, heightAboveGround, holdPitchAttitude, holdVertica
  */
 
 const RAD_TO_DEG = 180 / Math.PI;
-const SPAWN = getRunwaySpawnPoint(HOME_RUNWAY, 60);
-const THRESHOLD_Z = HOME_RUNWAY.center.z - HOME_RUNWAY.length / 2;
-const RUNWAY_END_Z = HOME_RUNWAY.center.z + HOME_RUNWAY.length / 2;
+const SPAWN = getRunwaySpawnPoint(TEST_RUNWAY, 60);
+const THRESHOLD_Z = TEST_RUNWAY.center.z - TEST_RUNWAY.length / 2;
+const RUNWAY_END_Z = TEST_RUNWAY.center.z + TEST_RUNWAY.length / 2;
 const LOOP_CAPABLE: readonly AircraftClassId[] = ['interceptor', 'fighterBomber', 'navalFighter', 'diveBomber', 'triplane', 'biplane'];
 
 const setup = (id: AircraftClassId) => ({ spec: AIRCRAFT_CLASSES[id], perf: computePerformance(AIRCRAFT_CLASSES[id]) });
@@ -96,7 +95,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
         turned.heading = v.attitude.headingDeg;
         return { throttle: 0.2, yaw: 1 };
       });
-      expect(state.crashed).toBe(false);
+      expect(state.crashed, String(state.crashReason)).toBe(false);
       expect(angleDifference(turned.heading, 0)).toBeGreaterThan(30);
       expect(state.telemetry.airspeed).toBeLessThan(30);
     });
@@ -118,7 +117,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
       expect(state.crashed).toBe(false);
       expect(result.liftoffSpeed).toBeGreaterThan(perf.stallSpeed);
       expect(result.liftoffSpeed).toBeLessThan(perf.stallSpeed * 1.6);
-      expect(result.liftoffDistance).toBeLessThan(HOME_RUNWAY.length - 60);
+      expect(result.liftoffDistance).toBeLessThan(TEST_RUNWAY.length - 60);
       expect(heightAboveGround(state)).toBeGreaterThan(50);
     });
 
@@ -426,7 +425,7 @@ describe.each(AIRCRAFT_CLASS_IDS)('%s', (id) => {
 
 describe('crashes and collisions (Fighter-Bomber)', () => {
   const { spec } = setup('fighterBomber');
-  const runwayPoint = { x: HOME_RUNWAY.center.x, z: HOME_RUNWAY.center.z };
+  const runwayPoint = { x: TEST_RUNWAY.center.x, z: TEST_RUNWAY.center.z };
 
   /** Aircraft with its wheels `wheelHeight` above the runway, moving forward at `speed`, sinking at `sinkRate`. */
   const approaching = (wheelHeight: number, speed: number, sinkRate: number, bankDeg = 0) => {
