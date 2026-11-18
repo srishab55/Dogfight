@@ -1,7 +1,8 @@
 import type { AircraftClassSpec } from '../config/aircraftClasses';
 import { groundClearance, hasTailhook } from '../config/aircraftClasses';
 import { TERRAIN_CONFIG } from '../config/terrain';
-import { BASES, type BaseDefinition, type RunwayDefinition } from '../config/world';
+import { BASES, type BaseDefinition, type BaseOwnerLookup, type RunwayDefinition } from '../config/world';
+import type { Team } from '../types/team';
 import type { CarrierStatusMap } from '../world/carrierStatus';
 import { vec3 } from '../math/vec3';
 import type { Vec3 } from '../types/vector';
@@ -174,6 +175,67 @@ export function autoLandBaseFor(spec: AircraftClassSpec, position: Readonly<Vec3
     if (distance < bestDistance) {
       best = base;
       bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/** What the choice of base knows about the fight: who holds each base, and which enemy ones are defenceless. */
+export interface AutoLandPreferences {
+  readonly team: Team;
+  readonly ownerOf: BaseOwnerLookup;
+  /** An enemy base with its defences destroyed (it can be captured by landing). */
+  readonly isOpen: (base: BaseDefinition) => boolean;
+}
+
+/**
+ * How far out of its way a defended enemy base is (m): landing there gives
+ * nothing (no rearming, no capture) and its AA gun fires, so it's chosen
+ * only when nothing else is near.
+ */
+const DEFENDED_ENEMY_PENALTY = 3_000;
+
+/** Choosing a base: each radian it lies off the way the aircraft is flying counts as this much more distance (m). */
+const OFF_THE_NOSE_COST_PER_RADIAN = 900;
+
+/**
+ * How much auto-landing at `base` is "the one you mean": its distance, plus
+ * how far it lies off the way you're flying (a base behind costs as much as
+ * one 2.8 km further away ahead), plus a penalty for a defended enemy base.
+ * Infinity if it can't be used (out of range; a carrier without a hook, or
+ * sinking). Which runway direction to land on is planAutoLand's business.
+ */
+export function autoLandCost(base: BaseDefinition, spec: AircraftClassSpec, state: Readonly<AircraftState>, carrierStatuses: CarrierStatusMap | null, preferences: AutoLandPreferences | null): number {
+  if (base.kind === 'carrier' && (!hasTailhook(spec) || (carrierStatuses?.get(base.id)?.sink ?? 0) > 0)) return Infinity;
+  const p = state.position;
+  const dx = base.runway.center.x - p.x;
+  const dz = base.runway.center.z - p.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance > AUTO_LAND_CONFIG.offerRange) return Infinity;
+  const moving = Math.hypot(state.velocity.x, state.velocity.z) > 5;
+  const off = moving && distance > 1 ? Math.abs(wrap(Math.atan2(dx, dz) - Math.atan2(state.velocity.x, state.velocity.z))) : 0;
+  let cost = distance + off * OFF_THE_NOSE_COST_PER_RADIAN;
+  if (preferences) {
+    const owner = preferences.ownerOf(base);
+    if (owner !== null && owner !== preferences.team && !preferences.isOpen(base)) cost += DEFENDED_ENEMY_PENALTY;
+  }
+  return cost;
+}
+
+/**
+ * The base auto-land takes this aircraft to: of those in range (anyone's),
+ * the one it's heading for (near, and ahead rather than behind), so it never
+ * turns round for a base behind when there's one ahead; your own bases and
+ * ones you can take are preferred to defended enemy ones (see autoLandCost).
+ */
+export function chooseAutoLandBase(spec: AircraftClassSpec, state: Readonly<AircraftState>, carrierStatuses: CarrierStatusMap | null, preferences: AutoLandPreferences | null, bases: readonly BaseDefinition[] = BASES): BaseDefinition | null {
+  let best: BaseDefinition | null = null;
+  let bestCost = Infinity;
+  for (const base of bases) {
+    const cost = autoLandCost(base, spec, state, carrierStatuses, preferences);
+    if (cost < bestCost) {
+      best = base;
+      bestCost = cost;
     }
   }
   return best;

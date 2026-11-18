@@ -27,6 +27,10 @@ export interface HudFrame {
   readonly gunsight: ScreenPoint | null;
   /** Mouse-flight aim point (where the aircraft is being steered), or null when not mouse flying. */
   readonly aimReticle: ScreenPoint | null;
+  /** Where to put the gunsight to hit the nearest enemy aircraft ahead (the gun solution), or null. */
+  readonly leadPoint: ScreenPoint | null;
+  /** Rounds fired now would hit an enemy aircraft: the gunsight and aim circle turn red. */
+  readonly onTarget: boolean;
   readonly guns: { readonly heat: number; readonly overheated: boolean; readonly ammo: number };
   /** A full load of ammunition for this aircraft (rounds). */
   readonly fullAmmo: number;
@@ -205,6 +209,7 @@ export class FlightHud {
   private readonly damageFlash: HTMLElement;
   private readonly gunsight: HTMLElement;
   private readonly aimReticle: HTMLElement;
+  private readonly leadPoint: HTMLElement;
   private readonly flightPathMarker: HTMLElement;
   private readonly impactPoint: HTMLElement;
   private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string }> = [];
@@ -369,7 +374,8 @@ export class FlightHud {
     this.flightPathMarker = h('div', 'hud-fpm');
     this.aimReticle = h('div', 'hud-aim');
     this.impactPoint = h('div', 'hud-impact');
-    for (const symbol of [this.gunsight, this.flightPathMarker, this.aimReticle, this.impactPoint]) symbol.hidden = true;
+    this.leadPoint = h('div', 'hud-lead');
+    for (const symbol of [this.gunsight, this.flightPathMarker, this.aimReticle, this.impactPoint, this.leadPoint]) symbol.hidden = true;
     const markerLayer = h('div', 'hud-markers');
     for (let i = 0; i < MAX_MARKERS; i++) {
       const markerLabel = h('div', 'hud-enemy__label');
@@ -385,7 +391,7 @@ export class FlightHud {
       this.baseLabelPool.push({ box, text: '', color: '' });
     }
 
-    this.root.append(this.damageFlash, markerLayer, this.impactPoint, this.flightPathMarker, this.gunsight, this.aimReticle, status, airframe, instruments, weapons, this.approach, alerts, feed, this.crashPanel);
+    this.root.append(this.damageFlash, markerLayer, this.impactPoint, this.leadPoint, this.flightPathMarker, this.gunsight, this.aimReticle, status, airframe, instruments, weapons, this.approach, alerts, feed, this.crashPanel);
     parent.append(this.root);
   }
 
@@ -478,8 +484,13 @@ export class FlightHud {
     placeMarker(this.flightPathMarker, frame.flightPathMarker);
     placeMarker(this.gunsight, frame.gunsight);
     placeMarker(this.aimReticle, frame.aimReticle);
+    placeMarker(this.leadPoint, frame.leadPoint);
     this.hitMarkerTimer = Math.max(0, this.hitMarkerTimer - deltaSeconds);
     this.gunsight.classList.toggle('hud-gunsight--hit', this.hitMarkerTimer > 0);
+    // On target: fire now and the rounds hit an enemy aircraft.
+    this.gunsight.classList.toggle('hud-gunsight--on-target', frame.onTarget);
+    this.aimReticle.classList.toggle('hud-aim--on-target', frame.onTarget);
+    this.leadPoint.classList.toggle('hud-lead--on-target', frame.onTarget);
     this.updateTouchdownMessage(deltaSeconds, state);
 
     this.sinceRefresh += deltaSeconds;

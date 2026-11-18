@@ -46,6 +46,8 @@ export interface PlacedSphere {
   readonly position: Vec3;
   radius: number;
   team: number;
+  /** Always true: an aircraft's sphere (near-miss allowances apply). */
+  readonly aircraft: true;
 }
 
 const scaled = vec3();

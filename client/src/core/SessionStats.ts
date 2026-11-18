@@ -47,6 +47,13 @@ export class SessionStats {
       case 'aircraftShotDown':
         if (event.owner === this.playerId && event.victim !== this.playerId) this.kills++;
         return;
+      case 'aircraftHit':
+        // Rounds on enemy aircraft count towards accuracy and damage dealt too.
+        if (event.owner === this.playerId && event.victim !== this.playerId) {
+          this.hits++;
+          this.damageDealt += event.damage;
+        }
+        return;
       default:
     }
   }

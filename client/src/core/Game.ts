@@ -12,6 +12,7 @@ import {
   CombatWorld,
   PAVED_AREAS,
   AiForce,
+  type AiPilot,
   createSquadron,
   createMatch,
   remainingSeconds,
@@ -42,7 +43,12 @@ import {
   startingBases,
   computePerformance,
   hasTailhook,
-  autoLandBaseFor,
+  autoLandCost,
+  chooseAutoLandBase,
+  leadDirection,
+  roundsWouldHit,
+  HIT_ASSIST_CONFIG,
+  type AutoLandPreferences,
   neutralControls,
   planAutoLand,
   stepAutoLand,
@@ -125,6 +131,11 @@ const PLAYER_ID = 1;
 
 /** The AI pilots' ids in combat events (the player is 1; AA guns 10 000 and up). */
 const AI_FIRST_ID = 100;
+/** Auto-land keeps offering the same base until another is better by this much (m of its choice cost). */
+const AUTO_LAND_OFFER_HYSTERESIS = 600;
+/** The lead marker and on-target cue look for enemy aircraft out to this range (m). */
+const GUNNERY_AID_RANGE = 1_200;
+const NO_AIDS = { lead: null, onTarget: false } as const;
 
 /** The screens over the game. Any of them pauses it (single player). */
 type Screen = 'menu' | 'hangar' | 'pause' | 'settings' | 'lobby' | 'results';
@@ -259,6 +270,7 @@ export class Game {
   private readonly projected = new Vector3();
   private readonly wheelHeightPoint = new Vector3();
   private readonly markerPoint = new Vector3();
+  private readonly leadScratch = { x: 0, y: 0, z: 0 };
   /** The mouse aim, raised to allow for the rounds' drop: what the nose is actually pointed at. */
   private readonly gunAim = new Vector3();
   /** Auto-land (P): the autopilot flying a landing at `autoLandBase`, or null. */
@@ -396,7 +408,8 @@ export class Game {
       this.aiClock += dt;
       this.aiForce.fly(this.aiWorldFor(this.aiClock), dt);
       this.shooters.length = 0;
-      this.shooters.push({ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire }, ...this.aiForce.shooters());
+      // Your rounds count from a few metres off an enemy aircraft (aim assist; the AI has none).
+      this.shooters.push({ id: PLAYER_ID, team: PLAYER_TEAM, state, spec, guns: this.playerGuns, trigger: controls.fire, nearMiss: HIT_ASSIST_CONFIG.nearMissMetres }, ...this.aiForce.shooters());
       this.combat.step(dt, this.shooters);
       this.serviceEvent = stepService(this.service, state, spec, this.playerGuns, PLAYER_TEAM, dt, this.combat.ownerOf) ?? this.serviceEvent;
       this.aiForce.service(this.combat.ownerOf, dt);
@@ -458,6 +471,7 @@ export class Game {
       flightPathMarker: this.projectFlightPath(),
       gunsight: this.projectGunsight(),
       aimReticle: mouseFlying ? this.projectAim() : null,
+      ...(({ lead, onTarget }) => ({ leadPoint: lead, onTarget }))(this.gunneryAids()),
       guns: this.playerGuns,
       fullAmmo: fullAmmo(this.aircraft.spec),
       serviceProgress: this.service.base ? this.service.progress : null,
@@ -498,6 +512,8 @@ export class Game {
         return;
       case 'aircraftHit':
         this.effects.spawn('spark', event.x, event.y, event.z);
+        // Your rounds on an enemy aircraft: the gunsight flashes, as on any target.
+        if (event.owner === PLAYER_ID && event.victim !== PLAYER_ID) this.hud.registerHit();
         if (event.victim === PLAYER_ID) {
           if (this.settings.accessibility.damageFlash) this.hud.registerDamage(DEFENCE_VISUAL_CONFIG.hitFlashSeconds);
           this.impactShake = Math.max(this.impactShake, DEFENCE_VISUAL_CONFIG.hitShake);
@@ -794,7 +810,7 @@ export class Game {
       this.hud.showMessage('AUTO-LAND is for landing: take off first', 'ok', 2.5);
       return;
     }
-    const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
+    const base = this.autoLandTarget();
     if (!base) {
       this.hud.showMessage(`AUTO-LAND · no base within ${AUTO_LAND_CONFIG.offerRange / 1000} km${spec.airframe.tailhook ? '' : ` (the ${spec.displayName} is too big for a carrier)`}`, 'ok', 3);
       return;
@@ -868,7 +884,7 @@ export class Game {
       return { active: true, text: `AUTO-LAND · ${this.autoLandBase.name.toUpperCase()} · ${step} · ${this.keyName('autoLand')}: take over` };
     }
     if (state.onGround || !this.settings.gameplay.autoLandOffers) return null;
-    const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
+    const base = this.autoLandTarget();
     // An aircraft with no hook (the Heavy Bomber) near a carrier: say why it isn't offered, and offer the nearest airfield.
     const p = state.position;
     const carrierNearby = !spec.airframe.tailhook && CARRIERS.some((c) => Math.hypot(c.center.x - p.x, c.center.z - p.z) < AUTO_LAND_HUD.promptDistance);
@@ -879,6 +895,64 @@ export class Game {
     const owner = this.combat.ownerOf(base);
     const whose = owner === PLAYER_TEAM ? '' : owner === null ? " (nobody's)" : ' (enemy)';
     return { active: false, text: `${this.keyName('autoLand')} · AUTO-LAND at ${base.name}${whose} · ${(distance / 1000).toFixed(1)} km${tooBig}` };
+  }
+
+  /** What auto-land's choice of base knows: who holds what, and which enemy bases are defenceless. */
+  private readonly autoLandPreferences: AutoLandPreferences = {
+    team: PLAYER_TEAM,
+    ownerOf: (base) => this.combat.ownerOf(base),
+    isOpen: (base) => this.combat.bases.find((c) => c.base.id === base.id)?.neutralized ?? false,
+  };
+  /** The base auto-land last offered: kept unless another is clearly the better choice, so the offer doesn't flicker. */
+  private offeredBase: BaseDefinition | null = null;
+
+  /** The base you're heading for (shared rule: near, ahead, and one you can use), steady from frame to frame. */
+  private autoLandTarget(): BaseDefinition | null {
+    const { state, spec } = this.aircraft;
+    const prefs = this.autoLandPreferences;
+    const best = chooseAutoLandBase(spec, state, this.carrierStatuses, prefs);
+    const previous = this.offeredBase;
+    if (previous && best && previous !== best && autoLandCost(previous, spec, state, this.carrierStatuses, prefs) < autoLandCost(best, spec, state, this.carrierStatuses, prefs) + AUTO_LAND_OFFER_HYSTERESIS) return previous;
+    this.offeredBase = best;
+    return best;
+  }
+
+  /**
+   * Gunnery aids: the lead marker on the nearest enemy aircraft ahead (where
+   * to put the gunsight), and whether rounds fired now would hit any enemy
+   * aircraft (the gunsight turns red), counting the near-miss allowance.
+   */
+  private gunneryAids(): { lead: ScreenPoint | null; onTarget: boolean } {
+    const me = this.aircraft.state;
+    const spec = this.aircraft.spec;
+    if (me.crashed || me.onGround || this.cameras.mode === 'orbit') return NO_AIDS;
+    Vector3.Forward().rotateByQuaternionToRef(this.aircraft.renderOrientation, this.cameraForward);
+    let onTarget = false;
+    let nearest: AiPilot | null = null;
+    let nearestDistance: number = GUNNERY_AID_RANGE;
+    for (const pilot of this.aiForce.pilots) {
+      const s = pilot.state;
+      if (!pilot.spawned || s.crashed || pilot.team === PLAYER_TEAM) continue;
+      const dx = s.position.x - me.position.x;
+      const dy = s.position.y - me.position.y;
+      const dz = s.position.z - me.position.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance > GUNNERY_AID_RANGE) continue;
+      // Ahead of the nose (within about 50 degrees).
+      if ((dx * this.cameraForward.x + dy * this.cameraForward.y + dz * this.cameraForward.z) / distance < 0.64) continue;
+      if (!onTarget && roundsWouldHit(me, spec, s, pilot.spec, HIT_ASSIST_CONFIG.nearMissMetres)) onTarget = true;
+      if (distance < nearestDistance) {
+        nearest = pilot;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest || !this.settings.gameplay.targetMarkers) return { lead: null, onTarget };
+    leadDirection(me, spec, nearest.state, this.leadScratch);
+    const length = Math.hypot(this.leadScratch.x, this.leadScratch.y, this.leadScratch.z) || 1;
+    // At the gunsight's distance, so the two line up on screen when the nose is on the solution.
+    const reach = GUN_SPECS[spec.id].convergenceDistance / length;
+    this.worldPoint.set(this.aircraft.renderPosition.x + this.leadScratch.x * reach, this.aircraft.renderPosition.y + this.leadScratch.y * reach, this.aircraft.renderPosition.z + this.leadScratch.z * reach);
+    return { lead: this.projectToScreen(this.worldPoint), onTarget };
   }
 
   /** Distance and compass bearing from the aircraft to the nearest friendly base. */
@@ -976,7 +1050,10 @@ export class Game {
       if (distance > 5_000) continue;
       this.markerPoint.set(s.position.x, s.position.y, s.position.z);
       const screen = this.projectToScreen(this.markerPoint);
-      if (screen) markers.push({ x: screen.x, y: screen.y, kind: 'aircraft', distance, label: pilot.spec.displayName.toUpperCase() });
+      // Its hull, once you've damaged it.
+      const hull = s.hullHealth / pilot.spec.combat.maxHullHealth;
+      const label = `${pilot.spec.displayName.toUpperCase()}${hull < 0.995 ? ` ${Math.round(hull * 100)}%` : ''}`;
+      if (screen) markers.push({ x: screen.x, y: screen.y, kind: 'aircraft', distance, label });
     }
     for (const target of this.combat.targets) {
       if (target.team === null || target.team === PLAYER_TEAM || target.health <= 0) continue;

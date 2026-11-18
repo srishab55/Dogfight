@@ -483,6 +483,48 @@
   opacity: 1;
 }
 
+/* On target: fire now and the rounds hit an enemy aircraft. Red, a little larger. */
+.hud-gunsight--on-target {
+  border-color: var(--color-danger);
+  border-width: 2.5px;
+  background: radial-gradient(circle, var(--color-danger) 0 3px, transparent 3.5px);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  opacity: 1;
+}
+
+.hud-aim--on-target {
+  border-color: var(--color-danger);
+  border-style: solid;
+  border-width: 2px;
+}
+
+/* Lead marker: where to put the gunsight to hit the nearest enemy aircraft ahead. */
+.hud-lead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--color-enemy);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  will-change: transform;
+}
+
+.hud-lead::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--color-enemy);
+}
+
+.hud-lead--on-target {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
 /* Mouse-flight aim circle: larger, white and dashed, so it reads differently from the gunsight. */
 .hud-aim {
   position: absolute;

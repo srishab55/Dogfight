@@ -4,6 +4,7 @@ import {
   AIRCRAFT_CLASS_IDS,
   AUTO_LAND_CONFIG,
   autoLandBaseFor,
+  chooseAutoLandBase,
   computePerformance,
   createAirborneState,
   createCarrierStatuses,
@@ -134,6 +135,31 @@ describe('auto-land: choosing the base', { timeout: 20_000 }, () => {
     expect(autoLandBaseFor(fighter, { x: 300, y: 500, z: -200 })?.id).toBe('central-airfield');
     // Beyond range of everything: no offer.
     expect(autoLandBaseFor(fighter, { x: 0, y: 500, z: -AUTO_LAND_CONFIG.offerRange - 4_000 })).toBeNull();
+  });
+
+  it('chooses the base ahead, not the one behind: along a route it never turns back to where it came from', () => {
+    const fighter = AIRCRAFT_CLASSES.fighterBomber;
+    const a = blueCarrier.runway.center;
+    const b = south.runway.center;
+    const heading = bearing({ ...a, y: 0 }, b);
+    for (const t of [0.25, 0.4, 0.5, 0.6, 0.75]) {
+      const state = createAirborneState(fighter, { x: a.x + (b.x - a.x) * t, y: 400, z: a.z + (b.z - a.z) * t }, heading, 110);
+      expect(chooseAutoLandBase(fighter, state, null, null)?.id, `at ${t * 100}% of the way`).toBe('south-airfield');
+    }
+    // Flying the other way, the carrier.
+    const back = createAirborneState(fighter, { x: (a.x + b.x) / 2, y: 400, z: (a.z + b.z) / 2 }, (heading + 180) % 360, 110);
+    expect(chooseAutoLandBase(fighter, back, null, null)?.id).toBe('blue-carrier');
+  });
+
+  it("prefers your bases, and ones you can take, to a defended enemy base just as near", () => {
+    const fighter = AIRCRAFT_CLASSES.fighterBomber;
+    // Over the middle of the central island, heading south towards the south airfield (Red's, defended) with the central one (nobody's) as near.
+    const state = createAirborneState(fighter, { x: -300, y: 500, z: -1_000 }, 180, 110);
+    const redHeld = { team: 'blue' as const, ownerOf: (b: BaseDefinition) => (b.id === 'south-airfield' ? ('red' as const) : b.team), isOpen: () => false };
+    expect(chooseAutoLandBase(fighter, state, null, null)?.id).toBe('south-airfield');
+    expect(chooseAutoLandBase(fighter, state, null, redHeld)?.id).not.toBe('south-airfield');
+    // Defenceless, it's worth landing at again: it can be taken.
+    expect(chooseAutoLandBase(fighter, state, null, { ...redHeld, isOpen: () => true })?.id).toBe('south-airfield');
   });
 
   it('carriers only for aircraft with a hook, and never a sinking one', () => {

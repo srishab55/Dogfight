@@ -35,6 +35,11 @@ export interface Shooter {
   readonly spec: AircraftClassSpec;
   readonly guns: GunState;
   readonly trigger: boolean;
+  /**
+   * Near-miss allowance for this shooter's rounds against aircraft (m): an
+   * aim assist for human pilots (HIT_ASSIST_CONFIG); the AI shoots without one.
+   */
+  readonly nearMiss?: number;
 }
 
 /** Default pool size: aircraft guns plus every AA gun's shells in flight. */
@@ -87,14 +92,14 @@ export class CombatWorld implements ImpactListener {
     this.targets = targets;
     this.aaGuns = targets.filter((t) => t.kind === 'aaGun').map((t) => createAaGun(t, AA_OWNER_BASE + t.id));
     this.carriersById = new Map(carriers.map((c) => [c.id, c]));
-    this.aircraftSpheres = Array.from({ length: MAX_AIRCRAFT * SPHERES_PER_AIRCRAFT }, () => ({ position: { x: 0, y: 0, z: 0 }, radius: 0, team: -1 }));
+    this.aircraftSpheres = Array.from({ length: MAX_AIRCRAFT * SPHERES_PER_AIRCRAFT }, () => ({ position: { x: 0, y: 0, z: 0 }, radius: 0, team: -1, aircraft: true as const }));
     this.targetSpheres = targets.map((t) => ({ position: t.position, radius: t.radius, team: teamCode(t.team) }));
   }
 
   step(dt: number, shooters: readonly Shooter[]): void {
     this.shooters = shooters;
     for (const shooter of shooters) {
-      stepGuns(shooter.guns, shooter.state, shooter.spec, GUN_SPECS[shooter.spec.id], shooter.trigger, this.projectiles, shooter.id, dt, teamCode(shooter.team));
+      stepGuns(shooter.guns, shooter.state, shooter.spec, GUN_SPECS[shooter.spec.id], shooter.trigger, this.projectiles, shooter.id, dt, teamCode(shooter.team), shooter.nearMiss ?? 0);
     }
 
     this.aaTargets.length = 0;

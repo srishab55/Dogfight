@@ -8,6 +8,8 @@ export interface SphereTarget {
   readonly radius: number;
   /** Team code (see `teamCode`); rounds pass through their own team. Omitted or -1: anyone can hit it. */
   readonly team?: number;
+  /** Part of an aircraft: rounds fired with a near-miss allowance hit it from that much further out. */
+  readonly aircraft?: boolean;
 }
 
 /** Team as a small integer for the typed arrays: 0 Blue, 1 Red, -1 nobody's (practice targets). */
@@ -44,6 +46,8 @@ export class ProjectilePool {
   readonly owner: Int32Array;
   /** Team code of whoever fired it: rounds don't hit their own side. */
   readonly team: Int8Array;
+  /** Near-miss allowance (m): passing this close to an aircraft counts as a hit (an aim assist; 0 for most rounds). */
+  readonly nearMiss: Float32Array;
   readonly active: Uint8Array;
   private readonly freeSlots: number[];
   activeCount = 0;
@@ -60,13 +64,14 @@ export class ProjectilePool {
     this.damage = new Float64Array(capacity);
     this.owner = new Int32Array(capacity);
     this.team = new Int8Array(capacity);
+    this.nearMiss = new Float32Array(capacity);
     this.active = new Uint8Array(capacity);
     // Free slots as a stack, highest index at the bottom.
     this.freeSlots = Array.from({ length: capacity }, (_, i) => capacity - 1 - i);
   }
 
   /** Adds a round. Returns false if the pool is full (the round is dropped). */
-  spawn(position: Readonly<Vec3>, velocity: Readonly<Vec3>, lifetime: number, damage: number, owner: number, team = -1): boolean {
+  spawn(position: Readonly<Vec3>, velocity: Readonly<Vec3>, lifetime: number, damage: number, owner: number, team = -1, nearMiss = 0): boolean {
     const slot = this.freeSlots.pop();
     if (slot === undefined) return false;
     this.px[slot] = position.x;
@@ -80,6 +85,7 @@ export class ProjectilePool {
     this.damage[slot] = damage;
     this.owner[slot] = owner;
     this.team[slot] = team;
+    this.nearMiss[slot] = nearMiss;
     this.active[slot] = 1;
     this.activeCount++;
     return true;
@@ -119,11 +125,12 @@ export class ProjectilePool {
       let hitT = Infinity;
       let hitTarget = -1;
       const team = this.team[i] ?? -1;
+      const nearMiss = this.nearMiss[i] ?? 0;
       for (let t = 0; t < targets.length; t++) {
         const target = targets[t];
         if (!target) continue;
         if (team >= 0 && target.team === team) continue; // no friendly fire
-        const along = segmentSphereIntersection(x0, y0, z0, dx, dy, dz, target);
+        const along = segmentSphereIntersection(x0, y0, z0, dx, dy, dz, target, target.aircraft ? nearMiss : 0);
         if (along < hitT) {
           hitT = along;
           hitTarget = t;
@@ -165,12 +172,13 @@ export class ProjectilePool {
  * sphere, or Infinity if it doesn't. Solves |p0 + t*d - c|^2 = r^2 for the
  * smaller root.
  */
-export function segmentSphereIntersection(x0: number, y0: number, z0: number, dx: number, dy: number, dz: number, sphere: SphereTarget): number {
+export function segmentSphereIntersection(x0: number, y0: number, z0: number, dx: number, dy: number, dz: number, sphere: SphereTarget, extraRadius = 0): number {
   const mx = x0 - sphere.position.x;
   const my = y0 - sphere.position.y;
   const mz = z0 - sphere.position.z;
   const b = mx * dx + my * dy + mz * dz;
-  const c = mx * mx + my * my + mz * mz - sphere.radius * sphere.radius;
+  const r = sphere.radius + extraRadius;
+  const c = mx * mx + my * my + mz * mz - r * r;
   if (c > 0 && b > 0) return Infinity; // outside and moving away
   const a = dx * dx + dy * dy + dz * dz;
   if (a === 0) return c <= 0 ? 0 : Infinity;

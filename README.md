@@ -128,10 +128,10 @@ In flight (the default keys):
 | **↑ / ↓** | Throttle up / down |
 | **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air |
 | **F / V** | Flaps down / up a notch (UP → TAKE-OFF → LANDING) |
-| **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited) |
+| **Space** | Fire guns (hold; they overheat after ~8 s, and ammunition is limited). Against aircraft, a red dot leads the nearest enemy ahead (put the gunsight on it), the gunsight turns **red** when firing now would hit, and rounds passing within 3 m of an enemy aircraft count as hits |
 | **X** | Lock the Dive Bomber's dive brakes out / in |
 | **C** | Camera: chase → cockpit → orbit |
-| **P** | Auto-land at the nearest base (anyone's; every type but the Heavy Bomber can land on a carrier). It takes the shortest way in, comes down steeply with air brakes, and climbs over any hill on its path; about a minute from 4 km out. The HUD offers it within 5 km. **P** or any flight key takes over |
+| **P** | Auto-land at the base you're heading for (near and ahead, preferring yours and ones you can take; anyone's; every type but the Heavy Bomber can land on a carrier). It takes the shortest way in, comes down steeply with air brakes, and climbs over any hill on its path; about a minute from 4 km out. The HUD offers it within 5 km. **P** or any flight key takes over |
 | **N** | Map: corner → big → off (remembered) |
 | **Esc** | Pause menu |
 | **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** lets go of the mouse and pauses |

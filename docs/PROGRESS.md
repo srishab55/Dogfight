@@ -2,11 +2,19 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** The match is in (your requests): you against four Red
+**Current status:** Gunnery aids against aircraft and a steadier auto-land choice (your feedback). Before that, the match (your requests): you against four Red
 AI pilots on a smaller map, island airfields to take, carriers as home bases,
 a timer, and the side holding more bases wins. Auto-land is faster and
 terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
 (FLIGHT_TEST.md card 41) and confirmation.
+
+## Gunnery against aircraft, and the auto-land base ✅ (your feedback, 2026-11-18)
+
+- ✅ Your rounds hit enemy aircraft from up to 3 m off their hit shapes (full damage): an aim assist for human pilots only, so the AI isn't deadlier (`HIT_ASSIST_CONFIG`)
+- ✅ Lead marker: a red dot where to put the gunsight for the nearest enemy aircraft ahead within 1.2 km (hidden with target markers off); the gunsight and mouse aim circle turn red while rounds fired now would hit (shared `aimAssist.ts`, the same rounds and hit shapes as the combat world)
+- ✅ Hits on aircraft flash the gunsight like hits on anything else, count towards accuracy and damage dealt, and the enemy's label shows its hull once damaged ("NAVAL FIGHTER 59%")
+- ✅ Auto-land goes to the base you're heading for: distance plus a cost for each radian off the nose (a base behind costs 2.8 km), and a defended enemy base costs 3 km more; the offer stays on one base unless another is clearly better. Before, it took the nearest by distance, so halfway along a route it turned you back to where you'd come from
+- Verified: 504 tests (new: near misses hit only with the assist, the cue agrees with the rounds, lead geometry, base ahead along a route, own/capturable bases preferred), build, and headless Chrome: firing from behind a Red aircraft damaged it (65 hits, label 59%), red gunsight and lead marker seen, the offer stayed on the base ahead all along the carrier-to-airfield route; no console errors
 
 ## The match: bases, timer and Red AI pilots ✅ (your requests, 2026-11-18)
 

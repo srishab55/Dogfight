@@ -531,7 +531,13 @@ launch from their carrier: two come for you (they lead their shots and
 break when you get behind them), two take fields ("RED HAS TAKEN …"). Other
 types can't be picked mid-match; the base can. At time-out the report says
 Victory, Defeat or Draw by the bases held; Continue resets everything.
-**Pass:** The side with more bases wins, and the AI is a real opponent.
+Get behind a Red aircraft: put the gunsight on the red lead dot and fire
+when the gunsight turns red. Fly from your carrier towards an island and
+press P at different points on the way.
+**Expect (also):** Your hits flash the gunsight and its label shows its hull
+dropping; it smokes, then goes down. P always takes you to the field ahead,
+not back to the carrier.
+**Pass:** The side with more bases wins, the AI is a real opponent, and you can shoot it down.
 
 ## Card 34: Retractable gear
 

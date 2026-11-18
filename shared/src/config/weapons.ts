@@ -86,3 +86,12 @@ export const PRACTICE_TARGET_CONFIG = {
     { x: 0, y: 450, z: 5_200 },
   ] satisfies readonly Vec3[],
 } as const;
+
+/**
+ * Aim assist for human pilots: their rounds that pass this close to an
+ * enemy aircraft's hit shapes count as hits (full damage). Hitting a moving
+ * aircraft exactly is very hard with the mouse or keys; the AI shoots without it.
+ */
+export const HIT_ASSIST_CONFIG = {
+  nearMissMetres: 3,
+} as const;

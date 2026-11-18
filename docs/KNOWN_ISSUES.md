@@ -63,6 +63,8 @@ None known.
 | L62 | With mouse flight, the browser uses the first Esc to let go of the mouse; the game opens the pause menu on that same press | One press | By design |
 | L63 | The lobby is a layout only: rooms, room codes, the Red team, ready checks and "Return to lobby" are disabled with the reason, and the server status says offline | No online play | Phase 5 (game server), Phase 6 (teams) |
 | L64 | The after-action report has no assists or bombing damage ("—" with the phase) | | Phase 4 (bombs), 5 (other players) |
+| L73 | The on-target cue and lead marker assume the target flies straight for the rounds' second of flight; against a hard-turning target the cue can flicker | A hint, not a guarantee | By design |
+| L74 | The near-miss allowance (3 m) is for human pilots only: the AI's rounds must hit its shapes exactly | Easier for you | By design (gameplay over realism) |
 | L67 | After landing to capture or rearm, an AI aircraft is moved (towed) to the start of the runway or the catapult before it takes off, rather than taxiing there | It appears there at once | By design (D57) |
 | L68 | No mid-air collisions: aircraft fly through each other (AI pilots break away inside 130 m) | Rare in practice | Phase 7 (with traffic) |
 | L69 | AI aircraft make no engine sound, and their gunfire is silent unless it hits you | You hear them only when they explode | Later, with spatial engine voices |
@@ -94,6 +96,8 @@ None known.
 
 | Issue | Found | Fix |
 |---|---|---|
+| Your rounds rarely hurt enemy aircraft (exact hit shapes, no aiming aid, no feedback) | Your report | 3 m near-miss allowance, lead marker, red on-target gunsight, hit flash and hull % on the label |
+| Auto-land picked the nearest base by distance, so halfway along a route it turned back to the base behind | Your report ("confused between areas") | Chooses the base you're heading for, prefers usable bases, steady offer |
 | Auto-land often crashed into terrain: final approach had no terrain check (it could start 25° off the centreline, over hills outside the cut corridor), and the intercept looked only straight ahead | Your report | Terrain checked along the turn it will fly and its next 6 s, in every phase; climb-out after a go-around; no steep turns low down. 40-approach sweep test, no ground contact |
 | Auto-land slow (90 s to 3 min) | Your report | Shorter final, shortest-way runway choice, fast transit with air-braked slow-down, steep descents: mean 114 s → 81 s |
 | The Interceptor tipped onto a wingtip in a full-rudder taxi turn on the wider (grippier) runway | Taxi test after widening the runways | Nose-wheel steering fades with speed, as on the vintage types |
