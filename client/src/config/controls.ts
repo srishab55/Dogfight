@@ -101,6 +101,18 @@ export const MOUSE_FLIGHT_CONFIG = {
   sensitivityStep: 1.25,
   /** Push the mouse forward to aim down (like a joystick) instead of up. */
   invertY: false,
+  /**
+   * Browser glitches: with the pointer locked, Chrome now and then reports a
+   * single mouse event hundreds of pixels long that the hand never made
+   * (and the cursor's jump to the centre just after locking), which would
+   * throw the aim across the sky. An event longer than both `spikeMinPixels`
+   * and `spikeFactor` times the recent pace is dropped; so is movement in
+   * the first `settleMs` after the lock. A real fast flick raises the pace
+   * with it, so it isn't cut.
+   */
+  spikeMinPixels: 200,
+  spikeFactor: 6,
+  settleMs: 80,
   /** The aim can't go beyond this far above or below the horizon (deg). */
   maxAimElevationDeg: 80,
   /** Distance of the aim point used for the reticle and the camera (m). */

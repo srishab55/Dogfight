@@ -141,6 +141,8 @@ const AI_FIRST_ID = 100;
 const AUTO_LAND_OFFER_HYSTERESIS = 600;
 /** The lead marker and on-target cue look for enemy aircraft out to this range (m). */
 const GUNNERY_AID_RANGE = 1_200;
+/** The lead dot moves to another enemy only when that one is this much nearer the nose (deg): it doesn't hop between two. */
+const LEAD_SWITCH_MARGIN_DEG = 6;
 /**
  * Off-screen arrows sit on an ellipse this fraction of the view's width and
  * height from its centre: lower below the centre, to clear the instruments and the prompt above them.
@@ -286,6 +288,8 @@ export class Game {
   private readonly worldPoint = new Vector3();
   private readonly cameraForward = new Vector3();
   private readonly cameraRight = new Vector3();
+  /** The enemy the lead dot is for (kept while it stays ahead and in range). */
+  private leadTargetId: number | null = null;
   private readonly cameraUp = new Vector3();
   /** Enemy aircraft off the screen this frame (filled with the markers). */
   private offscreen: OffscreenMarker[] = [];
@@ -1050,8 +1054,10 @@ export class Game {
     if (me.crashed || me.onGround || this.cameras.mode === 'orbit') return NO_AIDS;
     FORWARD.rotateByQuaternionToRef(this.aircraft.renderOrientation, this.cameraForward);
     let onTarget = false;
-    let nearest: AiPilot | null = null;
-    let nearestDistance: number = GUNNERY_AID_RANGE;
+    // The lead is for the enemy nearest the nose (the one you're pointing at), not the nearest by distance.
+    let best: AiPilot | null = null;
+    let bestCos = -1;
+    let currentCos = -2;
     for (const pilot of this.aiForce.pilots) {
       const s = pilot.state;
       if (!pilot.spawned || s.crashed || pilot.team === PLAYER_TEAM) continue;
@@ -1061,13 +1067,19 @@ export class Game {
       const distance = Math.hypot(dx, dy, dz);
       if (distance > GUNNERY_AID_RANGE) continue;
       // Ahead of the nose (within about 50 degrees).
-      if ((dx * this.cameraForward.x + dy * this.cameraForward.y + dz * this.cameraForward.z) / distance < 0.64) continue;
+      const cos = (dx * this.cameraForward.x + dy * this.cameraForward.y + dz * this.cameraForward.z) / distance;
+      if (cos < 0.64) continue;
       if (!onTarget && roundsWouldHit(me, spec, s, pilot.spec, HIT_ASSIST_CONFIG.nearMissMetres, enlargeBlend(s, pilot.spec, this.ground.heightAt(s.position.x, s.position.z)))) onTarget = true;
-      if (distance < nearestDistance) {
-        nearest = pilot;
-        nearestDistance = distance;
+      if (cos > bestCos) {
+        best = pilot;
+        bestCos = cos;
       }
+      if (pilot.id === this.leadTargetId) currentCos = cos;
     }
+    // Keep the one it's on while it's still ahead and in range, unless another is clearly nearer the nose.
+    const keep = currentCos > -2 && Math.acos(Math.min(1, currentCos)) - Math.acos(Math.min(1, bestCos)) < LEAD_SWITCH_MARGIN_DEG / RAD_TO_DEG;
+    const nearest = keep ? (this.aiForce.pilots.find((p) => p.id === this.leadTargetId) ?? best) : best;
+    this.leadTargetId = nearest?.id ?? null;
     if (!nearest || !this.settings.gameplay.targetMarkers) return { lead: null, onTarget };
     leadDirection(me, spec, nearest.state, this.leadScratch);
     const length = Math.hypot(this.leadScratch.x, this.leadScratch.y, this.leadScratch.z) || 1;
@@ -1978,6 +1990,7 @@ export class Game {
       ['  render', `${this.timings.average('render').toFixed(2)} ms`],
       ['  HUD', `${this.timings.average('hud').toFixed(2)} ms`],
       ['Camera', this.cameras.mode],
+      ['Mouse spikes', `${this.mouseFlight.spikesDropped} dropped`],
       ['AoA / slip', `${(t.angleOfAttack * RAD_TO_DEG).toFixed(1)}° / ${(t.sideslip * RAD_TO_DEG).toFixed(1)}°`],
       ['CL / CD', `${t.liftCoefficient.toFixed(2)} / ${t.dragCoefficient.toFixed(3)}`],
       ['Lift / weight', (t.lift / (this.aircraft.spec.mass * 9.81)).toFixed(2)],

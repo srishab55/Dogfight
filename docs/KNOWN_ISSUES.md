@@ -102,6 +102,7 @@ None known.
 
 | Issue | Found | Fix |
 |---|---|---|
+| The aim sometimes jumped "here and there" in mouse flight: every pointer-lock mouse event was taken at face value, and Chrome occasionally reports a single event hundreds of pixels long (and the cursor's jump as the lock starts); at 0.2°/px a 400 px glitch swings the aim 80° in a frame. The lead dot also followed the nearest enemy by distance, so with several Red aircraft about it could hop between them | Your report | Glitch events dropped (longer than both 200 px and 6× the recent pace; 80 ms settle after locking), counted in the debug overlay ("Mouse spikes"); the lead dot follows the enemy nearest the nose and changes only for one 6° nearer |
 | AI pilots stuck in an emergency branch: once pulling up (or turning back, or breaking), a pilot kept at it after the danger had passed, up to 90 s, and a landing never re-checked its abort conditions | Measuring while applying game-skills/GameAI | `guard` decorator re-checks those branches every step; `timeout` gives up a landing after 150 s. Pull-up time in a 5-minute squadron run 333 s → 10 s |
 | The shadow map drew every shadow caster on the map (246) every frame | Measuring while applying game-skills/Performance | Casters within 160 m of the aircraft only, re-culled 4× a second: 232 → 102 draw calls |
 | Your rounds rarely hurt enemy aircraft (exact hit shapes, no aiming aid, no feedback) | Your report | 3 m near-miss allowance, lead marker, red on-target gunsight, hit flash and hull % on the label |

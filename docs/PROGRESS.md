@@ -2,11 +2,17 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** visitor analytics for the Vercel site (your request: turn it on in the Vercel dashboard, see README "Deploying"). Before that, bigger targets and brakes that close the throttle (your feedback). Before that, the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
+**Current status:** steadier aim (your report: it jumped about now and then). Before that, visitor analytics for the Vercel site (your request: turn it on in the Vercel dashboard, see README "Deploying"). Before that, bigger targets and brakes that close the throttle (your feedback). Before that, the game-skills applied (your request): game feel (impact tiers, hit-stop on kills, hit flash, damage numbers, kill marker), interface (gamepad, safe areas, text size, off-screen arrows, colour-independent cues), AI (guards and a timeout; fixes pilots stuck pulling up), performance (frame timings, shadow-caster culling). Before that, Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
 AI pilots on a smaller map, island airfields to take, carriers as home bases,
 a timer, and the side holding more bases wins. Auto-land is faster and
 terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
 (FLIGHT_TEST.md cards 41 and 42) and confirmation.
+
+## Steadier aim ✅ (your report, 2026-11-18)
+
+- ✅ Mouse flight ignores browser glitch events (a single mouse event longer than 200 px and 6× the recent pace, which Chrome sometimes reports with the pointer locked, and the cursor's jump as the lock starts); a real fast flick still counts in full. The debug overlay counts what was dropped ("Mouse spikes")
+- ✅ The lead dot follows the enemy nearest your nose (the one you're pointing at), not the nearest by distance, and moves to another only when that one is clearly (6°) nearer the nose
+- Verified: in headless Chrome, ten 10 px moves turned the aim 20° (0.2°/px), a lone 600 px event was dropped (0°), and a flick building from 20 to 350 px was kept in full (196°); a fight with the Red squadron recorded frame by frame (2,254 frames): the lead dot never changed target while shown, never moved more than 37 px in a frame (the target manoeuvring), the gunsight never jumped and the on-target cue never flickered; typecheck and build; no console errors
 
 ## Visitor analytics on Vercel ✅ (your request, 2026-11-18)
 

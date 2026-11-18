@@ -22,6 +22,12 @@ export class MouseFlight {
   private sensitivityDegPerPixel = loadSensitivity();
   /** False while the orbit camera owns the mouse. */
   captureAllowed = true;
+  /** Recent movement per event (px, a running average), for telling spikes from fast flicks. */
+  private pace = 0;
+  /** Movement is ignored until this time (ms, performance.now()): the cursor's jump as the lock starts. */
+  private ignoreUntil = 0;
+  /** Glitch events dropped so far (shown in the debug overlay). */
+  spikesDropped = 0;
   /** Called when mouse flight starts or stops (e.g. to aim along the nose, show a message). */
   onChange: (active: boolean) => void = () => {};
   /** The player let go of the mouse (Esc) while flying with it: the game opens the hangar. */
@@ -103,6 +109,10 @@ export class MouseFlight {
   private readonly handleLockChange = (): void => {
     const wasEnabled = this.enabled;
     const locked = document.pointerLockElement === this.canvas;
+    if (locked && !wasEnabled) {
+      this.ignoreUntil = performance.now() + MOUSE_FLIGHT_CONFIG.settleMs;
+      this.pace = 0;
+    }
     this.setEnabled(locked);
     // Lost without release() being called: the player pressed Esc.
     if (wasEnabled && !locked) this.onUserRelease();
@@ -110,10 +120,27 @@ export class MouseFlight {
 
   private readonly handleMouseMove = (event: MouseEvent): void => {
     if (!this.enabled) return;
+    if (!this.acceptMovement(event.movementX, event.movementY, event.timeStamp)) return;
     const step = this.sensitivityDegPerPixel * DEG;
     this.aimHeading += event.movementX * step;
     this.aimElevation = clampElevation(this.aimElevation - event.movementY * step * (MOUSE_FLIGHT_CONFIG.invertY ? -1 : 1));
   };
+
+  /**
+   * Whether a mouse event is the hand moving, not a browser glitch (see
+   * MOUSE_FLIGHT_CONFIG.spikeMinPixels): drops it, and counts it, if it's
+   * far longer than both the minimum and the recent pace.
+   */
+  private acceptMovement(dx: number, dy: number, time: number): boolean {
+    if (time < this.ignoreUntil) return false;
+    const size = Math.max(Math.abs(dx), Math.abs(dy));
+    if (size > Math.max(MOUSE_FLIGHT_CONFIG.spikeMinPixels, MOUSE_FLIGHT_CONFIG.spikeFactor * this.pace)) {
+      this.spikesDropped++;
+      return false;
+    }
+    this.pace += (size - this.pace) * 0.3;
+    return true;
+  }
 }
 
 function loadSensitivity(): number {
