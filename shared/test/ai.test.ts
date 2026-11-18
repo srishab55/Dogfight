@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AIRCRAFT_CLASSES,
+  AI_CONFIG,
   AiPilot,
   CAPTURE_CONFIG,
   Status,
@@ -99,9 +100,13 @@ describe('the Red squadron on its own', { timeout: 120_000 }, () => {
   it('launches from its carrier, spreads out and takes all three island airfields within five minutes, without hitting the ground', () => {
     const pilots = createSquadron('red', 100, AIRCRAFT_CLASSES);
     const sim = simulate(pilots);
-    sim.run(300);
+    // Losses that weren't to gunfire (Blue's carrier guns shoot back when it's attacked): flown into the ground or sea.
+    const crashes: string[] = [];
+    sim.run(300, () => {
+      for (const p of pilots) if (p.spawned && p.state.crashed && !p.state.shotDown && !crashes.includes(`${p.id}:${p.losses}`)) crashes.push(`${p.id}:${p.losses}`);
+    });
     for (const id of ['south-airfield', 'central-airfield', 'north-airfield']) expect(sim.combat.ownerOf(baseById(id))).toBe('red');
-    expect(pilots.map((p) => p.losses)).toEqual([0, 0, 0, 0]);
+    expect(crashes).toEqual([]);
     const captures = sim.events.filter((e) => e.type === 'baseCaptured');
     // Different pilots took them: they spread out rather than all landing at one.
     expect(new Set(captures.map((e) => e.baseId)).size).toBe(captures.length);
@@ -146,6 +151,50 @@ describe('an AI hunter', { timeout: 120_000 }, () => {
       return (broke ||= pilot.activity === 'breaking');
     });
     expect(broke, [...seen].join(', ')).toBe(true);
+  });
+});
+
+describe('Red keeps coming, and defends its bases', { timeout: 120_000 }, () => {
+  it('a lost pilot is back about 5 s later, launching from the Red base nearest the enemy', () => {
+    const pilot = new AiPilot(100, 'red', AIRCRAFT_CLASSES.navalFighter, 'hunter', 0);
+    // Red has taken the north airfield; a Blue aircraft circles west of it, far from Red's carrier.
+    const target = drone(1, -1_000, 600, 2_600, 0, true);
+    const sim = simulate([pilot], [target]);
+    sim.combat.bases.find((b) => b.base.id === 'north-airfield')!.owner = 'red';
+    sim.run(20, () => pilot.spawned && pilot.state.position.y > 60);
+    // Shot down.
+    pilot.state.hullHealth = 0;
+    pilot.state.shotDown = true;
+    let lostAt = -1;
+    let backAt = -1;
+    sim.run(90, (t) => {
+      if (lostAt < 0 && !pilot.spawned) lostAt = t;
+      if (lostAt >= 0 && pilot.spawned) backAt = t;
+      return backAt >= 0;
+    });
+    expect(lostAt).toBeGreaterThan(0);
+    expect(backAt - lostAt).toBeLessThan(AI_CONFIG.respawnSeconds + 0.5);
+    // On the north airfield's runway, not back at the carrier.
+    const runway = baseById('north-airfield').runway;
+    expect(Math.hypot(pilot.state.position.x - runway.center.x, pilot.state.position.z - runway.center.z)).toBeLessThan(runway.length);
+  });
+
+  it('a raider breaks off taking a field to go and meet an enemy near a Red base', () => {
+    const raider = new AiPilot(100, 'red', AIRCRAFT_CLASSES.interceptor, 'raider', 0);
+    const sim = simulate([raider]);
+    const carrier = homeBase('red').runway.center;
+    // On its way to take a field, well away from its carrier.
+    sim.run(90, () => raider.blackboard.landing !== null && !raider.state.onGround && raider.blackboard.landing.auto.phase === 'intercept' && Math.hypot(raider.state.position.x - carrier.x, raider.state.position.z - carrier.z) > 2_200);
+    expect(raider.blackboard.landing?.purpose).toBe('capture');
+    // A Blue aircraft turns up over Red's carrier, far from the raider (beyond its own engagement range).
+    const intruder = drone(1, carrier.x - 500, 500, carrier.z, 0, true);
+    const sim2 = simulate([raider], [intruder]);
+    sim2.time = sim.time;
+    const p = raider.state.position;
+    expect(Math.hypot(intruder.state.position.x - p.x, intruder.state.position.z - p.z)).toBeGreaterThan(AI_CONFIG.engageRange.raider);
+    let defending = false;
+    sim2.run(5, () => (defending = raider.blackboard.target?.id === 1 && raider.blackboard.landing === null));
+    expect(defending, raider.activity).toBe(true);
   });
 });
 

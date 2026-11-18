@@ -2,11 +2,18 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** Gunnery aids against aircraft and a steadier auto-land choice (your feedback). Before that, the match (your requests): you against four Red
+**Current status:** Red relaunches within 5 s and defends its bases; two stronger AA guns at every base (your feedback). Before that, gunnery aids against aircraft and a steadier auto-land choice. Before that, the match (your requests): you against four Red
 AI pilots on a smaller map, island airfields to take, carriers as home bases,
 a timer, and the side holding more bases wins. Auto-land is faster and
 terrain-aware. Remaining in Phase 4: bombs. Waiting for your test
 (FLIGHT_TEST.md card 41) and confirmation.
+
+## Red keeps coming; stronger base defence ✅ (your feedback, 2026-11-18)
+
+- ✅ Red's pilots relaunch 5 s after being lost (was 15), from the Red base nearest you (a captured airfield as well as the carrier), one at a time on the catapult or runway start. (They did respawn before, but slowly and always from the carrier, so the sky could be empty for a minute)
+- ✅ Base defence by the AI: an enemy within 3 km of any Red base draws every Red pilot within 8 km, whatever its role; a capture on its way in is broken off to go and meet it
+- ✅ Two AA guns at every base (each field: both on the side away from the hangars, 400 m apart; each carrier: forward port, aft starboard), stronger: 2.4 km reach (was 2), 9 damage a shell (was 8), 70 hits to destroy (was 50). For whoever holds the base, so yours too
+- Verified: 506 tests (new: relaunch within 5 s at the base nearest the enemy, a raider breaks off a capture to defend; two guns per base), build, and headless Chrome: with you near Red's carrier and every Red aircraft shot down every 30 s, each was back taking off 5 s later and all four came for you; 60 FPS; no console errors
 
 ## Gunnery against aircraft, and the auto-land base ✅ (your feedback, 2026-11-18)
 

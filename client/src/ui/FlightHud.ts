@@ -594,7 +594,7 @@ export class FlightHud {
     let tone: Tone;
     if (status.holder === 'yours') {
       const repairing = status.defencesLeft < status.defencesTotal;
-      text = repairing ? 'Yours · crews building its defences' : 'Yours · its AA gun defends it for you';
+      text = repairing ? 'Yours · crews building its defences' : 'Yours · its two AA guns defend it for you';
       fill = status.defencesTotal > 0 ? status.defencesLeft / status.defencesTotal : 1;
       tone = 'friendly';
     } else if (status.capturing !== null) {

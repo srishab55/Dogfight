@@ -13,13 +13,21 @@ export const AI_CONFIG = {
   } as Readonly<Record<Team, readonly AircraftClassId[]>>,
   /** At the start, launches are this far apart, so they don't share the catapult. */
   launchInterval: 7,
-  /** A lost AI pilot is back in a fresh aircraft this long after crashing. */
-  respawnSeconds: 15,
+  /** A lost AI pilot is back in a fresh aircraft this long after crashing, at its side's base nearest the enemy. */
+  respawnSeconds: 5,
+  /** ...but waits while another aircraft is still within this distance of the catapult or runway start (m). */
+  launchSpacing: 40,
   /**
    * Half are hunters, after enemy aircraft out to the longer range; half
    * raiders, taking bases, who fight only what comes close.
    */
   engageRange: { hunter: 4_000, raider: 1_400 },
+  /**
+   * Defending: an enemy aircraft within `radius` of a base the AI's side
+   * holds draws every pilot within `interceptRange` of it, whatever its role
+   * (capture landings are broken off to go and meet it).
+   */
+  defend: { radius: 3_000, interceptRange: 8_000 },
   /** Opens fire inside this range with the lead point within this angle of the nose. */
   fireRange: 650,
   /** Closer than this, it stops closing and tracks the target with the gun solution. */

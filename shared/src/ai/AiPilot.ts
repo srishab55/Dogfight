@@ -28,10 +28,12 @@ import { Status, action, condition, selector, sequence, type BtNode } from './be
  *
  *   on the ground     take off, or wait out a capture or a service
  *   terrain ahead     pull up
- *   landing           fly the auto-land it started (to capture or to rearm)
+ *   landing           fly the auto-land it started (to capture or to rearm;
+ *                     a capture is broken off to defend a base)
  *   under attack      break turn
  *   needs service     go home and land to rearm and repair
- *   enemy aircraft    attack it: lead pursuit, fire when on target
+ *   enemy aircraft    attack it: lead pursuit, fire when on target; an enemy
+ *                     near one of its side's bases draws every pilot
  *   a base to take    land on it if it's open; otherwise strafe its defences
  *   patrol            fly towards the action
  *
@@ -158,15 +160,27 @@ export class AiPilot {
     this.tree.tick({ pilot: this, world }, dt);
   }
 
-  /** Starts at a base its team holds (on the catapult, or the runway), with full guns. */
+  /**
+   * Starts at a base its team holds (on the catapult, or the runway), with
+   * full guns: the one nearest the enemy, so it's straight back in the fight.
+   */
   private launch(world: AiWorld): void {
     const bases = startingBases(this.team, this.spec, world.ownerOf, world.carrierStatuses);
     if (bases.length === 0) {
-      this.respawnIn = Infinity;
+      // Nowhere to start from (its side holds no base): try again shortly, in case one is retaken.
+      this.respawnIn = AI_CONFIG.respawnSeconds;
       return;
     }
-    // Raiders start nearest the middle of the map (where the bases to take are); hunters, from home.
-    const base = this.role === 'raider' ? (bases.slice().sort((a, b) => distanceFromCentre(a) - distanceFromCentre(b))[0] ?? bases[0]!) : bases[0]!;
+    const enemies = world.aircraft.filter((a) => a.team !== this.team && !a.state.crashed);
+    const nearestEnemy = (base: BaseDefinition) => Math.min(...enemies.map((e) => Math.hypot(e.state.position.x - base.runway.center.x, e.state.position.z - base.runway.center.z)));
+    const base = enemies.length > 0 ? bases.slice().sort((a, b) => nearestEnemy(a) - nearestEnemy(b))[0]! : bases[0]!;
+    // One at a time on the catapult (or the start of the runway): wait a moment while it's taken.
+    const spawn = baseSpawnPoint(base).position;
+    const occupied = world.pilots.some((other) => other !== this && other.spawned && other.state.onGround && Math.hypot(other.state.position.x - spawn.x, other.state.position.z - spawn.z) < AI_CONFIG.launchSpacing);
+    if (occupied) {
+      this.respawnIn = 1;
+      return;
+    }
     this.state = createParkedState(this.spec, baseSpawnPoint(base), base.kind === 'carrier');
     this.guns = createGunState(this.spec);
     Object.assign(this.service, createServiceStatus());
@@ -252,8 +266,28 @@ function freshBlackboard(): Blackboard {
   return { target: null, objective: null, groundTarget: null, landing: null, landedAt: null, groundTimer: 0, takingOff: false, evadeUntil: -Infinity, evadeReadyAt: -Infinity, evadeSide: 1, strafe: 'setup', strafeTimer: 0 };
 }
 
-function distanceFromCentre(base: BaseDefinition): number {
-  return Math.hypot(base.runway.center.x, base.runway.center.z);
+/**
+ * An enemy aircraft in the air within the defence radius of a base this
+ * pilot's side holds, the nearest such to the pilot (within the intercept
+ * range); or null.
+ */
+function baseThreat(pilot: AiPilot, world: AiWorld): AiContact | null {
+  const d = AI_CONFIG.defend;
+  const p = pilot.state.position;
+  let best: AiContact | null = null;
+  let bestDistance: number = d.interceptRange;
+  for (const contact of world.aircraft) {
+    if (contact.team === pilot.team || !flying(contact.state)) continue;
+    const c = contact.state.position;
+    const nearOurBase = world.bases.some((b) => b.owner === pilot.team && Math.hypot(b.base.runway.center.x - c.x, b.base.runway.center.z - c.z) < d.radius);
+    if (!nearOurBase) continue;
+    const distance = Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z);
+    if (distance < bestDistance) {
+      best = contact;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 // ── The tree ────────────────────────────────────────────────────────────
@@ -391,7 +425,10 @@ function keepLanding(context: Context): boolean {
     landing.purpose === 'service'
       ? world.ownerOf(landing.base) === pilot.team
       : control !== undefined && control.owner !== pilot.team && (control.owner === null || control.neutralized);
-  if (!stillWorthIt || (underAttack(context) && pilot.heightAboveGround(world.ground) > 120)) {
+  const high = pilot.heightAboveGround(world.ground) > 120;
+  // A capture can wait: an enemy near one of our bases can't. (Not once on final: by then it's nearly down.)
+  const defend = landing.purpose === 'capture' && landing.auto.phase === 'intercept' && baseThreat(pilot, world) !== null;
+  if (!stillWorthIt || defend || (underAttack(context) && high)) {
     pilot.blackboard.landing = null;
     return false;
   }
@@ -464,8 +501,17 @@ function flying(state: Readonly<AircraftState>): boolean {
   return !state.crashed && !state.shotDown && !state.onGround;
 }
 
-/** The nearest enemy aircraft in the air within this pilot's engagement range. */
+/**
+ * Whom to fight: first an enemy near one of its side's bases (every pilot
+ * defends), else the nearest enemy aircraft in the air within this pilot's
+ * engagement range.
+ */
 function findAircraftTarget({ pilot, world }: Context): boolean {
+  const threat = baseThreat(pilot, world);
+  if (threat) {
+    pilot.blackboard.target = threat;
+    return true;
+  }
   const range = AI_CONFIG.engageRange[pilot.role];
   const p = pilot.state.position;
   let best: AiContact | null = null;

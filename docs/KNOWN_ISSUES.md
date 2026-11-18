@@ -69,7 +69,8 @@ None known.
 | L68 | No mid-air collisions: aircraft fly through each other (AI pilots break away inside 130 m) | Rare in practice | Phase 7 (with traffic) |
 | L69 | AI aircraft make no engine sound, and their gunfire is silent unless it hits you | You hear them only when they explode | Later, with spatial engine voices |
 | L70 | Carriers can't be sunk in a match (they're captured instead); the sinking code is kept behind `createTargets({ carrierHulls: true })` | No carrier sinking | By design (D53) |
-| L71 | The Red squadron takes undefended fields fast (all three within about 3 minutes if unopposed) and then goes for your carrier: alone against four, you need to defend as well as attack | A hard match | Tune `AI_CONFIG` (roles, ranges, aim) if it's too hard |
+| L71 | The Red squadron takes undefended fields fast (all three within about 3 minutes if unopposed), comes back 5 s after each loss, and all of it turns on you near a Red base: alone against four, you need to defend as well as attack | A hard match | Tune `AI_CONFIG` (respawn, defence radius, roles, aim) and `AA_GUN_CONFIG` if it's too hard |
+| L75 | A Red aircraft can relaunch from a captured airfield next to you, in your sights, 5 s after you shot it down | Easy kills or a surprise | By design (your choice: from the base nearest you) |
 | L72 | The map edge isn't enforced for you (the AI turns back at 4.2 km, further when chasing) | You can fly off the map | Later |
 | L66 | The shadow map covers 160 m around the aircraft, so buildings further away cast no shadow, and the runways show only shadows cast within that square | Fine from the air | By design (D51) |
 | L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |

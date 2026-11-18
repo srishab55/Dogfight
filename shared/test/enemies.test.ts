@@ -49,17 +49,19 @@ function run(world: CombatWorld, ground: GroundQuery, shooters: Shooter[], secon
 
 
 describe("every base's defences", () => {
-  it('each island airfield has an AA gun (not built while nobody holds it), a hangar, a fuel depot and a radar; each carrier an AA gun', () => {
+  it('each island airfield has two AA guns (not built while nobody holds it), a hangar, a fuel depot and a radar; each carrier two AA guns', () => {
     const targets = createTargets();
     for (const base of BASES) {
       const at = (kind: CombatTarget['kind']) => targets.filter((t) => t.baseId === base.id && t.kind === kind);
-      expect(at('aaGun')).toHaveLength(1);
+      expect(at('aaGun')).toHaveLength(2);
       if (base.kind === 'airfield') {
         for (const kind of ['hangar', 'fuelDepot', 'radar'] as const) expect(at(kind)).toHaveLength(1);
-        expect(at('aaGun')[0]?.built).toBe(false);
+        for (const gun of at('aaGun')) expect(gun.built).toBe(false);
       } else {
-        expect(at('aaGun')[0]?.team).toBe(base.team);
-        expect(at('aaGun')[0]?.health).toBe(AA_GUN_CONFIG.maxHealth);
+        for (const gun of at('aaGun')) {
+          expect(gun.team).toBe(base.team);
+          expect(gun.health).toBe(AA_GUN_CONFIG.maxHealth);
+        }
       }
     }
     // In a match carriers are captured, not sunk: no hull targets unless asked for.

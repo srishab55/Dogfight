@@ -541,17 +541,17 @@ export class Game {
         this.targetDestroyed(event);
         return;
       case 'baseNeutralized':
-        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENCELESS · land and stop on it to capture it`, 'good', 6);
+        if (event.owner !== PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENCELESS · land and stop on it to capture it (Red will come to defend it)`, 'good', 6);
         else this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} HAS LOST ITS DEFENCES · Red can land and take it`, 'bad', 6);
         return;
       case 'baseDefended':
         // Only a capture repairs a base: this is the new owner's crews finishing.
-        if (event.owner === PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} REPAIRED · its AA gun now defends it for you`, 'good', 5);
+        if (event.owner === PLAYER_TEAM) this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} DEFENDED · its two AA guns now fire for you`, 'good', 5);
         else this.hud.showMessage(`${this.baseName(event.baseId)}'s defences have been rebuilt`, 'ok', 4);
         return;
       case 'baseCaptured':
         if (event.owner === PLAYER_TEAM) {
-          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} TAKEN · it's yours: start and rearm here; your crews are building its AA gun`, 'good', 7);
+          this.hud.showMessage(`${this.baseName(event.baseId).toUpperCase()} TAKEN · it's yours: start and rearm here; your crews are building its two AA guns`, 'good', 7);
           this.audio.play('cable', 0.4, 1.6);
         } else {
           this.hud.showMessage(`RED HAS TAKEN ${this.baseName(event.baseId).toUpperCase()}${event.previousOwner === PLAYER_TEAM ? ' from you' : ''}`, 'bad', 6);

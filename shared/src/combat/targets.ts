@@ -71,9 +71,9 @@ export interface TargetOptions {
 
 /**
  * Every target on the map: the practice balloons, then each base's
- * defences. Every island airfield has an AA gun, a hangar, a fuel depot and
- * a radar; while it belongs to nobody they're nobody's, and its AA gun isn't
- * built yet. Each carrier has an AA gun.
+ * defences. Every island airfield has two AA guns, a hangar, a fuel depot
+ * and a radar; while it belongs to nobody they're nobody's, and its guns
+ * aren't built yet. Each carrier has two AA guns.
  */
 export function createTargets(options: TargetOptions = {}): CombatTarget[] {
   const targets: CombatTarget[] = [];
@@ -92,8 +92,10 @@ export function createTargets(options: TargetOptions = {}): CombatTarget[] {
         // Buildings face the runway: their fronts point back across it.
         add({ kind, team, position: at(spot, c.height), radius: c.hitRadius, headingDegrees: runway.headingDegrees + (spot.across > 0 ? -90 : 90), maxHealth: c.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: null, baseId: base.id });
       };
-      // Nobody mans the gun until somebody takes the field.
-      add({ kind: 'aaGun', team, position: at(BASE_LAYOUT.airfieldAaGun, AA_GUN_CONFIG.mountHeight), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: runway.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: null, baseId: base.id }, team !== null);
+      // Nobody mans the guns until somebody takes the field.
+      for (const spot of BASE_LAYOUT.airfieldAaGuns) {
+        add({ kind: 'aaGun', team, position: at(spot, AA_GUN_CONFIG.mountHeight), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: runway.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: null, baseId: base.id }, team !== null);
+      }
       structure('hangar', BASE_LAYOUT.hangar);
       structure('fuelDepot', BASE_LAYOUT.fuelDepot);
       structure('radar', BASE_LAYOUT.radar);
@@ -105,8 +107,9 @@ export function createTargets(options: TargetOptions = {}): CombatTarget[] {
       const c = CARRIER_DAMAGE_CONFIG;
       add({ kind: 'carrier', team, position: carrier.center, radius: 0, headingDegrees: carrier.headingDegrees, maxHealth: c.maxHealth, vulnerability: c.gunVulnerability, respawnSeconds: c.respawnSeconds, carrierId: carrier.id, baseId: null });
     }
-    const gun = BASE_LAYOUT.carrierAaGun;
-    add({ kind: 'aaGun', team, position: onCarrier(carrier, gun.fromStern, gun.side * (carrier.deckWidth / 2 - 1), AA_GUN_CONFIG.mountHeight * 0.6), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: carrier.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: carrier.id, baseId: base.id });
+    for (const gun of BASE_LAYOUT.carrierAaGuns) {
+      add({ kind: 'aaGun', team, position: onCarrier(carrier, gun.fromStern, gun.side * (carrier.deckWidth / 2 - 1), AA_GUN_CONFIG.mountHeight * 0.6), radius: AA_GUN_CONFIG.hitRadius, headingDegrees: carrier.headingDegrees, maxHealth: AA_GUN_CONFIG.maxHealth, vulnerability: 1, respawnSeconds: NEVER, carrierId: carrier.id, baseId: base.id });
+    }
   }
   return targets;
 }

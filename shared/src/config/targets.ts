@@ -5,22 +5,22 @@
  */
 
 /**
- * Each base's one anti-aircraft gun: a quad 40 mm mount on a raised concrete
- * flak platform, with a tall flag, so you can see it from far off. It fires
- * rapid tracer in bursts and leads its target (aims where the aircraft will
- * be when the shell gets there), but it slews at a limited rate, so a fast
- * crossing target or a jinking one is much harder to hit than one flying
- * straight at it.
+ * The bases' anti-aircraft guns, two at each: a quad 40 mm mount on a
+ * raised concrete flak platform, with a tall flag, so you can see it from
+ * far off. It fires rapid tracer in bursts and leads its target (aims where
+ * the aircraft will be when the shell gets there), but it slews at a
+ * limited rate, so a fast crossing target or a jinking one is much harder to
+ * hit than one flying straight at it.
  */
 export const AA_GUN_CONFIG = {
   /** Opens fire at aircraft closer than this (m). */
-  range: 2_000,
+  range: 2_400,
   muzzleVelocity: 880,
   /** Four barrels: about five shells a second. */
   roundsPerSecond: 5,
   projectileLifetime: 2.8,
   /** A 40 mm shell hits far harder than a machine-gun round (1). */
-  damagePerRound: 8,
+  damagePerRound: 9,
   /** Random scatter of each shell around the aim line (deg). */
   dispersionDeg: 0.6,
   /** Bursts: seconds of firing, then seconds of pause. */
@@ -33,8 +33,8 @@ export const AA_GUN_CONFIG = {
   fireWithinDeg: 4,
   /** Won't fire lower than this above the horizon (deg): it would hit its own ground. */
   minElevationDeg: 3,
-  /** About 50 machine-gun hits: two good passes, or one long one. Once destroyed it stays destroyed (see CAPTURE_CONFIG). */
-  maxHealth: 50,
+  /** About 70 machine-gun hits: two or three good passes. Once destroyed it stays destroyed (see CAPTURE_CONFIG). */
+  maxHealth: 70,
   /** Hit sphere around the platform and gun (m). */
   hitRadius: 7,
   /** The guns sit on top of the platform (m above the ground or deck). */
@@ -109,7 +109,11 @@ export const CARRIER_DAMAGE_CONFIG = {
  * positions are distance from the stern and side (+1 starboard, -1 port).
  */
 export const BASE_LAYOUT = {
-  airfieldAaGun: { along: -20, across: -98 },
+  /** Two AA guns, both on the side away from the hangars, 400 m apart: together they cover the whole runway. */
+  airfieldAaGuns: [
+    { along: -20, across: -98 },
+    { along: 380, across: -98 },
+  ],
   hangar: { along: -250, across: 108 },
   fuelDepot: { along: 160, across: 102 },
   /**
@@ -118,7 +122,11 @@ export const BASE_LAYOUT = {
    * of rudder and it can shoot it from the ground.
    */
   radar: { along: -450, across: -54 },
-  carrierAaGun: { fromStern: 205, side: -1 },
+  /** Two on each carrier: forward on the port side, aft on the starboard side (clear of the wires and the island). */
+  carrierAaGuns: [
+    { fromStern: 205, side: -1 },
+    { fromStern: 60, side: 1 },
+  ],
 } as const;
 
 /**

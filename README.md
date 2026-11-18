@@ -21,11 +21,11 @@ apart; carrier to carrier is 5.6 km.
 
 **The match** (5, 10 or 15 minutes, chosen in the hangar):
 
-- A field nobody holds is **taken by landing and stopping on it for 5 seconds**. Its AA gun is then built for you in 30 seconds, and you can start and rearm there.
-- A field the other side holds is defended: destroy its AA gun, hangar, fuel depot and radar, then land on it to take it. A **carrier is taken the same way** (shoot its AA gun, land on the deck with the hook, stop).
+- A field nobody holds is **taken by landing and stopping on it for 5 seconds**. Its two AA guns are then built for you in 30 seconds, and you can start and rearm there.
+- A field the other side holds is defended: destroy its two AA guns, hangar, fuel depot and radar, then land on it to take it. A **carrier is taken the same way** (shoot its two AA guns, land on the deck with the hook, stop).
 - **When time is up, the side holding more bases wins**; the same number is a draw. A side left with **no base at all** has nowhere to start from and **loses at once**.
 - Your **aircraft is fixed for the match** (the base you start from can change). Exit to the main menu and everything resets.
-- **Red's four AI pilots** launch from their carrier: two hunt you, two take bases (and defend themselves). They land to capture fields, strafe defences, go home to rearm, and break when you get on their tail.
+- **Red's four AI pilots** launch from their carrier: two hunt you, two take bases. They land to capture fields, strafe defences, go home to rearm, and break when you get on their tail. **Come within 3 km of a Red base and all of them come to defend it.** One shot down is back **5 seconds** later, from the Red base nearest you.
 
 | Aircraft (key) | Notes |
 |---|---|
@@ -166,16 +166,17 @@ carriers, every base in its owner's colour, you, and every other aircraft
 time left, the bases each side holds, your kills, and the objective: the
 nearest base you don't hold.
 
-**Taking and attacking bases:** every island airfield has one big AA gun on
-a flak platform (empty until somebody takes the field), a hangar, a fuel
-depot and a radar beside the runway. Red brackets mark enemy targets, and
+**Taking and attacking bases:** every island airfield has two big AA guns on
+flak platforms (empty until somebody takes the field), a hangar, a fuel
+depot and a radar beside the runway; each carrier has two AA guns. They
+reach 2.4 km and take about 70 hits each. Red brackets mark enemy targets, and
 bigger ones mark Red aircraft with their type and distance. What you destroy
-stays destroyed. Destroy a Red field's AA gun, hangar, fuel depot and radar
+stays destroyed. Destroy a Red field's AA guns, hangar, fuel depot and radar
 and it's defenceless: land, stop for 5 seconds, and it's yours. (The radar
 stands just off the runway near its far end: landing towards it, a touch of
 rudder and you can shoot it from the ground, then just stay stopped.) Its
 flag turns blue, you can rearm and start there, and 30 seconds later your
-crews have built its defences: its AA gun now defends it for you. When you
+crews have built its defences: its AA guns now defend it for you. When you
 dive at the ground, an orange circle shows where your rounds will hit; in
 mouse flight, the aim circle is where they land.
 
