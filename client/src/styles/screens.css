@@ -1,0 +1,911 @@
+/*
+ * Screens: main menu, hangar (aircraft selection and respawn), pause menu,
+ * settings, lobby and the after-action report. Built from the components
+ * and tokens; layout only here.
+ */
+
+/* ── Screen frame: top bar, panels, footer ──────────────────────────────── */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-screen);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  pointer-events: none;
+  animation: fade-in var(--duration-slow) var(--ease-out);
+}
+
+.screen-panel {
+  pointer-events: auto;
+  background: var(--color-screen-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  animation: rise-in var(--duration-slow) var(--ease-out);
+}
+
+.screen-bar {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.screen-bar > *,
+.screen-footer > * {
+  pointer-events: auto;
+}
+
+.screen-bar__end {
+  margin-left: auto;
+}
+
+.screen-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.screen-title__name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--tracking-heading);
+  text-transform: uppercase;
+}
+
+.screen-footer {
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-5);
+}
+
+.screen-footer__note {
+  max-width: 420px;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  text-align: right;
+  color: var(--color-text-2);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+/* A section's label, with a hint on the right. */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.section-head:first-child {
+  margin-top: 0;
+}
+
+.section-head__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Name / value pairs. */
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.facts dt {
+  color: var(--color-text-2);
+}
+
+.facts dd {
+  margin: 0;
+  text-align: right;
+  color: var(--color-text);
+}
+
+/* A text box (callsign, room code). */
+.input {
+  min-width: 0;
+  padding: 7px 10px;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  pointer-events: auto;
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.input:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  border-color: var(--color-border);
+}
+
+/* A notice across a screen (features arriving in a later phase). */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-caution-soft);
+  border: 1px solid var(--color-caution-line);
+  border-radius: var(--radius-sm);
+  pointer-events: auto;
+}
+
+.banner p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+/* ── Main menu ──────────────────────────────────────────────────────────── */
+
+.main-menu__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--color-scrim-left);
+}
+
+.main-menu__column {
+  position: absolute;
+  top: 50%;
+  left: clamp(24px, 6vw, 112px);
+  width: min(380px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  font-family: var(--font-heading);
+  line-height: 0.9;
+  text-transform: uppercase;
+  animation: rise-in var(--duration-slow) var(--ease-out);
+}
+
+.logo__dogfight {
+  font-size: clamp(52px, 6.4vw, var(--text-display));
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--color-text);
+}
+
+.logo__squadron {
+  margin-top: var(--space-2);
+  padding-left: 3px;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: 0.64em;
+  color: var(--color-accent);
+}
+
+.main-menu__tagline {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+  color: var(--color-text-2);
+}
+
+.main-menu__play {
+  justify-content: space-between;
+}
+
+.main-menu__nav {
+  margin-left: calc(-1 * var(--space-4));
+}
+
+.main-menu__corner {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: auto;
+}
+
+.callsign {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 12px;
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.callsign:hover {
+  border-color: var(--color-accent-line);
+}
+
+.callsign__name {
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.callsign__edit {
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+}
+
+.callsign__input {
+  width: 200px;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.main-menu__footer {
+  position: absolute;
+  left: clamp(24px, 6vw, 112px);
+  bottom: var(--space-5);
+}
+
+.main-menu__hangar {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-2);
+}
+
+/* ── Hangar: the fleet left, the 3D aircraft centre, its figures right ──── */
+
+/* Each column fits its content, up to the space between the top bar and FLY. */
+.hangar__column {
+  position: absolute;
+  top: 72px;
+  max-height: calc(100% - 152px);
+  width: var(--hangar-left-width);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.hangar__left {
+  left: var(--space-4);
+}
+
+.hangar__right {
+  right: var(--space-4);
+  width: var(--hangar-right-width);
+}
+
+.hangar__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.aircraft-card {
+  min-width: 0;
+  gap: 4px;
+  padding: 6px 8px 7px 11px;
+}
+
+.aircraft-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.aircraft-card__name {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-heading);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.aircraft-card[aria-pressed='true'] .tag {
+  color: var(--color-accent);
+}
+
+.hangar__map {
+  display: flex;
+  justify-content: center;
+}
+
+.base-map {
+  display: block;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.hangar__base {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.hangar__base-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hangar__base-detail {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  text-align: right;
+  color: var(--color-text-2);
+}
+
+.segmented--block {
+  display: flex;
+  width: 100%;
+}
+
+.hangar__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.hangar__name {
+  margin: 6px 0 2px;
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--tracking-heading);
+  text-transform: uppercase;
+}
+
+.hangar__role {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--color-text-2);
+}
+
+.hangar__ratings .stat {
+  grid-template-columns: 74px 1fr 76px;
+  padding: 4px 0;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--swatch);
+  border: 2px solid var(--color-border-strong);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.swatch:hover {
+  transform: scale(1.08);
+}
+
+.swatch[aria-pressed='true'] {
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+}
+
+/* Respawn: what happened, over the 3D view between the columns. */
+.hangar__report {
+  position: absolute;
+  top: 72px;
+  left: calc(var(--space-4) + var(--hangar-left-width) + var(--space-5));
+  right: calc(var(--space-4) + var(--hangar-right-width) + var(--space-5));
+  max-width: 440px;
+  margin: 0 auto;
+  padding: var(--space-4);
+  border-left: 2px solid var(--color-danger);
+}
+
+.hangar__report-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.hangar__report-title .ui-heading {
+  font-size: var(--text-2xl);
+}
+
+.hangar__report-cause {
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-2);
+}
+
+/* ── Pause menu ─────────────────────────────────────────────────────────── */
+
+.pause-menu__dialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: var(--space-5) var(--space-3) var(--space-3);
+}
+
+.pause-menu__header {
+  padding: 0 var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pause-menu__title {
+  margin: 6px 0 4px;
+  font-size: var(--text-3xl);
+  line-height: 1;
+}
+
+.pause-menu__subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-2);
+}
+
+.pause-menu .nav__item {
+  padding: 9px 14px 9px 16px;
+  font-size: var(--text-lg);
+}
+
+.nav__divider {
+  margin: var(--space-2) 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Settings ───────────────────────────────────────────────────────────── */
+
+.settings__dialog {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: min(840px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 48px));
+  max-height: none;
+  overflow: hidden;
+}
+
+.settings__header {
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+.settings__title {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-2xl);
+}
+
+.settings__body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2) var(--space-5) var(--space-4);
+}
+
+.settings__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+}
+
+.settings__status {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-2);
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 320px);
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.setting__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.setting__name {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.setting__description {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-text-2);
+}
+
+.setting__control {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.setting__control .slider {
+  width: 100%;
+}
+
+.settings__section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-5) 0 var(--space-1);
+}
+
+.keybinds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-5);
+}
+
+.keybind {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 4px 0;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.keybind--fixed {
+  grid-template-columns: 1fr auto;
+}
+
+.keybind__keys {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.btn--capturing {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Lobby ──────────────────────────────────────────────────────────────── */
+
+.lobby {
+  background: var(--color-overlay);
+}
+
+.lobby__content {
+  position: absolute;
+  top: 76px;
+  bottom: 84px;
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 1040px;
+  margin: 0 auto;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.lobby__grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.lobby__panel {
+  padding: var(--space-4);
+}
+
+.lobby__join {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.lobby__join .input {
+  flex: 1;
+}
+
+.lobby__team-choice,
+.lobby__ready {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.lobby__team-choice .segmented,
+.lobby__ready .switch {
+  margin-left: auto;
+}
+
+.lobby__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.lobby__team {
+  min-height: 168px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.lobby__team-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.roster {
+  margin: 0;
+  padding: var(--space-1) 0;
+  list-style: none;
+}
+
+.roster__player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  font-size: var(--text-sm);
+  background: var(--color-friendly-soft);
+  border-left: 2px solid var(--color-friendly);
+}
+
+.roster__name {
+  font-weight: 600;
+}
+
+.roster__detail {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-2);
+}
+
+.roster__empty {
+  padding: 12px;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+/* ── After-action report ────────────────────────────────────────────────── */
+
+.results {
+  display: grid;
+  place-items: center;
+  background: var(--color-overlay);
+  pointer-events: auto;
+}
+
+.results__panel {
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+.results__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.results__subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-2);
+}
+
+.results__outcome {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+}
+
+.results__outcome-value {
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-2);
+}
+
+.results__outcome-note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.results__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  animation: rise-in var(--duration-slow) var(--ease-out) both;
+}
+
+.stat-tile:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.stat-tile:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.stat-tile:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+.stat-tile:nth-child(5) {
+  animation-delay: 160ms;
+}
+
+.stat-tile:nth-child(6) {
+  animation-delay: 200ms;
+}
+
+.stat-tile__value {
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-tile__detail {
+  font-size: var(--text-xs);
+  color: var(--color-text-2);
+}
+
+.results__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  margin-top: var(--space-5);
+}
+
+.results__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+}
+
+/* The dev build's debug overlay (top right) would cover the menus' corners. */
+#ui-root[data-screen] .debug-overlay {
+  display: none;
+}
+
+/* ── Startup failure ────────────────────────────────────────────────────── */
+
+.fatal-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: var(--space-5);
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.fatal-error h1 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  text-transform: uppercase;
+  color: var(--color-danger);
+}
+
+.fatal-error p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--color-text-2);
+}
+
+/* ── Smaller windows ────────────────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  :root {
+    --hangar-left-width: 296px;
+    --hangar-right-width: 300px;
+  }
+}
+
+@media (max-width: 760px) {
+  .keybinds,
+  .results__columns,
+  .lobby__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .setting {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  .results__tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

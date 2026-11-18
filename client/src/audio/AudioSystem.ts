@@ -49,6 +49,8 @@ const MUTED_KEY = 'dogfight.audioMuted';
 export class AudioSystem {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** Master volume 0-1 (the Audio setting). */
+  private volume: number = AUDIO_CONFIG.masterVolume;
   private analyser: AnalyserNode | null = null;
   private bank: SoundBank | null = null;
   private engine: EngineVoice[] = [];
@@ -79,6 +81,12 @@ export class AudioSystem {
     return this.muted;
   }
 
+  /** The Audio setting: master volume 0-1. */
+  setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume));
+    if (this.master && this.ctx && !this.muted) this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
+  }
+
   setMuted(muted: boolean): void {
     if (muted !== this.muted) this.toggleMute();
   }
@@ -98,7 +106,7 @@ export class AudioSystem {
     } catch {
       // Private browsing or blocked storage: the choice just isn't remembered.
     }
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : AUDIO_CONFIG.masterVolume, this.ctx.currentTime, 0.05);
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.05);
     return this.muted;
   }
 
@@ -255,7 +263,7 @@ export class AudioSystem {
     const noise = createNoiseBuffer(ctx);
 
     const master = ctx.createGain();
-    master.gain.value = this.muted ? 0 : AUDIO_CONFIG.masterVolume;
+    master.gain.value = this.muted ? 0 : this.volume;
     const compressor = ctx.createDynamicsCompressor();
     compressor.threshold.value = -14;
     compressor.ratio.value = 6;

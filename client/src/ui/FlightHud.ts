@@ -1,13 +1,17 @@
 import { getAttitude, stallAngles, type AircraftClassSpec, type AircraftState, type Attitude, type FlightControls } from '@dogfight/shared';
-import { formatKeyCode } from './ControlsHint';
-import { KEY_BINDINGS } from '../config/controls';
 import type { TargetKind } from '@dogfight/shared';
+import { formatKeyCode } from './ControlsHint';
+import { KEY_BINDINGS, type KeyBindings } from '../config/controls';
 import { TOUCHDOWN_GRADES, TOUCHDOWN_MESSAGE_SECONDS } from '../config/landing';
+import { h, kbd, label, progress, setText, show, tag, type ProgressBar, type Tone } from './components';
 
 /** Numbers refresh this often (s): readable, and cheap on the DOM. Warnings update every frame. */
 const READOUT_INTERVAL = 0.05;
 /** "PULL UP" when the ground is less than this many seconds away at the current sink rate. */
 export const PULL_UP_SECONDS = 4;
+/** Heading tape: pixels per degree, and its window width (px). */
+const TAPE_PX_PER_DEG = 2;
+const TAPE_WIDTH = 168;
 
 /** Everything the HUD shows for one frame. */
 export interface HudFrame {
@@ -38,14 +42,13 @@ export interface HudFrame {
   readonly approach: ApproachGuide | null;
   /** The nearest enemy base you're attacking or capturing, or null. */
   readonly baseStatus: BaseStatus | null;
-  /** Practice balloons burst this session. */
+  /** Targets destroyed this session. */
   readonly targetsDestroyed: number;
+  /** How many of the bases your team holds. */
+  readonly basesHeld: { readonly held: number; readonly total: number };
   /** Bases on screen and far enough away to need finding, with their labels. */
   readonly baseLabels: readonly BaseLabel[];
-  /**
-   * The assist line: auto-land flying a landing (`active`) or on offer (P)
-   * in the air; on the ground, the choice of base to take off from (J). Null: nothing to say.
-   */
+  /** The assist line: auto-land flying a landing (`active`) or on offer (P); on the ground, a pointer to the hangar. Null: nothing to say. */
   readonly prompt: { readonly active: boolean; readonly text: string } | null;
 }
 
@@ -82,7 +85,7 @@ export interface EnemyMarker {
 
 const MARKER_LABELS: Readonly<Record<TargetKind, string>> = { aaGun: 'AA', parkedAircraft: 'AIRCRAFT', carrier: 'CARRIER', balloon: '', hangar: 'HANGAR', fuelDepot: 'FUEL', radar: 'RADAR' };
 
-/** The nearest enemy (or newly captured) base's state, for the status line. */
+/** The nearest enemy (or newly captured) base's state, for the objective. */
 export interface BaseStatus {
   readonly name: string;
   readonly distance: number;
@@ -92,185 +95,289 @@ export interface BaseStatus {
   readonly capturing: number | null;
   readonly captured: boolean;
 }
-const MAX_MARKERS = 16;
 
 export interface ScreenPoint {
   readonly x: number;
   readonly y: number;
 }
 
+const MAX_MARKERS = 16;
 /** At most this many base labels at once (there are four bases). */
 const MAX_BASE_LABELS = 6;
 /** How long the gunsight glows red after a hit (s). */
 const HIT_MARKER_SECONDS = 0.15;
 
-type Field = 'speed' | 'altitude' | 'vertical' | 'throttle' | 'flaps' | 'gear' | 'heading' | 'aoa' | 'g' | 'hull' | 'guns' | 'ammo' | 'base' | 'baseKind' | 'targets' | 'aircraft' | 'status';
+/** A labelled readout: LABEL, a big value, a unit. */
+interface Readout {
+  readonly element: HTMLElement;
+  readonly value: HTMLElement;
+}
+
+function readout(name: string, unit: string, className = ''): Readout {
+  const value = h('span', 'ui-value hud-readout__value');
+  const element = h('div', `hud-readout ${className}`, label(name), h('div', 'hud-readout__line', value, unit ? h('span', 'ui-unit', unit) : null));
+  return { element, value };
+}
+
+/** A label-value row in a HUD panel. */
+function row(name: string): { element: HTMLElement; value: HTMLElement } {
+  const value = h('span', 'ui-value hud-row__value');
+  return { element: h('div', 'hud-row', label(name), value), value };
+}
 
 /**
- * Flight instruments, drawn in HTML/CSS over the 3D view. Phase 4 adds gun
- * heat and bombs; Phase 6 adds scores, bases and the minimap.
+ * The flight HUD, drawn in HTML/CSS over the 3D view and organised in zones
+ * that keep the middle of the screen clear:
+ *
+ *   top-left      STATUS: team, bases held, objective (an enemy base), home base, targets
+ *   top-centre    the radar map (MiniMap), approach calls under it
+ *   bottom-left   AIRFRAME: hull integrity, damage, gear, flaps, what the aircraft is doing
+ *   bottom-centre instruments: airspeed, altitude, heading tape, vertical speed, throttle
+ *   bottom-right  WEAPONS: ammunition, gun heat, bombs, rearming
+ *   centre        gunsight, flight-path marker, aim circle, target brackets, alerts
+ *
+ * Cyan instruments, amber for caution, red only for critical alerts. Numbers
+ * refresh 20 times a second; only text that changes is rewritten, and bars
+ * and markers move by transform.
  */
 export class FlightHud {
   private readonly root: HTMLElement;
-  private readonly fields: Record<Field, HTMLElement>;
-  private readonly throttleBar: HTMLElement;
-  private readonly stallWarning: HTMLElement;
-  private readonly pullUpWarning: HTMLElement;
+  // Status (top-left)
+  private readonly basesHeld: HTMLElement;
+  private readonly home: HTMLElement;
+  private readonly targets: HTMLElement;
+  private readonly objective: HTMLElement;
+  private readonly objectiveName: HTMLElement;
+  private readonly objectiveState: HTMLElement;
+  private readonly objectiveBar: ProgressBar;
+  // Airframe (bottom-left)
+  private readonly aircraftName: HTMLElement;
+  private readonly status: HTMLElement;
+  private readonly hullValue: HTMLElement;
+  private readonly hullBar: ProgressBar;
+  private readonly damageTag: HTMLElement;
+  private readonly gear: HTMLElement;
+  private readonly flaps: HTMLElement;
+  // Instruments (bottom-centre)
+  private readonly speed: Readout;
+  private readonly altitude: Readout;
+  private readonly vertical: Readout;
+  private readonly throttle: Readout;
+  private readonly throttleBar: ProgressBar;
+  private readonly headingValue: HTMLElement;
+  private readonly tapeStrip: HTMLElement;
+  private readonly aoa: HTMLElement;
+  private readonly load: HTMLElement;
+  // Weapons (bottom-right)
+  private readonly ammoValue: HTMLElement;
+  private readonly ammoFull: HTMLElement;
+  private readonly ammoBar: ProgressBar;
+  private readonly heatValue: HTMLElement;
+  private readonly heatBar: ProgressBar;
+  private readonly bombsRow: HTMLElement;
+  private readonly bombsValue: HTMLElement;
+  private readonly rearm: HTMLElement;
+  private readonly rearmBar: ProgressBar;
+  private readonly weaponNote: HTMLElement;
+  // Centre
+  private readonly stallAlert: HTMLElement;
+  private readonly pullUpAlert: HTMLElement;
+  private readonly overheatAlert: HTMLElement;
+  private readonly ammoAlert: HTMLElement;
+  private readonly approach: HTMLElement;
+  private readonly prompt: HTMLElement;
+  private readonly message: HTMLElement;
   private readonly crashPanel: HTMLElement;
-  private readonly crashReason: HTMLElement;
   private readonly crashTitle: HTMLElement;
-  /** Red flash around the screen edge when you're hit. */
+  private readonly crashReason: HTMLElement;
   private readonly damageFlash: HTMLElement;
-  private damageFlashTimer = 0;
   private readonly gunsight: HTMLElement;
   private readonly aimReticle: HTMLElement;
-  private readonly gunHeatBar: HTMLElement;
-  private readonly ammoBar: HTMLElement;
-  private readonly overheatWarning: HTMLElement;
-  private readonly outOfAmmoWarning: HTMLElement;
-  private readonly service: HTMLElement;
-  private readonly approach: HTMLElement;
+  private readonly flightPathMarker: HTMLElement;
+  private readonly impactPoint: HTMLElement;
   private readonly markers: Array<{ box: HTMLElement; label: HTMLElement; text: string }> = [];
   private readonly baseLabelPool: Array<{ box: HTMLElement; text: string; color: string }> = [];
-  private readonly impactPoint: HTMLElement;
-  private readonly baseStatus: HTMLElement;
-  private readonly baseStatusText: HTMLElement;
-  private readonly baseStatusBar: HTMLElement;
-  private readonly serviceBar: HTMLElement;
-  private readonly autoLand: HTMLElement;
+
+  private damageFlashTimer = 0;
+  private bindings: KeyBindings = KEY_BINDINGS;
   private hitMarkerTimer = 0;
-  private readonly flightPathMarker: HTMLElement;
-  private readonly touchdownMessage: HTMLElement;
+  private messageTimer = 0;
   private readonly attitude: Attitude = { headingDeg: 0, pitchDeg: 0, bankDeg: 0 };
   private sinceRefresh = READOUT_INTERVAL;
   private lastSeenTouchdown = 0;
-  private touchdownMessageTimer = 0;
   /** Gear position at the last readout refresh, to show which way it is moving. */
   private lastGear = 1;
   private gearWasLowering = false;
+  private lastClass = '';
 
   constructor(parent: HTMLElement) {
-    this.root = element('div', 'flight-hud');
-    const panel = element('div', 'hud-panel');
-    const readout = (label: string, unit: string, unitElement?: HTMLElement) => {
-      const row = element('div', 'hud-readout');
-      const value = element('span', 'hud-value');
-      row.append(element('span', 'hud-label', label), value, unitElement ?? element('span', 'hud-unit', unit));
-      panel.append(row);
-      return value;
-    };
-    const speed = readout('SPD', 'km/h');
-    const altitude = readout('ALT', 'm');
-    const vertical = readout('V/S', 'm/s');
-    const throttle = readout('THR', '%');
-    this.throttleBar = element('div', 'hud-throttle-fill');
-    const throttleTrack = element('div', 'hud-throttle-track');
-    throttleTrack.append(this.throttleBar);
-    panel.append(throttleTrack);
-    const flaps = readout('FLAP', '');
-    const gear = readout('GEAR', '');
-    const heading = readout('HDG', '°');
-    const aoa = readout('AoA', '°');
-    const g = readout('G', '');
-    const hull = readout('HULL', '%');
-    const guns = readout('GUN', 'heat');
-    this.gunHeatBar = element('div', 'hud-throttle-fill hud-heat-fill');
-    const gunHeatTrack = element('div', 'hud-throttle-track');
-    gunHeatTrack.append(this.gunHeatBar);
-    panel.append(gunHeatTrack);
-    const ammo = readout('AMMO', 'rds');
-    this.ammoBar = element('div', 'hud-throttle-fill hud-ammo-fill');
-    const ammoTrack = element('div', 'hud-throttle-track');
-    ammoTrack.append(this.ammoBar);
-    panel.append(ammoTrack);
-    const baseKind = element('span', 'hud-unit');
-    const base = readout('BASE', '', baseKind);
-    const targets = readout('TGT', 'burst');
-    const aircraft = element('div', 'hud-aircraft');
-    const status = element('div', 'hud-status');
-    panel.append(aircraft, status);
+    this.root = h('div', 'flight-hud');
 
-    this.fields = { speed, altitude, vertical, throttle, flaps, gear, heading, aoa, g, hull, guns, ammo, base, baseKind, targets, aircraft, status };
-    this.stallWarning = element('div', 'hud-warning hud-warning-stall', 'STALL');
-    this.pullUpWarning = element('div', 'hud-warning hud-warning-pullup', 'PULL UP');
-    this.overheatWarning = element('div', 'hud-warning hud-warning-pullup', 'GUNS OVERHEATED');
-    this.outOfAmmoWarning = element('div', 'hud-warning hud-warning-steady', 'OUT OF AMMO · LAND AT A BASE TO REARM');
-    const warnings = element('div', 'hud-warnings');
-    warnings.append(this.stallWarning, this.pullUpWarning, this.overheatWarning, this.outOfAmmoWarning);
+    // ── Top-left: status ──
+    const basesHeld = row('Bases held');
+    const home = row('Home base');
+    const targets = row('Targets');
+    this.basesHeld = basesHeld.value;
+    this.home = home.value;
+    this.targets = targets.value;
+    this.objectiveName = h('div', 'hud-objective__name');
+    this.objectiveState = h('div', 'hud-objective__state');
+    this.objectiveBar = progress();
+    this.objective = h('div', 'hud-objective', label('Objective'), this.objectiveName, this.objectiveState, this.objectiveBar.element);
+    const menuKey = KEY_BINDINGS.openHangar.map(formatKeyCode).join('/');
+    const status = h(
+      'section',
+      'panel panel--hud hud-panel hud-zone hud-zone--tl',
+      h('header', 'panel__header', label('Status'), tag('Blue · you', 'friendly')),
+      h('div', 'panel__body', basesHeld.element, home.element, targets.element, this.objective, h('div', 'hud-hint', kbd(menuKey), h('span', '', 'pause menu'))),
+    );
+    status.setAttribute('aria-label', 'Status');
 
-    // Ground crew at work: rearming and repairing, with a progress bar.
-    this.service = element('div', 'hud-service');
-    this.serviceBar = element('div', 'hud-service-fill');
-    const serviceTrack = element('div', 'hud-service-track');
-    serviceTrack.append(this.serviceBar);
-    this.service.append(element('div', 'hud-service-label', 'REARMING & REPAIRING'), serviceTrack);
-    this.service.hidden = true;
+    // ── Bottom-left: airframe ──
+    this.aircraftName = h('span', 'ui-heading hud-aircraft-name');
+    this.status = h('div', 'hud-status-line');
+    this.hullValue = h('span', 'ui-value hud-hull__value');
+    this.hullBar = progress(true);
+    this.damageTag = tag('', 'caution');
+    this.damageTag.hidden = true;
+    const gear = row('Gear');
+    const flaps = row('Flaps');
+    this.gear = gear.value;
+    this.flaps = flaps.value;
+    const airframe = h(
+      'section',
+      'panel panel--hud hud-panel hud-zone hud-zone--bl',
+      h('header', 'panel__header', this.aircraftName),
+      h(
+        'div',
+        'panel__body',
+        h('div', 'hud-hull', h('div', 'hud-hull__head', label('Hull integrity'), h('span', 'hud-hull__readout', this.hullValue, h('span', 'ui-unit', '%'))), this.hullBar.element, this.damageTag),
+        gear.element,
+        flaps.element,
+        this.status,
+      ),
+    );
+    airframe.setAttribute('aria-label', 'Airframe');
 
-    // Auto-land: the offer (P) near a base, then what the autopilot is doing.
-    this.autoLand = element('div', 'hud-autoland');
-    this.autoLand.hidden = true;
+    // ── Bottom-centre: instruments ──
+    this.speed = readout('Airspeed', 'km/h', 'hud-readout--primary');
+    this.altitude = readout('Altitude', 'm', 'hud-readout--primary');
+    this.vertical = readout('Vert speed', 'm/s');
+    this.throttle = readout('Throttle', '%');
+    this.throttleBar = progress();
+    this.throttle.element.append(this.throttleBar.element);
+    this.headingValue = h('span', 'ui-value hud-heading__value');
+    this.tapeStrip = buildTapeStrip();
+    const tape = h('div', 'hud-tape', this.tapeStrip, h('div', 'hud-tape__pointer'));
+    const heading = h('div', 'hud-readout hud-heading', label('Heading'), this.headingValue, tape);
+    this.aoa = h('span', 'ui-value');
+    this.load = h('span', 'ui-value');
+    const instruments = h(
+      'section',
+      'hud-zone hud-zone--bc hud-instruments',
+      h('div', 'hud-instruments__row', this.speed.element, this.vertical.element, heading, this.throttle.element, this.altitude.element),
+      h('div', 'hud-instruments__minor', label('AoA'), this.aoa, label('G'), this.load),
+    );
+    instruments.setAttribute('aria-label', 'Flight instruments');
 
-    // Approach calls along the top: distance, glide slope, line-up.
-    this.approach = element('div', 'hud-approach');
+    // ── Bottom-right: weapons ──
+    this.ammoValue = h('span', 'ui-value hud-ammo__value');
+    this.ammoFull = h('span', 'ui-unit');
+    this.ammoBar = progress(true);
+    this.heatValue = h('span', 'ui-value hud-row__value');
+    this.heatBar = progress();
+    this.bombsValue = h('span', 'ui-value hud-row__value');
+    this.bombsRow = h('div', 'hud-row', label('Bombs'), this.bombsValue);
+    this.rearmBar = progress();
+    this.rearm = h('div', 'hud-rearm', h('div', 'hud-row', label('Rearming'), h('span', 'ui-value hud-row__value', '')), this.rearmBar.element);
+    this.rearm.hidden = true;
+    this.weaponNote = h('div', 'hud-weapon-note');
+    const weapons = h(
+      'section',
+      'panel panel--hud hud-panel hud-zone hud-zone--br',
+      h('header', 'panel__header', label('Weapons'), h('span', 'ui-label hud-weapon-select', 'Guns')),
+      h(
+        'div',
+        'panel__body',
+        h('div', 'hud-ammo', h('div', 'hud-hull__head', label('Ammunition'), h('span', 'hud-hull__readout', this.ammoValue, this.ammoFull)), this.ammoBar.element),
+        h('div', 'hud-heat', h('div', 'hud-row', label('Gun heat'), this.heatValue), this.heatBar.element),
+        this.bombsRow,
+        this.rearm,
+        this.weaponNote,
+      ),
+    );
+    weapons.setAttribute('aria-label', 'Weapons');
+
+    // ── Centre: alerts, approach calls, prompt and messages ──
+    this.stallAlert = h('div', 'hud-alert', 'Stall');
+    this.stallAlert.dataset['tone'] = 'danger';
+    this.pullUpAlert = h('div', 'hud-alert', 'Pull up');
+    this.pullUpAlert.dataset['tone'] = 'danger';
+    this.overheatAlert = h('div', 'hud-alert hud-alert--steady', 'Guns overheated');
+    this.overheatAlert.dataset['tone'] = 'caution';
+    this.ammoAlert = h('div', 'hud-alert hud-alert--steady', 'Out of ammo · land at a base to rearm');
+    this.ammoAlert.dataset['tone'] = 'caution';
+    for (const alert of [this.stallAlert, this.pullUpAlert, this.overheatAlert, this.ammoAlert]) {
+      alert.hidden = true;
+      alert.setAttribute('role', 'alert');
+    }
+    const alerts = h('div', 'hud-alerts', this.stallAlert, this.pullUpAlert, this.overheatAlert, this.ammoAlert);
+    this.approach = h('div', 'hud-approach');
     this.approach.hidden = true;
+    this.prompt = h('div', 'hud-prompt');
+    this.prompt.hidden = true;
+    this.message = h('div', 'toast hud-message');
+    this.message.hidden = true;
+    this.message.setAttribute('role', 'status');
+    const feed = h('div', 'hud-feed', this.prompt, this.message);
 
-    // Enemy base status: defences left, then capture.
-    this.baseStatus = element('div', 'hud-base-status');
-    this.baseStatusText = element('div', 'hud-base-status-text');
-    this.baseStatusBar = element('div', 'hud-service-fill');
-    const baseTrack = element('div', 'hud-service-track');
-    baseTrack.append(this.baseStatusBar);
-    this.baseStatus.append(this.baseStatusText, baseTrack);
-    this.baseStatus.hidden = true;
+    // Crash card.
+    this.crashTitle = h('div', 'ui-heading hud-crash__title', 'Crashed');
+    this.crashReason = h('div', 'hud-crash__reason');
+    this.crashPanel = h(
+      'div',
+      'hud-crash',
+      this.crashTitle,
+      this.crashReason,
+      h('div', 'hud-crash__keys', kbd('Enter'), h('span', '', 'fly again'), kbd(menuKey), h('span', '', 'respawn options')),
+    );
+    this.crashPanel.hidden = true;
+    this.crashPanel.setAttribute('role', 'alert');
 
-    // Strafing aim: where the rounds will strike the ground.
-    this.impactPoint = element('div', 'hud-impact');
-    this.impactPoint.hidden = true;
-    const markerLayer = element('div', 'hud-markers');
+    this.damageFlash = h('div', 'hud-damage-flash');
+    this.damageFlash.hidden = true;
+
+    // Symbols on the 3D view.
+    this.gunsight = h('div', 'hud-gunsight');
+    this.flightPathMarker = h('div', 'hud-fpm');
+    this.aimReticle = h('div', 'hud-aim');
+    this.impactPoint = h('div', 'hud-impact');
+    for (const symbol of [this.gunsight, this.flightPathMarker, this.aimReticle, this.impactPoint]) symbol.hidden = true;
+    const markerLayer = h('div', 'hud-markers');
     for (let i = 0; i < MAX_MARKERS; i++) {
-      const box = element('div', 'hud-enemy');
-      const label = element('div', 'hud-enemy-label');
-      box.append(label);
+      const markerLabel = h('div', 'hud-enemy__label');
+      const box = h('div', 'hud-enemy', markerLabel);
       box.hidden = true;
       markerLayer.append(box);
-      this.markers.push({ box, label, text: '' });
+      this.markers.push({ box, label: markerLabel, text: '' });
     }
     for (let i = 0; i < MAX_BASE_LABELS; i++) {
-      const box = element('div', 'hud-base-label');
+      const box = h('div', 'hud-base-label');
       box.hidden = true;
       markerLayer.append(box);
       this.baseLabelPool.push({ box, text: '', color: '' });
     }
 
-    this.crashPanel = element('div', 'hud-crash');
-    this.crashReason = element('div', 'hud-crash-reason');
-    this.crashTitle = element('div', 'hud-crash-title', 'CRASHED');
-    const hangarKey = KEY_BINDINGS.openHangar.map(formatKeyCode).join(' / ');
-    this.crashPanel.append(this.crashTitle, this.crashReason, element('div', 'hud-crash-hint', `Enter: fly again · ${hangarKey}: hangar (another aircraft, paint or base)`));
-    this.damageFlash = element('div', 'hud-damage-flash');
-    this.damageFlash.hidden = true;
-
-    // Gunsight: where the gun streams converge. Put it on the target and fire.
-    this.gunsight = element('div', 'hud-gunsight');
-    this.gunsight.hidden = true;
-
-    // Flight-path marker: where the aircraft is actually going, as opposed to where
-    // the nose points. Put it on the runway touchdown zone and that's where you'll land.
-    this.flightPathMarker = element('div', 'hud-fpm');
-    this.flightPathMarker.hidden = true;
-
-    this.touchdownMessage = element('div', 'hud-touchdown');
-    this.touchdownMessage.hidden = true;
-
-    // Mouse-flight aim circle: where the mouse is steering the aircraft. The gunsight chases it.
-    this.aimReticle = element('div', 'hud-aim');
-    this.aimReticle.hidden = true;
-
-    this.root.append(this.damageFlash, warnings, panel, this.crashPanel, this.aimReticle, this.gunsight, this.flightPathMarker, this.touchdownMessage, this.service, this.autoLand, this.approach, this.baseStatus, markerLayer, this.impactPoint);
+    this.root.append(this.damageFlash, markerLayer, this.impactPoint, this.flightPathMarker, this.gunsight, this.aimReticle, status, airframe, instruments, weapons, this.approach, alerts, feed, this.crashPanel);
     parent.append(this.root);
   }
 
   /** Flash the screen edge red: you've been hit. */
+  /** The keys in force (the player may have rebound them), for the hints the HUD shows. */
+  setBindings(bindings: KeyBindings): void {
+    this.bindings = bindings;
+  }
+
   registerDamage(seconds: number): void {
     this.damageFlashTimer = seconds;
   }
@@ -282,19 +389,23 @@ export class FlightHud {
 
   /** Removes the current message early (e.g. a briefing that no longer applies). */
   clearMessage(): void {
-    this.touchdownMessageTimer = 0;
+    this.messageTimer = 0;
   }
 
-  /** A short message in the centre-bottom of the screen, e.g. a briefing or a touchdown grade. */
-  /** Hidden while the hangar is open. */
+  /** Hidden while a menu or the hangar is open. */
   setVisible(visible: boolean): void {
     this.root.hidden = !visible;
   }
 
+  /** A short notification above the instruments, e.g. a briefing or a touchdown grade. */
   showMessage(text: string, tone: 'good' | 'ok' | 'bad', seconds: number): void {
-    this.touchdownMessage.textContent = text;
-    this.touchdownMessage.dataset['tone'] = tone;
-    this.touchdownMessageTimer = seconds;
+    setText(this.message, text);
+    this.message.dataset['tone'] = tone === 'good' ? 'accent' : tone === 'bad' ? 'danger' : 'caution';
+    this.messageTimer = seconds;
+    // Restart the entrance animation.
+    this.message.style.animation = 'none';
+    void this.message.offsetWidth;
+    this.message.style.animation = '';
   }
 
   update(deltaSeconds: number, frame: HudFrame): void {
@@ -303,27 +414,25 @@ export class FlightHud {
     const sinking = -state.velocity.y;
     const airborne = !state.onGround && !state.crashed;
 
-    // Warnings and markers react every frame.
-    toggle(this.stallWarning, airborne && t.stallWarning);
-    toggle(this.pullUpWarning, airborne && sinking > 5 && heightAboveGround / sinking < PULL_UP_SECONDS);
-    toggle(this.crashPanel, state.crashed);
+    // Alerts and symbols react every frame.
+    show(this.stallAlert, airborne && t.stallWarning);
+    show(this.pullUpAlert, airborne && sinking > 5 && heightAboveGround / sinking < PULL_UP_SECONDS);
+    show(this.overheatAlert, frame.guns.overheated && !state.crashed);
+    show(this.ammoAlert, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
+    show(this.crashPanel, state.crashed);
     if (state.crashed) {
-      this.crashTitle.textContent = state.crashReason === 'shot down' ? 'SHOT DOWN' : 'CRASHED';
-      this.crashReason.textContent = state.crashReason === 'shot down' ? 'Brought down by anti-aircraft fire' : `Cause: ${state.crashReason ?? 'unknown'}`;
+      setText(this.crashTitle, state.crashReason === 'shot down' ? 'Shot down' : 'Crashed');
+      setText(this.crashReason, state.crashReason === 'shot down' ? 'Brought down by anti-aircraft fire' : `Cause: ${state.crashReason ?? 'unknown'}`);
     }
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - deltaSeconds);
-    toggle(this.damageFlash, this.damageFlashTimer > 0);
+    show(this.damageFlash, this.damageFlashTimer > 0);
     if (this.damageFlashTimer > 0) this.damageFlash.style.opacity = Math.min(1, this.damageFlashTimer * 4).toFixed(2);
-    toggle(this.overheatWarning, frame.guns.overheated && !state.crashed);
-    toggle(this.outOfAmmoWarning, frame.guns.ammo === 0 && !state.crashed && frame.serviceProgress === null);
-    toggle(this.service, frame.serviceProgress !== null);
-    toggle(this.autoLand, frame.prompt !== null && !state.crashed);
+    show(this.prompt, frame.prompt !== null && !state.crashed);
     if (frame.prompt) {
-      if (this.autoLand.textContent !== frame.prompt.text) this.autoLand.textContent = frame.prompt.text;
-      this.autoLand.dataset.state = frame.prompt.active ? 'active' : 'offer';
+      setText(this.prompt, frame.prompt.text);
+      this.prompt.dataset['state'] = frame.prompt.active ? 'active' : 'offer';
     }
     this.updateApproach(frame.approach);
-    this.updateBaseStatus(frame.baseStatus);
     placeMarker(this.impactPoint, frame.impactPoint);
     this.markers.forEach((marker, i) => {
       const enemy = frame.enemyMarkers[i];
@@ -337,101 +446,140 @@ export class FlightHud {
       }
     });
     this.baseLabelPool.forEach((slot, i) => {
-      const label = frame.baseLabels[i];
-      placeMarker(slot.box, label ?? null);
-      if (!label) return;
-      if (label.text !== slot.text) {
-        slot.text = label.text;
-        slot.box.textContent = label.text;
+      const baseLabel = frame.baseLabels[i];
+      placeMarker(slot.box, baseLabel ?? null);
+      if (!baseLabel) return;
+      if (baseLabel.text !== slot.text) {
+        slot.text = baseLabel.text;
+        slot.box.textContent = baseLabel.text;
       }
-      if (label.color !== slot.color) {
-        slot.color = label.color;
-        slot.box.style.setProperty('--base-color', label.color);
+      if (baseLabel.color !== slot.color) {
+        slot.color = baseLabel.color;
+        slot.box.style.setProperty('--base-color', baseLabel.color);
       }
     });
-    if (frame.serviceProgress !== null) this.serviceBar.style.width = `${(frame.serviceProgress * 100).toFixed(0)}%`;
     placeMarker(this.flightPathMarker, frame.flightPathMarker);
     placeMarker(this.gunsight, frame.gunsight);
     placeMarker(this.aimReticle, frame.aimReticle);
     this.hitMarkerTimer = Math.max(0, this.hitMarkerTimer - deltaSeconds);
-    this.gunsight.classList.toggle('hud-gunsight-hit', this.hitMarkerTimer > 0);
+    this.gunsight.classList.toggle('hud-gunsight--hit', this.hitMarkerTimer > 0);
     this.updateTouchdownMessage(deltaSeconds, state);
 
     this.sinceRefresh += deltaSeconds;
     if (this.sinceRefresh < READOUT_INTERVAL) return;
     this.sinceRefresh = 0;
-
-    getAttitude(state.orientation, this.attitude);
-    const critical = (stallAngles(spec.aero).positive * 180) / Math.PI;
-    const aoaDeg = (t.angleOfAttack * 180) / Math.PI;
-    this.fields.speed.textContent = (t.airspeed * 3.6).toFixed(0);
-    this.fields.altitude.textContent = Math.max(0, heightAboveGround).toFixed(0);
-    this.fields.vertical.textContent = (state.velocity.y >= 0 ? '+' : '') + state.velocity.y.toFixed(1);
-    this.fields.throttle.textContent = (controls.throttle * 100).toFixed(0);
-    this.throttleBar.style.width = `${(controls.throttle * 100).toFixed(0)}%`;
-    // Lever notch plus actual position; amber when the airflow is holding the flaps up.
-    const flapPercent = Math.round(state.flapPosition * 100);
-    this.fields.flaps.textContent = `${frame.flapNotchName} ${flapPercent}%`;
-    this.fields.flaps.classList.toggle('hud-value-warn', controls.flaps > 0 && state.flapPosition < controls.flaps - 0.05 && t.airspeed > spec.flaps.maxExtensionSpeed);
-    // Automatic gear: DOWN / UP, or which way it's moving.
-    const gear = state.gearPosition;
-    const lowering = gear > this.lastGear || (gear === this.lastGear && this.gearWasLowering);
-    this.gearWasLowering = lowering;
-    this.lastGear = gear;
-    this.fields.gear.textContent = gear >= 0.999 ? 'DOWN' : gear <= 0.001 ? 'UP' : `${lowering ? '▼' : '▲'} ${Math.round(gear * 100)}%`;
-    this.fields.gear.classList.toggle('hud-value-warn', gear > 0.001 && gear < 0.999);
-    this.fields.heading.textContent = this.attitude.headingDeg.toFixed(0).padStart(3, '0');
-    this.fields.aoa.textContent = `${aoaDeg.toFixed(1)} / ${critical.toFixed(0)}`;
-    this.fields.g.textContent = t.loadFactor.toFixed(1);
-    const hullPercent = (100 * state.hullHealth) / spec.combat.maxHullHealth;
-    this.fields.hull.textContent = hullPercent.toFixed(0);
-    this.fields.hull.classList.toggle('hud-value-warn', hullPercent < 60);
-    const heatPercent = Math.round(frame.guns.heat * 100);
-    this.fields.guns.textContent = frame.guns.overheated ? 'HOT' : `${heatPercent}%`;
-    this.fields.guns.classList.toggle('hud-value-warn', frame.guns.overheated || heatPercent > 70);
-    this.gunHeatBar.style.width = `${heatPercent}%`;
-    this.gunHeatBar.classList.toggle('hud-heat-hot', frame.guns.overheated || heatPercent > 70);
-    const ammoFraction = frame.fullAmmo > 0 ? frame.guns.ammo / frame.fullAmmo : 0;
-    this.fields.ammo.textContent = `${frame.guns.ammo}`;
-    this.fields.ammo.classList.toggle('hud-value-warn', ammoFraction < 0.2);
-    this.ammoBar.style.width = `${(ammoFraction * 100).toFixed(0)}%`;
-    this.ammoBar.classList.toggle('hud-heat-hot', ammoFraction < 0.2);
-    const base = frame.nearestBase;
-    this.fields.base.textContent = !base ? '—' : base.distance === 0 ? 'ON BASE' : `${formatDistance(base.distance)} ${base.bearingDeg.toFixed(0).padStart(3, '0')}°`;
-    this.fields.baseKind.textContent = base ? (base.kind === 'carrier' ? 'CV' : 'AF') : '';
-    this.fields.targets.textContent = `${frame.targetsDestroyed}`;
-    this.fields.aircraft.textContent = spec.displayName;
-    this.fields.status.textContent = statusLine(state, controls);
+    this.refreshReadouts(frame, spec, controls, t, heightAboveGround);
   }
 
   dispose(): void {
     this.root.remove();
   }
 
-  private updateBaseStatus(status: BaseStatus | null): void {
-    toggle(this.baseStatus, status !== null);
+  private refreshReadouts(frame: HudFrame, spec: AircraftClassSpec, controls: Readonly<FlightControls>, t: AircraftState['telemetry'], heightAboveGround: number): void {
+    const state = frame.state;
+    getAttitude(state.orientation, this.attitude);
+
+    // Instruments.
+    setText(this.speed.value, (t.airspeed * 3.6).toFixed(0));
+    setText(this.altitude.value, Math.max(0, heightAboveGround).toFixed(0));
+    setText(this.vertical.value, (state.velocity.y >= 0 ? '+' : '') + state.velocity.y.toFixed(1));
+    setText(this.throttle.value, (controls.throttle * 100).toFixed(0));
+    this.throttleBar.set(controls.throttle);
+    const heading = (this.attitude.headingDeg + 360) % 360;
+    setText(this.headingValue, `${heading.toFixed(0).padStart(3, '0')}°`);
+    this.tapeStrip.style.transform = `translateX(${(TAPE_WIDTH / 2 - (heading + 180) * TAPE_PX_PER_DEG).toFixed(1)}px)`;
+    const critical = (stallAngles(spec.aero).positive * 180) / Math.PI;
+    const aoaDeg = (t.angleOfAttack * 180) / Math.PI;
+    setText(this.aoa, `${aoaDeg.toFixed(1)}° / ${critical.toFixed(0)}°`);
+    this.aoa.dataset['tone'] = aoaDeg > critical - 2 ? 'caution' : '';
+    setText(this.load, t.loadFactor.toFixed(1));
+
+    // Airframe.
+    if (spec.id !== this.lastClass) {
+      this.lastClass = spec.id;
+      setText(this.aircraftName, spec.displayName);
+    }
+    const hullPercent = (100 * state.hullHealth) / spec.combat.maxHullHealth;
+    setText(this.hullValue, hullPercent.toFixed(0));
+    const hullTone: Tone = hullPercent < 30 ? 'danger' : hullPercent < 60 ? 'caution' : 'accent';
+    this.hullBar.set(hullPercent / 100, hullTone);
+    this.hullValue.dataset['tone'] = hullTone;
+    const damage = state.shotDown ? 'Out of control' : hullPercent < 30 ? 'Critical damage' : hullPercent < 60 ? 'Damaged' : '';
+    show(this.damageTag, damage !== '');
+    if (damage) {
+      setText(this.damageTag, damage);
+      this.damageTag.dataset['tone'] = hullPercent < 30 || state.shotDown ? 'danger' : 'caution';
+      this.damageTag.classList.toggle('tag--pulse', hullPercent < 30 || state.shotDown);
+    }
+    const gear = state.gearPosition;
+    const lowering = gear > this.lastGear || (gear === this.lastGear && this.gearWasLowering);
+    this.gearWasLowering = lowering;
+    this.lastGear = gear;
+    setText(this.gear, spec.airframe.fixedGear ? 'FIXED' : gear >= 0.999 ? 'DOWN' : gear <= 0.001 ? 'UP' : `${lowering ? '▼' : '▲'} ${Math.round(gear * 100)}%`);
+    this.gear.dataset['tone'] = gear > 0.001 && gear < 0.999 ? 'caution' : '';
+    setText(this.flaps, `${frame.flapNotchName} ${Math.round(state.flapPosition * 100)}%`);
+    // Amber when the airflow is holding the flaps up.
+    this.flaps.dataset['tone'] = controls.flaps > 0 && state.flapPosition < controls.flaps - 0.05 && t.airspeed > spec.flaps.maxExtensionSpeed ? 'caution' : '';
+    setText(this.status, statusLine(state, controls));
+
+    // Weapons.
+    const ammoFraction = frame.fullAmmo > 0 ? frame.guns.ammo / frame.fullAmmo : 0;
+    setText(this.ammoValue, String(frame.guns.ammo));
+    setText(this.ammoFull, `/ ${frame.fullAmmo} rds`);
+    const ammoTone: Tone = frame.guns.ammo === 0 ? 'danger' : ammoFraction < 0.2 ? 'caution' : 'accent';
+    this.ammoBar.set(ammoFraction, ammoTone);
+    this.ammoValue.dataset['tone'] = ammoTone;
+    const heat = frame.guns.heat;
+    setText(this.heatValue, frame.guns.overheated ? 'OVERHEAT' : `${Math.round(heat * 100)}%`);
+    const heatTone: Tone = frame.guns.overheated ? 'danger' : heat > 0.7 ? 'caution' : 'accent';
+    this.heatBar.set(heat, heatTone);
+    this.heatValue.dataset['tone'] = heatTone === 'accent' ? '' : heatTone;
+    show(this.bombsRow, spec.combat.bombCapacity > 0);
+    if (spec.combat.bombCapacity > 0) setText(this.bombsValue, `${spec.combat.bombCapacity} racks · not armed yet`);
+    show(this.rearm, frame.serviceProgress !== null);
+    if (frame.serviceProgress !== null) {
+      this.rearmBar.set(frame.serviceProgress, 'ok');
+      const value = this.rearm.querySelector<HTMLElement>('.hud-row__value');
+      if (value) setText(value, `${Math.round(frame.serviceProgress * 100)}%`);
+    }
+    setText(this.weaponNote, frame.guns.ammo === 0 && frame.serviceProgress === null ? 'Land and stop at a friendly base to rearm' : '');
+
+    // Status.
+    setText(this.basesHeld, `${frame.basesHeld.held} / ${frame.basesHeld.total}`);
+    const base = frame.nearestBase;
+    setText(this.home, !base ? '—' : base.distance === 0 ? 'ON BASE' : `${formatDistance(base.distance)} · ${base.bearingDeg.toFixed(0).padStart(3, '0')}°`);
+    setText(this.targets, String(frame.targetsDestroyed));
+    this.updateObjective(frame.baseStatus);
+  }
+
+  private updateObjective(status: BaseStatus | null): void {
+    show(this.objective, status !== null);
     if (!status) return;
     let text: string;
     let fill: number;
+    let tone: Tone;
     if (status.captured) {
       const repairing = status.defencesLeft < status.defencesTotal;
-      text = repairing
-        ? `${status.name.toUpperCase()} · CAPTURED · yours: rearm here · crews repairing its defences`
-        : `${status.name.toUpperCase()} · YOURS · repaired: its AA gun defends it for you`;
+      text = repairing ? 'Captured · crews repairing its defences' : 'Yours · its AA gun defends it for you';
       fill = status.defencesTotal > 0 ? status.defencesLeft / status.defencesTotal : 1;
+      tone = 'friendly';
     } else if (status.capturing !== null) {
-      text = `${status.name.toUpperCase()} · CAPTURING ${Math.round(status.capturing * 100)}% · stay stopped`;
+      text = `Capturing ${Math.round(status.capturing * 100)}% · stay stopped`;
       fill = status.capturing;
+      tone = 'caution';
     } else if (status.defencesLeft === 0) {
-      text = `${status.name.toUpperCase()} · DEFENCELESS · land and stop on its runway to capture`;
+      text = 'Defenceless · land and stop on its runway';
       fill = 0;
+      tone = 'caution';
     } else {
-      text = `${status.name.toUpperCase()} · ${formatDistance(status.distance)} · DEFENCES ${status.defencesLeft}/${status.defencesTotal} (AA, hangar, fuel, radar)`;
+      text = `Defences ${status.defencesLeft}/${status.defencesTotal} · ${formatDistance(status.distance)}`;
       fill = 1 - status.defencesLeft / status.defencesTotal;
+      tone = 'danger';
     }
-    if (this.baseStatusText.textContent !== text) this.baseStatusText.textContent = text;
-    this.baseStatusBar.style.width = `${(fill * 100).toFixed(0)}%`;
-    this.baseStatus.dataset['state'] = status.captured ? 'captured' : status.defencesLeft === 0 ? 'open' : 'defended';
+    setText(this.objectiveName, status.name);
+    setText(this.objectiveState, text);
+    this.objectiveBar.set(fill, tone);
+    this.objective.dataset['state'] = status.captured ? 'captured' : status.defencesLeft === 0 ? 'open' : 'defended';
   }
 
   /**
@@ -440,22 +588,22 @@ export class FlightHud {
    * low with a call for power. Line-up: within 1.2 deg is on the centreline.
    */
   private updateApproach(guide: ApproachGuide | null): void {
-    toggle(this.approach, guide !== null);
+    show(this.approach, guide !== null);
     if (!guide) return;
     const d = guide.glideDeviationDeg;
     const glide: [string, string] =
-      d > 0.8 ? ['HIGH', 'warn'] : d > 0.3 ? ['A LITTLE HIGH', 'ok'] : d >= -0.3 ? ['ON GLIDE SLOPE', 'good'] : d >= -0.8 ? ['A LITTLE LOW', 'ok'] : ['LOW · POWER!', 'bad'];
+      d > 0.8 ? ['High', 'caution'] : d > 0.3 ? ['A little high', ''] : d >= -0.3 ? ['On glide slope', 'ok'] : d >= -0.8 ? ['A little low', ''] : ['Low · power!', 'danger'];
     const l = guide.lineupDeg;
-    const lineup: [string, string] = Math.abs(l) <= 1.2 ? ['ON CENTRELINE', 'good'] : l > 0 ? ['COME LEFT', l > 4 ? 'warn' : 'ok'] : ['COME RIGHT', l < -4 ? 'warn' : 'ok'];
+    const lineup: [string, string] = Math.abs(l) <= 1.2 ? ['On centreline', 'ok'] : l > 0 ? ['Come left', l > 4 ? 'caution' : ''] : ['Come right', l < -4 ? 'caution' : ''];
     const cut = guide.kind === 'carrier' && guide.distance < 70 && Math.abs(d) < 0.8 && Math.abs(l) < 2.5;
-    const label = guide.kind === 'carrier' ? 'LSO' : 'APPROACH';
+    const name = guide.kind === 'carrier' ? 'LSO' : 'Approach';
     const parts = cut
-      ? `<span class="hud-approach-label">${label}</span><span data-tone="good">CUT · TOUCH DOWN</span>`
-      : `<span class="hud-approach-label">${label}</span><span>${formatDistance(guide.distance)}</span><span data-tone="${glide[1]}">${glide[0]}</span><span data-tone="${lineup[1]}">${lineup[0]}</span>`;
+      ? `<span class="ui-label">${name}</span><span data-tone="ok">Cut · touch down</span>`
+      : `<span class="ui-label">${name}</span><span class="ui-value">${formatDistance(guide.distance)}</span><span data-tone="${glide[1]}">${glide[0]}</span><span data-tone="${lineup[1]}">${lineup[0]}</span>`;
     if (this.approach.innerHTML !== parts) this.approach.innerHTML = parts;
   }
 
-  /** Shows a grade for a few seconds after each touchdown: "TOUCHDOWN 1.2 m/s · SMOOTH". */
+  /** Shows a grade for a few seconds after each touchdown: "Touchdown 1.2 m/s · smooth". */
   private updateTouchdownMessage(deltaSeconds: number, state: Readonly<AircraftState>): void {
     if (state.touchdownCount !== this.lastSeenTouchdown) {
       const isNewTouchdown = state.touchdownCount > this.lastSeenTouchdown;
@@ -464,14 +612,28 @@ export class FlightHud {
         const sink = state.lastTouchdownSinkRate;
         const grade = TOUCHDOWN_GRADES.find((g) => sink <= g.maxSinkRate) ?? TOUCHDOWN_GRADES[TOUCHDOWN_GRADES.length - 1];
         const damage = state.lastTouchdownDamage > 0 ? ` · hull −${state.lastTouchdownDamage.toFixed(0)}` : '';
-        const brakeKey = KEY_BINDINGS.brake.map(formatKeyCode).join('/');
+        const brakeKey = this.bindings.brake.map(formatKeyCode).join('/') || 'the brake key';
         const stop = state.hookEngaged ? ' · caught a wire' : ` · hold ${brakeKey} to brake`;
         this.showMessage(`TOUCHDOWN ${sink.toFixed(1)} m/s · ${grade?.label ?? ''}${damage}${stop}`, grade?.tone ?? 'ok', TOUCHDOWN_MESSAGE_SECONDS);
       }
     }
-    this.touchdownMessageTimer = Math.max(0, this.touchdownMessageTimer - deltaSeconds);
-    toggle(this.touchdownMessage, this.touchdownMessageTimer > 0 && !state.crashed);
+    this.messageTimer = Math.max(0, this.messageTimer - deltaSeconds);
+    show(this.message, this.messageTimer > 0 && !state.crashed);
   }
+}
+
+/** The heading tape's strip: ticks every 5 degrees (a CSS gradient), labels every 30, from -180 to 540 so it never runs out. */
+function buildTapeStrip(): HTMLElement {
+  const strip = h('div', 'hud-tape__strip');
+  strip.style.width = `${720 * TAPE_PX_PER_DEG}px`;
+  const cardinal: Record<number, string> = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+  for (let deg = -180; deg <= 540; deg += 30) {
+    const wrapped = ((deg % 360) + 360) % 360;
+    const mark = h('span', cardinal[wrapped] ? 'hud-tape__mark hud-tape__mark--cardinal' : 'hud-tape__mark', cardinal[wrapped] ?? String(wrapped / 10).padStart(2, '0'));
+    mark.style.left = `${(deg + 180) * TAPE_PX_PER_DEG}px`;
+    strip.append(mark);
+  }
+  return strip;
 }
 
 /** What the aircraft is doing, in a few words: on the catapult, held by a wire, braking, airborne... */
@@ -492,20 +654,8 @@ function formatDistance(metres: number): string {
   return metres < 1000 ? `${(metres / 10).toFixed(0)}0 m` : `${(metres / 1000).toFixed(1)} km`;
 }
 
-function element(tag: string, className: string, text?: string): HTMLElement {
-  const el = document.createElement(tag);
-  el.className = className;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-
 /** Centres a HUD symbol on a screen point, or hides it. */
 function placeMarker(el: HTMLElement, position: ScreenPoint | null): void {
-  toggle(el, position !== null);
+  show(el, position !== null);
   if (position) el.style.transform = `translate(${position.x.toFixed(1)}px, ${position.y.toFixed(1)}px) translate(-50%, -50%)`;
-}
-
-function toggle(el: HTMLElement, visible: boolean): void {
-  if (el.hidden === !visible) return;
-  el.hidden = !visible;
 }

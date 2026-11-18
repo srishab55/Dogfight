@@ -66,24 +66,50 @@ Open <http://localhost:5173>. Saving any file reloads the page.
 Run only **one** dev server at a time: two share Vite's dependency cache and
 can break each other (fix: stop both, run `npm run dev` again).
 
-## Controls
+## Menus
 
-**The hangar** opens when the game starts, and with **Esc** at any time (the
-game pauses). It is where you set everything up, so the flight keys stay few:
+The game opens at the **main menu**, over your aircraft parked at its base.
+Your callsign is top right (click to change it). **PLAY** opens the hangar;
+**Multiplayer** shows the lobby (online play needs the game server: Phase 5);
+**Settings** and **Controls** open the settings. Every screen works with the
+mouse or the keyboard (Tab, arrows, Enter, Esc to go back), and every screen
+pauses the game.
 
-- **Aircraft**: the seven types (shortcuts **1 – 7**), each with its figures (top and stall speed, climb, turn, guns, armour, gear, carriers). Your aircraft is on show behind the panels, the camera slowly circling it (drag to look round).
+**The hangar** (aircraft selection) is where you set up a flight, so the
+flight keys stay few:
+
+- **Aircraft**: the seven types (shortcuts **1 – 7**), each with its class and what it's for. Bars compare it with the rest of the fleet (speed, climb, turn rate, armour, firepower, bombs) beside the exact figures, and its loadout. Your aircraft is on show between the panels, the camera slowly circling it (drag to look round).
 - **Paint**: ten schemes, remembered for each type; your team colour stays on the markings.
-- **Start from**: a map of your bases, captured ones too (click one, or **← →**). Every type but the Heavy Bomber can start on a carrier's catapult.
+- **Deploy**: a map of your bases, captured ones too (click one, or **← →**). Every type but the Heavy Bomber can start on a carrier's catapult.
 - **Start**: on the runway, in the air (800 m), or on final for landing practice.
-- **Settings**: steering (easy turns or direct roll), mouse sensitivity, sound.
-- **FLY** (**Enter**) starts a flight; **RESUME** (**Esc**) carries on the one you paused. After a crash, **Enter** flies again straight away.
+- **FLY** (**Enter**).
 
-In flight:
+**Esc in flight pauses**: Resume, Change aircraft / base (the hangar: FLY
+starts a new flight, Back returns to the paused one), Settings, Controls,
+Audio, Return to lobby (Phase 5) and **Exit to main menu**, which ends the
+session with an **after-action report**: targets destroyed (by type), damage
+dealt, hit accuracy, deaths (shot down or crashed), bases captured, sorties
+and flying time. A winner and team scores arrive with the team rules (Phase 6).
+
+**After a crash** the HUD says what happened; **Enter** flies again at once
+with the same choices. Otherwise the **respawn screen** opens after 1.5 s
+(**Esc** opens it sooner): the hangar, with the cause and your last
+sortie's figures.
+
+**Settings** apply as you change them and are remembered in this browser:
+
+- **Graphics**: a Low / Medium / High preset, or set render resolution (50–100 %), antialiasing (off, 2×, 4×), shadows (off, 1024, 2048) and bloom yourself.
+- **Audio**: sound on or off, master volume.
+- **Controls**: steering (easy turns or direct roll), mouse aim sensitivity, camera drag speed, and every flight key rebindable (click Change, press the key; Esc and Enter stay fixed).
+- **Gameplay**: target markers, base labels and beacons, auto-land offers.
+- **Accessibility**: HUD scale (capped so it always fits the window), reduced motion (follows your system unless you choose), damage flash, camera shake.
+
+In flight (the default keys):
 
 | Key | Action |
 |---|---|
 | **W / S** | Pitch up / down |
-| **A / D** | Turn left / right: the aircraft banks into the turn and levels itself when you let go (direct roll can be chosen in the hangar) |
+| **A / D** | Turn left / right: the aircraft banks into the turn and levels itself when you let go (direct roll can be chosen in Settings) |
 | **Q / E** | Rudder left / right (steers the nose wheel on the ground) |
 | **↑ / ↓** | Throttle up / down |
 | **B** | Brakes (hold): wheel brakes on the ground, air brakes in the air |
@@ -93,8 +119,8 @@ In flight:
 | **C** | Camera: chase → cockpit → orbit |
 | **P** | Auto-land at the nearest base within 10 km (any team; every type but the Heavy Bomber can land on a carrier). The HUD offers it within 5 km. **P** or any flight key takes over |
 | **N** | Map: corner → big → off (remembered) |
-| **Esc** | The hangar (pauses the game) |
-| **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** lets go of the mouse and opens the hangar |
+| **Esc** | Pause menu |
+| **Mouse** | Click the view to fly with the mouse: the aircraft flies towards the aim circle. **Esc** lets go of the mouse and pauses |
 | Mouse drag / wheel | Look round / zoom (orbit camera and the hangar) |
 | **`** | Debug stats (shown by default in dev) |
 
@@ -102,15 +128,17 @@ Keys ramp the control surfaces smoothly: tap for small corrections, hold for
 full deflection. In mouse flight, holding any flight key overrides the mouse
 on that axis. The landing gear is automatic: it comes up soon after take-off and
 down as you come in to land (the HUD's GEAR line shows it); touching down with it up
-is a belly landing. Bombs arrive later in Phase 4 (on a key other than B). Bindings and mouse
-sensitivity live in [client/src/config/controls.ts](client/src/config/controls.ts).
+is a belly landing. Bombs arrive later in Phase 4 (on a key other than B). The default
+bindings live in [client/src/config/controls.ts](client/src/config/controls.ts); players
+rebind them in Settings → Controls.
 
 Watch the airframe: ailerons, elevators, rudder and flaps all move with your inputs.
 
 **Carrier tips:** on the catapult, push the throttle to full (**↑**) and the
 catapult throws you off the bow with take-off flaps set. To land back on,
-press **L** (or fly the approach yourself): landing flaps lower the hook,
-and the **LSO** line under the title calls your approach (distance, high or
+press **P** (auto-land), start on Landing in the hangar, or fly the approach
+yourself: landing flaps lower the hook,
+and the **LSO** line under the map at the top calls your approach (distance, high or
 low, come left or right, then CUT). Touch down anywhere in the first half of
 the deck and the hook stops you in about 50 m; miss every wire and the crash
 barrier stops you (with some damage). Throttle to idle to be released.
@@ -124,8 +152,8 @@ carriers, every base in its owner's colour, and you.
 **Attacking and capturing Red's airfield:** it's defended by one big AA gun
 on a flak platform with a tall red flag, and has a hangar, a fuel depot and
 a radar station beside the north end of the runway (plus parked aircraft).
-Red brackets on the HUD mark them, and the status line under the title
-counts the defences left. What you destroy stays destroyed. Destroy the AA
+Red brackets on the HUD mark them, and the Status panel (top left) counts
+the defences left. What you destroy stays destroyed. Destroy the AA
 gun, hangar, fuel depot and radar and the base is defenceless: land, stop on
 its runway for 5 seconds, and it's captured. (Landing heading north, the
 radar is a few hundred metres ahead: a touch of rudder and you can shoot it

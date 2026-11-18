@@ -51,11 +51,14 @@ export class BaseBeacons {
     });
   }
 
+  /** The Gameplay setting: show the beacons (with the base labels) or not. */
+  visible = true;
+
   update(views: readonly BaseView[], cameraPosition: Vector3, time: number): void {
     const c = BEACON_CONFIG;
     for (const beacon of this.beacons) {
       const view = views.find((v) => v.base.id === beacon.baseId);
-      if (!view || view.state === 'gone') {
+      if (!view || view.state === 'gone' || !this.visible) {
         beacon.mesh.setEnabled(false);
         continue;
       }

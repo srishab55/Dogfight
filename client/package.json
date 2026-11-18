@@ -13,7 +13,10 @@
   "dependencies": {
     "@babylonjs/core": "^9.36.0",
     "@babylonjs/materials": "^9.36.0",
-    "@dogfight/shared": "*"
+    "@dogfight/shared": "*",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/rajdhani": "^5.3.0"
   },
   "devDependencies": {
     "vite": "^8.3.8"

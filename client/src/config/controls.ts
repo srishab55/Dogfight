@@ -8,8 +8,9 @@
  * Guns are on Space; wheel brakes on B (IL-2's key). Bombs arrive with the rest of Phase 4, on another key. The mouse can
  * fly the aircraft too (MOUSE_FLIGHT_CONFIG below). X opens and closes the
  * dive brakes (only the Dive Bomber has them). Everything else (aircraft,
- * paint, base, how to start, steering, mouse, sound) is set in the hangar
- * (Esc), so the flight keys stay few.
+ * paint, base and how to start in the hangar; steering, mouse, sound and
+ * these keys in Settings) is set from the menus, so the flight keys stay few.
+ * Players can rebind the flight keys (core/Settings.ts); these are the defaults.
  */
 export const KEY_BINDINGS = {
   // ── In flight ──
@@ -29,13 +30,13 @@ export const KEY_BINDINGS = {
   cycleCamera: ['KeyC'],
   autoLand: ['KeyP'],
   toggleMap: ['KeyN'],
-  /** The hangar: aircraft, paint, base, start, settings and the controls. */
+  /** The pause menu in flight; back out of any screen. */
   openHangar: ['Escape'],
   toggleDebugOverlay: ['Backquote'],
   // ── In the hangar (shortcuts for its buttons) ──
   pickerPrevious: ['ArrowLeft'],
   pickerNext: ['ArrowRight'],
-  /** FLY; after a crash, also flies again straight from the crash screen. */
+  /** FLY (and the menus' main button); after a crash, flies again straight from the crash screen. */
   pickerConfirm: ['Enter', 'NumpadEnter'],
   selectInterceptor: ['Digit1'],
   selectFighterBomber: ['Digit2'],
@@ -113,18 +114,25 @@ export const MOUSE_FLIGHT_CONFIG = {
   },
 } as const;
 
-/** The flight keys, as the hangar lists them. Generated from the bindings, so it stays correct when keys change. */
-export const CONTROLS_HINT_ROWS: ReadonlyArray<{ readonly actions: readonly InputAction[]; readonly label: string }> = [
-  { actions: ['pitchUp', 'pitchDown'], label: 'Pitch up / down' },
-  { actions: ['rollLeft', 'rollRight'], label: 'Turn left / right (easy steering: it levels itself)' },
-  { actions: ['yawLeft', 'yawRight'], label: 'Rudder (steers on the ground)' },
-  { actions: ['throttleUp', 'throttleDown'], label: 'Throttle' },
-  { actions: ['brake'], label: 'Brakes (hold): wheels on the ground, air brakes in the air' },
-  { actions: ['flapsDown', 'flapsUp'], label: 'Flaps down / up a notch' },
-  { actions: ['fireGuns'], label: 'Fire guns (hold)' },
-  { actions: ['toggleDiveBrakes'], label: 'Dive brakes (Dive Bomber)' },
-  { actions: ['cycleCamera'], label: 'Camera: chase / cockpit / orbit' },
-  { actions: ['autoLand'], label: 'Auto-land at the nearest base' },
-  { actions: ['toggleMap'], label: 'Map: corner / big / off' },
-  { actions: ['openHangar'], label: 'Hangar (pauses the game)' },
-];
+/** What each rebindable flight key does, as the Settings screen lists it. */
+export const ACTION_LABELS: Readonly<Partial<Record<InputAction, string>>> = {
+  pitchUp: 'Pitch up',
+  pitchDown: 'Pitch down',
+  rollLeft: 'Turn / roll left',
+  rollRight: 'Turn / roll right',
+  yawLeft: 'Rudder left',
+  yawRight: 'Rudder right',
+  throttleUp: 'Throttle up',
+  throttleDown: 'Throttle down',
+  brake: 'Brakes (hold): wheels, or air brakes in flight',
+  flapsDown: 'Flaps down a notch',
+  flapsUp: 'Flaps up a notch',
+  fireGuns: 'Fire guns (hold)',
+  toggleDiveBrakes: 'Dive brakes (Dive Bomber)',
+  cycleCamera: 'Camera: chase / cockpit / orbit',
+  autoLand: 'Auto-land at the nearest base',
+  toggleMap: 'Map: corner / large / off',
+};
+
+/** Keys a flight action can't take: they run the menus, move focus or open the debug overlay. */
+export const RESERVED_KEYS: readonly string[] = ['Escape', 'Enter', 'NumpadEnter', 'Tab', 'Backquote', 'MetaLeft', 'MetaRight'];

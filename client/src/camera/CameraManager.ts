@@ -33,6 +33,8 @@ export class CameraManager {
   /** The hangar's slowly circling view is on, and the mode to return to after it. */
   private showcase = false;
   private modeBeforeShowcase: CameraMode = 'chase';
+  private showcaseRadius: number | null = null;
+  private readonly baseAngularSensibility: number;
   private readonly effects = new CameraEffects();
 
   constructor(
@@ -59,6 +61,7 @@ export class CameraManager {
     this.orbit.wheelDeltaPercentage = config.wheelDeltaPercentage;
     // Mouse only: the orbit camera's default arrow-key rotation would fight the throttle.
     this.orbit.inputs.removeByType('ArcRotateCameraKeyboardMoveInput');
+    this.baseAngularSensibility = this.orbit.angularSensibilityX;
 
     scene.activeCamera = this.chase.camera;
   }
@@ -87,7 +90,10 @@ export class CameraManager {
    */
   setShowcase(on: boolean, spec?: AircraftClassSpec): void {
     if (on) {
-      if (!this.showcase) this.modeBeforeShowcase = this.currentMode;
+      if (!this.showcase) {
+        this.modeBeforeShowcase = this.currentMode;
+        this.orbit.beta = degreesToRadians(72);
+      }
       this.showcase = true;
       this.setMode('orbit');
       this.orbit.useAutoRotationBehavior = true;
@@ -97,8 +103,8 @@ export class CameraManager {
         rotation.idleRotationWaitTime = 2_500;
         rotation.idleRotationSpinupTime = 1_500;
       }
-      if (spec) this.orbit.radius = 2.1 * wingSpan(spec) + 6;
-      this.orbit.beta = degreesToRadians(72);
+      // Frame the aircraft: eased towards in update(), so changing aircraft glides rather than jumps.
+      if (spec) this.showcaseRadius = 2.1 * wingSpan(spec) + 6;
     } else if (this.showcase) {
       this.showcase = false;
       this.orbit.useAutoRotationBehavior = false;
@@ -117,6 +123,13 @@ export class CameraManager {
     this.chase.setTargetScale(size);
     this.mouseAim.setTargetScale(size);
     this.cockpit.setEye(spec.airframe.cockpitEye, spec.airframeScale);
+  }
+
+  /** The Controls setting: orbit camera (and hangar view) drag speed, 1 = default. */
+  setOrbitSensitivity(sensitivity: number): void {
+    // Babylon's "sensibility" is pixels per radian: higher is slower.
+    this.orbit.angularSensibilityX = this.baseAngularSensibility / sensitivity;
+    this.orbit.angularSensibilityY = this.baseAngularSensibility / sensitivity;
   }
 
   /** Jump the cameras to the target without smoothing (spawn, teleport). */
@@ -148,6 +161,11 @@ export class CameraManager {
       const camera = this.currentMode === 'cockpit' ? this.cockpit.camera : aim ? this.mouseAim.camera : this.chase.camera;
       const baseFov = this.currentMode === 'cockpit' ? COCKPIT_CAMERA_CONFIG.fieldOfViewDegrees : CHASE_CAMERA_CONFIG.fieldOfViewDegrees;
       this.effects.apply(camera, baseFov, deltaSeconds, effects);
+    }
+    if (this.showcase && this.showcaseRadius !== null) {
+      const t = Math.min(1, deltaSeconds * 4);
+      this.orbit.radius += (this.showcaseRadius - this.orbit.radius) * t;
+      if (Math.abs(this.showcaseRadius - this.orbit.radius) < 0.05) this.showcaseRadius = null;
     }
     // Mutating the target in place keeps the orbit's angles and zoom. Assigning
     // a new target instead would recompute them from the camera's old position.

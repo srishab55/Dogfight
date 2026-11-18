@@ -13,7 +13,7 @@ None known.
 |---|---|---|---|
 | L3 | Faint flat band just below the horizon when inverted at altitude | Minor visual | Phase 3 (sky/clouds) |
 | L4 | No environment map: metallic or glossy surfaces have nothing to reflect | Paint is kept non-metallic for now | Phase 3 |
-| L7 | The ground shows the aircraft's shadow only within ~600 m of it | None in practice | By design |
+| L7 | The ground shows the aircraft's shadow only within ~600 m of it (and only inside the 160 m shadow square, L66) | None in practice | By design |
 | L8 | Render resolution is re-read only on window `resize`; moving between displays may not fire it | Slightly blurry or sharp until next resize | Later (`matchMedia` resolution listener) |
 | L10 | Main JS chunk is 1.79 MB (437 KB gzipped), mostly Babylon.js; the post-processing pipeline and `@babylonjs/materials` added ~0.5 MB in Phase 3. Vite prints a chunk-size warning on build | ~0.4 s extra load on a slow connection; the warning is harmless | Phase 8 (code-split the rendering pipeline) |
 | L11 | No Babylon Inspector, to keep dependencies light | Debug via the overlay and DevTools (`window.dogfight` in dev) | Add if Phase 3 material work needs it |
@@ -59,8 +59,12 @@ None known.
 | L58 | Taking off from another base (J) moves you there at once in a fresh, rearmed aircraft, rather than you flying there; it's offered only when stopped or crashed | Quick relocation | By design (your request) |
 | L59 | The Triplane and Biplane have tricycle gear like every type (history: tail-draggers), and the Triplane has an invisible "flap" lever that adds lift | Easier ground handling and landings | By design (D29) |
 | L60 | The new types share the fighters' guns and hit model; the Fighter-Bomber's bombs are only to look at | No bombs yet | Phase 4 bombs |
-| L61 | The hangar pauses the game: fine on your own, but a shared world can't stop | Nothing yet | Phase 5 (the hangar won't pause; you leave your aircraft safe at a base, or it keeps flying) |
-| L62 | With mouse flight, the browser uses the first Esc to let go of the mouse; the game opens the hangar on that same press | One press | By design |
+| L61 | Every screen (pause, hangar, settings) pauses the game: fine on your own, but a shared world can't stop | Nothing yet | Phase 5 (the menus won't pause; you leave your aircraft safe at a base, or it keeps flying) |
+| L62 | With mouse flight, the browser uses the first Esc to let go of the mouse; the game opens the pause menu on that same press | One press | By design |
+| L63 | The lobby is a layout only: rooms, room codes, the Red team, ready checks and "Return to lobby" are disabled with the reason, and the server status says offline | No online play | Phase 5 (game server), Phase 6 (teams) |
+| L64 | The after-action report has no winner, team score, assists or bombing damage ("—" with the phase) | Personal figures only | Phase 4 (bombs), 5 (other players), 6 (team rules) |
+| L65 | Exiting to the main menu ends the session's figures but not the world: destroyed targets and captured bases stay as they are until the page is reloaded | The next session starts where the last left off | Phase 6 (matches with a start and an end) |
+| L66 | The shadow map covers 160 m around the aircraft, so buildings further away cast no shadow, and the runways show only shadows cast within that square | Fine from the air | By design (D51) |
 | L55 | The gear is automatic only (no lever), and travels in 3 s (real: 5-10 s). In a slow, low, descending dogfight turn it may come down until you climb or speed up | A little extra drag | By design |
 | L48 | Handling is brisker than the real aircraft (roll rates about 35% up, fighters' g-limits +1) | Less historical | By design (your request) |
 | L49 | The strafing aim point and the mouse drop correction assume a round at muzzle velocity with no drag; the wing guns converge at 300 m | Small errors beyond about 800 m | Fine at strafing range |
@@ -85,6 +89,8 @@ None known.
 
 | Issue | Found | Fix |
 |---|---|---|
+| The aircraft cast no visible shadow: base buildings, guns and carriers had joined the casters, and the map fitted around all of them stretched across the whole 12 km map | Testing the Shadows setting (UI redesign) | Fixed 160 m shadow square around the aircraft (D51) |
+| Turning shadows off tripped WebGL "sampler type" errors for a few frames | Testing the Shadows setting | Off renders an empty map once instead of switching the light's shadows off |
 | Orbit camera could be dragged underground | Phase 0 browser test (camera at y = −4.9 m) | Beta limit computed per frame from target height and zoom (`CameraManager.keepOrbitAboveGround`) |
 | Hard crease line along the horizon | Phase 0 screenshots | Sky gradient changed from `e^0.45` (infinite slope at the horizon) to `1 − (1 − e)^k` |
 | 4% of the ground colour visible where the sky box cuts it off | Phase 0 screenshots | Far plane 25 km → 30 km, sky box 16.5 km, ground 50 km: >99.5% haze at the cut |

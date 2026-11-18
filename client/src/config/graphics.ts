@@ -68,8 +68,15 @@ export const LIGHTING_CONFIG = {
 
 export const SHADOW_CONFIG = {
   enabled: true,
-  /** Shadow map resolution in texels. The map covers only the aircraft, so 1024 is very sharp. */
+  /** Shadow map resolution in texels (the Medium setting; High doubles it). */
   mapSize: 1024,
+  /**
+   * Width of the square the shadow map covers around the aircraft (m):
+   * 1024 texels over 160 m is 16 cm each. Fitting the map to the casters
+   * instead stretched it over every building on the map, and the aircraft's
+   * shadow shrank to nothing.
+   */
+  frustumSize: 160,
   /** How far the shadow "camera" sits behind the aircraft, along the sun direction (m). */
   lightDistance: 300,
   /** Depth range of the shadow camera (m). The ground only receives the shadow while within this range. */

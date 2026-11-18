@@ -36,13 +36,14 @@ and **H** to hide the controls list.
 | Space | Fire guns (hold) |
 | Mouse | Click the view: fly with the mouse (aim circle). Esc releases |
 | C | Camera: chase → cockpit → orbit |
-| Esc | The hangar (pauses): aircraft (1 – 7), paint, base, start (runway, air start, landing practice), settings. FLY (Enter) |
+| Esc | Pause menu: resume, change aircraft / base (the hangar: aircraft 1 – 7, paint, base, start), settings, exit. FLY (Enter) |
 
 **Since the hangar arrived (2026-11-18):** where a card below says **R**
 (respawn), **T** (air start), **L** (landing practice), **1 – 7** (aircraft),
 **O** (paint), **J** (base), **K** (steering), **M** (sound), **[ ]** (mouse)
-or **H** (help), do it in the hangar instead (**Esc**), then FLY. After a
-crash, **Enter** flies again with the same choices.
+or **H** (help), do it in the hangar instead (**Esc** → Change aircraft /
+base), then FLY; **K**, **M** and **[ ]** are in Settings. After a crash,
+**Enter** flies again with the same choices.
 
 Keys ramp the controls: a **tap** is a small correction, a **hold** is full
 deflection (about 0.3 s to reach it). Fly with taps.
@@ -480,18 +481,40 @@ the airframe; the blue markings stay. Switching away and back keeps your choice.
 
 ## Card 39: The hangar
 
-**Do:** Load the game. Click through the aircraft, a paint, a base on the map,
-and each start, then FLY. In the air, press **Esc**, look at another
-aircraft, then **Esc** again. Press **Esc**, change the steering, mouse and
-sound settings, and RESUME. Crash, then press **Enter**.
-**Expect:** The game opens in the hangar with your aircraft on show, the
-camera circling it. Choosing an aircraft or base (while stopped) moves the
-parked aircraft there; the figures change with the type; paint changes it at
-once. FLY starts as chosen. Esc in flight pauses (nothing moves) and offers
-RESUME; looking at another type doesn't touch your flight. The settings take
-effect and are remembered. On the crash screen Enter flies again. In flight
-only the flying keys work (R, T, L, 1-7, O, J, K, M and H do nothing).
+**Do:** Load the game and press PLAY. Click through the aircraft, a paint, a
+base on the map, and each start, then FLY. In the air, press **Esc**, choose
+Change aircraft / base, look at another aircraft, then Back and Resume.
+Crash, then press **Enter**.
+**Expect:** The hangar shows your aircraft between its panels, the camera
+circling it. Choosing an aircraft or base (while stopped) moves the parked
+aircraft there; the figures and bars change with the type; paint changes it
+at once. FLY starts as chosen. Esc in flight pauses (nothing moves); looking
+at another type doesn't touch your flight. On the crash screen Enter flies
+again. In flight only the flying keys work (R, T, L, 1-7, O, J, K, M and H
+do nothing). Settings: card 40.
 **Pass:** Setting up is all in the hangar, and flying needs only the flight keys.
+
+## Card 40: Menus and settings (UI redesign)
+
+**Do:** Load the game at 1366×768 or larger. Edit the callsign (top right).
+Open Settings: choose Low, then High; turn Shadows off and on; rebind Pitch
+up to another key (Change, then press it), fly with it, then Reset keys; set
+HUD scale to the largest; turn Reduced motion on. Open Multiplayer, then
+Back. PLAY: pick aircraft with 1 – 7 and the mouse, a paint, a base (click,
+or ← →), a start; FLY. In flight press **Esc**, try every item; Change
+aircraft / base, then Back. Crash and wait. From the respawn screen press
+**Esc**, then Exit to main menu.
+**Expect:** Every screen works with mouse and keyboard (Tab, arrows, Enter,
+Esc) and nothing overlaps. Low makes the 3D view softer and drops shadows
+and glow; High sharpens shadows. The rebound key flies; Esc during "Press a
+key…" cancels only that. The HUD grows but never overlaps; with reduced
+motion nothing animates (no radar sweep, no pulsing). The lobby says
+offline with its online controls disabled. Esc pauses (nothing moves);
+Back from the hangar returns to the paused flight. 1.5 s after a crash the
+respawn screen shows the cause and your sortie; Enter flies again. Exit
+shows the after-action report with your real figures, then the main menu.
+**Pass:** Everything you change in a menu changes the game, and every menu
+can be left with Esc.
 
 ## Card 34: Retractable gear
 
@@ -535,4 +558,5 @@ ALT, AoA, G), plus the debug overlay if possible.
 | 35 | headless Chrome (client only): labels, map modes, amber when defenceless |
 | 36 | `bases.test.ts`: where you can start from · `carrier.test.ts`: land fighters on the catapult and wires |
 | 39 | headless Chrome (client only): hangar at load, choices, FLY, Esc pause and RESUME, preview, settings, Enter after a crash, old keys inert |
+| 40 | headless Chrome (client only), 1366×768 and 1920×1080: every screen's layout (inside the window, no overlaps), keyboard focus and arrows, presets applied (shadow casters, samples, bloom, resolution), rebinding and Esc while capturing, HUD scale capped to fit (no zone overlap at the largest), reduced motion, lobby disabled, pause stops physics, respawn after 1.5 s counting the loss once, report, 60 FPS, no console errors |
 | 34 | `landingGear.test.ts`: up after take-off and catapult launch · down before touchdown · stays down through a small climb · stays up fast and in cruise · drag · belly landing |

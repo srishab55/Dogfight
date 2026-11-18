@@ -2,10 +2,24 @@
 
 Legend: ✅ done and verified · 🔄 in progress · ⬜ not started
 
-**Current status:** The hangar is in (your request): aircraft, paint,
-base, start and settings are chosen there, and the flight keys are down to
-the flying ones. Remaining in Phase 4: bombs. Waiting for your test
-(FLIGHT_TEST.md card 39) and confirmation.
+**Current status:** The interface redesign is in (your brief): a design
+system, a zoned HUD, and the main menu, hangar (aircraft selection and
+respawn), pause menu, settings, lobby layout and after-action report.
+Remaining in Phase 4: bombs. Waiting for your test (FLIGHT_TEST.md card 40)
+and confirmation.
+
+## Interface redesign ✅ (your brief, 2026-11-18)
+
+- ✅ Design system: tokens for colour (dark slate surfaces; cyan selection, amber caution, red danger and enemy, blue friendly), type (Rajdhani, Inter, JetBrains Mono; self-hosted, OFL), spacing, shape, motion and layers; one stylesheet of components (buttons, menu items, tabs, segmented controls, switches, sliders, dropdowns, bars, stat rows, cards, tags, chips, key labels, tooltips, modals, notifications) built by `ui/components.ts`
+- ✅ HUD in zones: status top left (bases held, home base, targets, objective), radar top centre (with a sweep), airframe bottom left (hull bar and damage state, gear, flaps), instruments bottom centre (airspeed, altitude, vertical speed, heading tape, throttle, AoA, g), weapons bottom right (ammunition, gun heat, bombs, rearming); alerts, approach guide, prompts and messages in the centre band; no overlaps at 1366×768 or 1920×1080
+- ✅ Main menu over the parked aircraft: PLAY, Multiplayer, Settings, Controls; callsign (editable, remembered); connection status (offline)
+- ✅ Hangar redesigned as aircraft selection: cards with class tags, bars comparing each type with the fleet plus exact figures, loadout, paint swatches, the deploy map and start; the camera eases between aircraft sizes. After a crash it becomes the respawn screen (cause, aircraft, time in the air, kills, rounds left), opening by itself after 1.5 s; Enter still flies again at once
+- ✅ Pause menu (Esc): Resume, Change aircraft / base, Settings, Controls, Audio, Return to lobby (Phase 5, disabled), Exit to main menu
+- ✅ Settings that all change the game: graphics preset, render resolution, antialiasing, shadows, bloom; sound and master volume; steering, mouse aim sensitivity, camera drag speed and rebinding of every flight key (with conflict notices and reset); target markers, base labels and beacons, auto-land offers; HUD scale (capped to fit the window), reduced motion, damage flash, camera shake. Remembered in this browser
+- ✅ Lobby layout with the truth: offline, one player (you, Blue), room and ready controls disabled with the phase they arrive in
+- ✅ After-action report on Exit: targets destroyed by type, damage dealt, hit accuracy, deaths (shot down / crashed), bases captured, sorties, flying time; winner, team score, assists and bombing shown as "—" with their phase
+- ✅ Found and fixed while testing the Shadows setting: the aircraft's shadow had vanished (the map was stretched over every building on the map); now a sharp 160 m square around the aircraft
+- Verified: 441 tests (1 skipped by design), typecheck, build, and headless Chrome at 1366×768 and 1920×1080: 36 checks per size (every screen inside the window without overlaps, keyboard focus and arrows, presets reaching the renderer, rebinding, Esc during capture, HUD scale cap with no zone overlap at the largest, reduced motion, pause stopping physics, respawn after 1.5 s counting the loss once, report, Continue); 60 FPS; no console errors
 
 ## Extras added along the way
 
@@ -19,7 +33,7 @@ the flying ones. Remaining in Phase 4: bombs. Waiting for your test
 
 ## Milestone: islands, carriers and new aircraft ✅ (your request, 2026-11-16)
 
-- ✅ "Dogfight Squadron" title along the top of the screen (and the page title)
+- ✅ "Dogfight Squadron" title along the top of the screen (and the page title); since the redesign, the main menu's logo
 - ✅ Island map: three islands (Blue, Red, mountainous central) in the sea, ragged coastlines, beaches, woods on the hillsides, fields on the plains; runways on flattened pads with clear approaches. 9 tests
 - ✅ Sea: one-pass custom shader. Turquoise shallows, deep blue offshore, surf, sky reflection, sun glint, waves that fade before they alias
 - ✅ Two anchored carriers (Blue and Red): hull, deck markings, island with team band, arrestor wires, catapult, approach lights. Their decks are real ground; the island is solid; the sea is ditching

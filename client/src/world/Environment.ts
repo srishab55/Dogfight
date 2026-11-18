@@ -60,6 +60,10 @@ export class Environment {
     this.shadows?.addCasters(carrierMeshes);
   }
 
+  setShadowQuality(quality: 'off' | 'medium' | 'high'): void {
+    this.shadows?.setQuality(quality);
+  }
+
   addShadowCasters(meshes: readonly AbstractMesh[]): void {
     this.shadows?.addCasters(meshes);
   }

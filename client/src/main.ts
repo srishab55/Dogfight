@@ -1,3 +1,12 @@
+// Fonts, bundled with the game (SIL Open Font License): Rajdhani for headings, Inter for text, JetBrains Mono for instruments.
+import '@fontsource/rajdhani/latin-500.css';
+import '@fontsource/rajdhani/latin-600.css';
+import '@fontsource/rajdhani/latin-700.css';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-500.css';
 import './styles.css';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { Game } from './core/Game';

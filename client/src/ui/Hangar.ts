@@ -1,7 +1,9 @@
 import type { AircraftClassId, BaseDefinition } from '@dogfight/shared';
 import type { PaintId } from '../config/aircraftVisuals';
+import { UI_CONFIG } from '../config/ui';
 import { BaseMap, type BaseChoice } from './BaseMap';
 import type { MapFrame } from './MiniMap';
+import { button, dot, h, kbd, label, segmented, setText, statRow, tag, type Control } from './components';
 
 /** An aircraft type as the hangar shows it. */
 export interface HangarAircraft {
@@ -9,10 +11,17 @@ export interface HangarAircraft {
   /** Its shortcut in the hangar ("1"-"7"). */
   readonly key: string;
   readonly name: string;
+  /** Its class, as a tag: "Interceptor", "Vintage"... */
+  readonly classTag: string;
   /** One line: what it's for. */
   readonly role: string;
-  /** Label, value pairs: top speed, stall speed, climb, guns... */
-  readonly stats: ReadonlyArray<readonly [string, string]>;
+  /**
+   * Comparison figures. Each bar is the value over the best in the fleet, so
+   * the bars compare the types; `text` is the exact figure.
+   */
+  readonly ratings: ReadonlyArray<{ readonly name: string; readonly value: number; readonly text: string }>;
+  /** Weapons and handling facts: label, value. */
+  readonly loadout: ReadonlyArray<readonly [string, string]>;
 }
 
 export interface HangarPaint {
@@ -32,14 +41,19 @@ export interface HangarSelection {
   readonly start: StartMode;
 }
 
-export interface HangarSettings {
-  readonly steering: SteeringMode;
-  /** Mouse sensitivity (deg per pixel), and its range. */
-  readonly sensitivity: number;
-  readonly minSensitivity: number;
-  readonly maxSensitivity: number;
-  readonly soundOn: boolean;
+/** After a crash: what happened, and the aircraft's last state. */
+export interface RespawnReport {
+  readonly title: string;
+  readonly cause: string;
+  readonly lines: ReadonlyArray<readonly [string, string]>;
 }
+
+/**
+ * Why the hangar is open. "select": before a flight (from the main menu or
+ * lobby). "change": from the pause menu; `resumable` when a flight is in
+ * progress, so FLY starts a new one. "respawn": after a crash.
+ */
+export type HangarMode = { readonly kind: 'select' } | { readonly kind: 'change'; readonly resumable: boolean } | { readonly kind: 'respawn'; readonly report: RespawnReport };
 
 /** Everything the hangar tells the game. */
 export interface HangarEvents {
@@ -47,148 +61,144 @@ export interface HangarEvents {
   paint(id: PaintId): void;
   base(base: BaseDefinition): void;
   start(mode: StartMode): void;
-  steering(mode: SteeringMode): void;
-  sensitivity(value: number): void;
-  sound(on: boolean): void;
   fly(): void;
-  resume(): void;
+  back(): void;
 }
 
-const START_LABELS: Readonly<Record<StartMode, string>> = { runway: 'Runway', air: 'In the air', approach: 'Landing practice' };
-const START_TITLES: Readonly<Record<StartMode, string>> = { runway: 'On the runway (or the catapult), ready to take off', air: '800 m up over the base', approach: 'On final approach, flaps down, to practise landing' };
-const MAP_SIZE = 252;
+const START_OPTIONS = [
+  { value: 'runway', label: 'Runway', tooltip: 'On the runway (or the catapult), ready to take off' },
+  { value: 'air', label: 'In the air', tooltip: '800 m up over the base' },
+  { value: 'approach', label: 'Landing', tooltip: 'On final approach, flaps down, to practise landing' },
+] as const;
 
 /**
- * The hangar: everything you set up before flying, so the flight keys stay
- * few. Your aircraft (with its figures), its paint, the base to start from
- * (on a map), how to start, settings, and the controls. FLY (Enter) goes;
- * RESUME returns to a flight in progress. The 3D view behind it shows the
- * aircraft, the camera slowly circling it (drag to look around).
+ * The hangar: choose an aircraft (compared with the rest of the fleet), its
+ * paint, the base to start from (on a map) and how to start; then FLY. The
+ * 3D view between the columns shows the aircraft, the camera slowly circling
+ * it (drag to look round). After a crash it's the respawn screen, with what
+ * happened. The game is paused while it's open.
  */
 export class Hangar {
   private readonly root: HTMLElement;
-  private readonly aircraftButtons = new Map<AircraftClassId, HTMLElement>();
-  private readonly paintButtons = new Map<PaintId, HTMLElement>();
-  private readonly startButtons = new Map<StartMode, HTMLElement>();
-  private readonly steeringButtons = new Map<SteeringMode, HTMLElement>();
-  private readonly statsPanel: HTMLElement;
-  private readonly baseInfo: HTMLElement;
+  private readonly cards = new Map<AircraftClassId, HTMLButtonElement>();
+  private readonly swatches = new Map<PaintId, HTMLButtonElement>();
+  private readonly title: HTMLElement;
+  private readonly eyebrow: HTMLElement;
+  private readonly backButton: HTMLButtonElement;
+  private readonly flyButton: HTMLButtonElement;
   private readonly note: HTMLElement;
-  private readonly resumeButton: HTMLButtonElement;
-  private readonly sensitivityInput: HTMLInputElement;
-  private readonly sensitivityValue: HTMLElement;
-  private readonly soundButton: HTMLButtonElement;
+  private readonly report: HTMLElement;
+  private readonly detailTag: HTMLElement;
+  private readonly detailName: HTMLElement;
+  private readonly detailRole: HTMLElement;
+  private readonly ratings: Array<ReturnType<typeof statRow>>;
+  private readonly loadout: HTMLElement;
+  private readonly paintName: HTMLElement;
+  private readonly baseName: HTMLElement;
+  private readonly baseDetail: HTMLElement;
+  private readonly baseDot: HTMLElement;
+  private readonly start: Control<StartMode>;
   private readonly map: BaseMap;
-  private soundOn = true;
+  /** The best of each rating in the fleet, to scale the bars. */
+  private readonly ratingMax: number[];
   private sinceMapDraw = Infinity;
 
   constructor(
     parent: HTMLElement,
     background: HTMLCanvasElement,
     private readonly aircraft: readonly HangarAircraft[],
-    paints: readonly HangarPaint[],
-    controls: ReadonlyArray<{ readonly keys: readonly string[]; readonly label: string }>,
+    private readonly paints: readonly HangarPaint[],
     private readonly events: HangarEvents,
   ) {
-    this.root = el('div', 'hangar');
+    this.root = h('section', 'screen hangar');
+    this.root.setAttribute('aria-label', 'Hangar');
     this.root.hidden = true;
 
-    // ── Left: the aircraft ──
-    const left = el('div', 'hangar-panel hangar-left');
-    left.append(el('div', 'hangar-title', 'HANGAR'), el('div', 'hangar-heading', 'AIRCRAFT'));
-    const list = el('div', 'hangar-aircraft');
+    // ── Top bar ──
+    this.backButton = button('Back', { variant: 'ghost', hint: 'Esc', onClick: () => this.events.back() });
+    this.eyebrow = label('Hangar');
+    this.title = h('h1', 'screen-title__name', 'Select aircraft');
+    const bar = h('header', 'screen-bar', this.backButton, h('div', 'screen-title', this.eyebrow, this.title), h('span', 'chip screen-bar__end', dot('friendly'), 'Blue team'));
+
+    // ── Left: the fleet, and where to start ──
+    const cardGrid = h('div', 'hangar__cards');
+    cardGrid.setAttribute('role', 'group');
+    cardGrid.setAttribute('aria-label', 'Aircraft');
     for (const type of aircraft) {
-      const button = el('button', 'hangar-aircraft-button');
-      button.append(el('span', 'hangar-key', type.key), el('span', 'hangar-aircraft-name', type.name));
-      button.addEventListener('click', () => this.events.aircraft(type.id));
-      this.aircraftButtons.set(type.id, button);
-      list.append(button);
+      const card = h('button', 'card aircraft-card', h('span', 'aircraft-card__name', type.name), h('span', 'aircraft-card__meta', tag(type.classTag), kbd(type.key)));
+      card.setAttribute('aria-pressed', 'false');
+      card.addEventListener('click', () => this.events.aircraft(type.id));
+      this.cards.set(type.id, card);
+      cardGrid.append(card);
     }
-    this.statsPanel = el('div', 'hangar-stats');
-    left.append(list, this.statsPanel);
-    const controlsBox = document.createElement('details');
-    controlsBox.className = 'hangar-controls';
-    controlsBox.append(el('summary', '', 'CONTROLS IN FLIGHT'));
-    for (const row of controls) {
-      const line = el('div', 'hangar-control');
-      for (const key of row.keys) line.append(el('kbd', '', key));
-      line.append(` ${row.label}`);
-      controlsBox.append(line);
-    }
-    left.append(controlsBox);
-
-    // ── Right: paint, base, start, settings ──
-    const right = el('div', 'hangar-panel hangar-right');
-    right.append(el('div', 'hangar-heading', 'PAINT'));
-    const swatches = el('div', 'hangar-swatches');
-    for (const paint of paints) {
-      const swatch = el('button', 'hangar-swatch');
-      swatch.style.background = paint.body;
-      swatch.title = paint.name;
-      swatch.addEventListener('click', () => this.events.paint(paint.id));
-      this.paintButtons.set(paint.id, swatch);
-      swatches.append(swatch);
-    }
-    right.append(swatches);
-
-    right.append(el('div', 'hangar-heading', 'START FROM'));
-    this.map = new BaseMap(background, MAP_SIZE);
-    this.map.onSelect = (base) => this.events.base(base);
+    this.map = new BaseMap(background, UI_CONFIG.hangarMapSize);
+    this.map.canvas.setAttribute('aria-label', 'Map: click a ringed base to start there');
+    this.map.onSelect = (base) => {
+      this.showBase();
+      this.events.base(base);
+    };
     this.map.onConfirm = () => this.events.fly();
-    this.baseInfo = el('div', 'hangar-base-info');
-    right.append(this.map.canvas, this.baseInfo);
+    this.baseDot = dot();
+    this.baseName = h('span', 'hangar__base-name');
+    this.baseDetail = h('span', 'hangar__base-detail');
+    this.start = segmented<StartMode>('How to start', START_OPTIONS, 'runway', (mode) => this.events.start(mode));
+    this.start.element.classList.add('segmented--block');
+    const left = h(
+      'aside',
+      'screen-panel hangar__column hangar__left',
+      h('div', 'section-head', label('Aircraft'), h('span', 'section-head__hint', kbd('1'), '–', kbd(String(aircraft.length)))),
+      cardGrid,
+      h('div', 'section-head', label('Deploy'), h('span', 'section-head__hint', kbd('←'), kbd('→'))),
+      h('div', 'hangar__map', this.map.canvas),
+      h('div', 'hangar__base', this.baseDot, this.baseName, this.baseDetail),
+      h('div', 'section-head', label('Start')),
+      this.start.element,
+    );
 
-    right.append(el('div', 'hangar-heading', 'START'));
-    const starts = el('div', 'hangar-options hangar-options-inline');
-    for (const mode of ['runway', 'air', 'approach'] as const) {
-      const button = el('button', 'hangar-option', START_LABELS[mode]);
-      button.title = START_TITLES[mode];
-      button.addEventListener('click', () => this.events.start(mode));
-      this.startButtons.set(mode, button);
-      starts.append(button);
+    // ── Right: the chosen type ──
+    this.detailTag = tag('');
+    this.detailName = h('h2', 'hangar__name');
+    this.detailRole = h('p', 'hangar__role');
+    const ratingNames = aircraft[0]?.ratings.map((r) => r.name) ?? [];
+    this.ratings = ratingNames.map((name) => statRow(name));
+    this.ratingMax = ratingNames.map((_, i) => Math.max(...aircraft.map((a) => a.ratings[i]?.value ?? 0)));
+    this.loadout = h('dl', 'facts');
+    const swatchRow = h('div', 'swatches');
+    swatchRow.setAttribute('role', 'group');
+    swatchRow.setAttribute('aria-label', 'Paint');
+    for (const paint of paints) {
+      const swatch = h('button', 'swatch');
+      swatch.style.setProperty('--swatch', paint.body);
+      swatch.setAttribute('aria-label', paint.name);
+      swatch.dataset['tooltip'] = paint.name;
+      swatch.addEventListener('click', () => this.events.paint(paint.id));
+      this.swatches.set(paint.id, swatch);
+      swatchRow.append(swatch);
     }
-    right.append(starts);
+    this.paintName = h('span', 'section-head__hint');
+    const right = h(
+      'aside',
+      'screen-panel hangar__column hangar__right',
+      h('div', 'hangar__identity', this.detailTag, this.detailName, this.detailRole),
+      h('div', 'section-head', label('Performance'), h('span', 'section-head__hint', 'vs. the fleet')),
+      h('div', 'hangar__ratings', ...this.ratings.map((r) => r.element)),
+      h('div', 'section-head', label('Loadout')),
+      this.loadout,
+      h('div', 'section-head', label('Paint'), this.paintName),
+      swatchRow,
+    );
 
-    right.append(el('div', 'hangar-heading', 'SETTINGS'));
-    const steering = el('div', 'hangar-setting');
-    steering.append(el('span', 'hangar-setting-label', 'Steering'));
-    const steeringOptions = el('div', 'hangar-options hangar-options-inline');
-    for (const [mode, label] of [['easy', 'Easy turns'], ['direct', 'Direct roll']] as const) {
-      const button = el('button', 'hangar-option', label);
-      button.addEventListener('click', () => this.events.steering(mode));
-      this.steeringButtons.set(mode, button);
-      steeringOptions.append(button);
-    }
-    steering.append(steeringOptions);
-    const mouse = el('div', 'hangar-setting');
-    mouse.append(el('span', 'hangar-setting-label', 'Mouse'));
-    this.sensitivityInput = document.createElement('input');
-    this.sensitivityInput.type = 'range';
-    this.sensitivityInput.className = 'hangar-slider';
-    this.sensitivityInput.addEventListener('input', () => {
-      const value = Number(this.sensitivityInput.value);
-      this.sensitivityValue.textContent = `${value.toFixed(2)}°/px`;
-      this.events.sensitivity(value);
-    });
-    this.sensitivityValue = el('span', 'hangar-setting-value');
-    mouse.append(this.sensitivityInput, this.sensitivityValue);
-    const sound = el('div', 'hangar-setting');
-    sound.append(el('span', 'hangar-setting-label', 'Sound'));
-    this.soundButton = el('button', 'hangar-option') as HTMLButtonElement;
-    this.soundButton.addEventListener('click', () => this.events.sound(!this.soundOn));
-    sound.append(this.soundButton);
-    right.append(steering, mouse, sound);
+    // ── Respawn: what happened ──
+    this.report = h('div', 'screen-panel hangar__report');
+    this.report.setAttribute('role', 'status');
+    this.report.hidden = true;
 
     // ── Bottom: go ──
-    const bottom = el('div', 'hangar-bottom');
-    this.note = el('div', 'hangar-note');
-    this.resumeButton = el('button', 'hangar-resume', 'RESUME (Esc)') as HTMLButtonElement;
-    this.resumeButton.addEventListener('click', () => this.events.resume());
-    const fly = el('button', 'hangar-fly', 'FLY  (Enter)');
-    fly.addEventListener('click', () => this.events.fly());
-    bottom.append(this.note, this.resumeButton, fly);
+    this.note = h('p', 'screen-footer__note');
+    this.flyButton = button('Fly', { variant: 'primary', size: 'lg', hint: 'Enter', onClick: () => this.events.fly() });
+    const footer = h('footer', 'screen-footer', this.note, this.flyButton);
 
-    this.root.append(left, right, bottom);
+    this.root.append(bar, left, this.report, right, footer);
     parent.append(this.root);
   }
 
@@ -196,23 +206,34 @@ export class Hangar {
     return !this.root.hidden;
   }
 
-  /**
-   * @param canResume a flight is in progress, so RESUME is offered.
-   * @param note shown above FLY, e.g. that FLY starts a new flight.
-   */
-  open(selection: HangarSelection, settings: HangarSettings, bases: readonly BaseChoice[], frame: MapFrame, canResume: boolean, note: string | null): void {
+  open(mode: HangarMode, selection: HangarSelection, bases: readonly BaseChoice[], frame: MapFrame): void {
     this.root.hidden = false;
-    this.resumeButton.hidden = !canResume;
-    this.note.textContent = note ?? '';
-    this.sensitivityInput.min = String(settings.minSensitivity);
-    this.sensitivityInput.max = String(settings.maxSensitivity);
-    this.sensitivityInput.step = '0.01';
-    this.sensitivityInput.value = String(settings.sensitivity);
-    this.sensitivityValue.textContent = `${settings.sensitivity.toFixed(2)}°/px`;
-    this.setSteering(settings.steering);
-    this.setSound(settings.soundOn);
+    this.root.dataset['mode'] = mode.kind;
+    setText(this.eyebrow, mode.kind === 'respawn' ? 'Aircraft lost' : 'Hangar');
+    setText(this.title, mode.kind === 'respawn' ? 'Respawn' : mode.kind === 'change' ? 'Change aircraft' : 'Select aircraft');
+    setText(this.backButton.firstElementChild as HTMLElement, mode.kind === 'respawn' ? 'Menu' : 'Back');
+    setText(this.flyButton.firstElementChild as HTMLElement, mode.kind === 'respawn' ? 'Fly again' : 'Fly');
+    setText(
+      this.note,
+      mode.kind === 'change'
+        ? mode.resumable
+          ? 'FLY starts a new flight with these choices. Back returns to your paused flight.'
+          : 'Your choices apply straight away. FLY takes off.'
+        : mode.kind === 'respawn'
+          ? 'Choose an aircraft and base, then fly again.'
+          : 'Choose an aircraft, its paint and where to start. Drag the view to look round.',
+    );
+    this.report.hidden = mode.kind !== 'respawn';
+    if (mode.kind === 'respawn') {
+      const r = mode.report;
+      const facts = h('dl', 'facts');
+      for (const [name, value] of r.lines) facts.append(h('dt', '', name), h('dd', '', value));
+      this.report.replaceChildren(h('div', 'hangar__report-title', tag('Lost', 'danger'), h('h2', 'ui-heading', r.title)), h('p', 'hangar__report-cause', r.cause), facts);
+    }
     this.setBases(bases, selection.baseId, frame);
     this.setSelection(selection);
+    // Keyboard users start on FLY: Enter goes, Tab reaches the rest.
+    this.flyButton.focus({ preventScroll: true });
   }
 
   close(): void {
@@ -221,17 +242,21 @@ export class Hangar {
 
   /** Highlights the chosen aircraft, paint and start, and shows the aircraft's figures. */
   setSelection(selection: HangarSelection): void {
-    for (const [id, button] of this.aircraftButtons) button.toggleAttribute('data-selected', id === selection.classId);
-    for (const [id, button] of this.paintButtons) button.toggleAttribute('data-selected', id === selection.paintId);
-    for (const [mode, button] of this.startButtons) button.toggleAttribute('data-selected', mode === selection.start);
+    for (const [id, card] of this.cards) card.setAttribute('aria-pressed', String(id === selection.classId));
+    for (const [id, swatch] of this.swatches) swatch.setAttribute('aria-pressed', String(id === selection.paintId));
+    setText(this.paintName, this.paints.find((p) => p.id === selection.paintId)?.name ?? '');
+    this.start.set(selection.start);
     const type = this.aircraft.find((a) => a.id === selection.classId);
-    this.statsPanel.replaceChildren();
-    if (type) {
-      this.statsPanel.append(el('div', 'hangar-stats-name', type.name), el('div', 'hangar-stats-role', type.role));
-      const table = el('div', 'hangar-stats-table');
-      for (const [label, value] of type.stats) table.append(el('span', 'hangar-stat-label', label), el('span', 'hangar-stat-value', value));
-      this.statsPanel.append(table);
-    }
+    if (!type) return;
+    setText(this.detailTag, type.classTag);
+    setText(this.detailName, type.name);
+    setText(this.detailRole, type.role);
+    type.ratings.forEach((rating, i) => {
+      const max = this.ratingMax[i] ?? 0;
+      this.ratings[i]?.set(max > 0 ? rating.value / max : 0, rating.text);
+    });
+    this.loadout.replaceChildren();
+    for (const [name, value] of type.loadout) this.loadout.append(h('dt', '', name), h('dd', '', value));
   }
 
   /** The bases this aircraft can start from (changes with the type: carriers need a hook). */
@@ -245,16 +270,6 @@ export class Hangar {
     const choice = this.map.move(direction);
     this.showBase();
     return choice?.base ?? null;
-  }
-
-  setSteering(mode: SteeringMode): void {
-    for (const [m, button] of this.steeringButtons) button.toggleAttribute('data-selected', m === mode);
-  }
-
-  setSound(on: boolean): void {
-    this.soundOn = on;
-    this.soundButton.textContent = on ? 'On' : 'Off';
-    this.soundButton.toggleAttribute('data-selected', on);
   }
 
   update(deltaSeconds: number, frame: MapFrame): void {
@@ -273,18 +288,8 @@ export class Hangar {
 
   private showBase(): void {
     const choice = this.map.selected;
-    this.baseInfo.replaceChildren();
-    if (!choice) return;
-    const name = el('span', 'hangar-base-name', choice.name);
-    name.style.color = choice.color;
-    this.baseInfo.append(name, el('span', 'hangar-base-detail', choice.detail));
+    setText(this.baseName, choice?.name ?? 'No base available');
+    setText(this.baseDetail, choice?.detail ?? '');
+    this.baseDot.style.background = choice?.color ?? '';
   }
-}
-
-function el(tag: string, className: string, text?: string): HTMLElement {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text !== undefined) element.textContent = text;
-  if (element instanceof HTMLButtonElement) element.type = 'button';
-  return element;
 }

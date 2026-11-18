@@ -14,7 +14,7 @@ export const MINIMAP_CONFIG = {
   /** Size of the terrain picture drawn once at start (px). */
   backgroundResolution: 256,
   /** On-screen size (CSS px): the corner map, and the big map. */
-  smallSize: 210,
+  smallSize: 200,
   largeSize: 560,
   /** Redraws per second (it's a map, not a gauge). */
   redrawHz: 15,

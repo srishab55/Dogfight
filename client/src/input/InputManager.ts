@@ -16,12 +16,11 @@ import type { InputAction, KeyBindings } from '../config/controls';
 export class InputManager {
   private readonly heldKeys = new Set<string>();
   private readonly keysPressedThisFrame = new Set<string>();
-  private readonly codesByAction: ReadonlyMap<InputAction, readonly string[]>;
-  private readonly boundCodes: ReadonlySet<string>;
+  private codesByAction: ReadonlyMap<InputAction, readonly string[]> = new Map();
+  private boundCodes: ReadonlySet<string> = new Set();
 
   constructor(private readonly target: Window, bindings: KeyBindings) {
-    this.codesByAction = new Map(Object.entries(bindings) as Array<[InputAction, readonly string[]]>);
-    this.boundCodes = new Set(Object.values(bindings).flat());
+    this.setBindings(bindings);
 
     target.addEventListener('keydown', this.handleKeyDown);
     target.addEventListener('keyup', this.handleKeyUp);
@@ -29,6 +28,13 @@ export class InputManager {
     // app and the key would stay "stuck" down. Forget everything instead.
     target.addEventListener('blur', this.releaseAll);
     target.document.addEventListener('visibilitychange', this.releaseAll);
+  }
+
+  /** Replaces the key bindings (the settings screen rebinds keys). */
+  setBindings(bindings: KeyBindings): void {
+    this.codesByAction = new Map(Object.entries(bindings) as Array<[InputAction, readonly string[]]>);
+    this.boundCodes = new Set(Object.values(bindings).flat());
+    this.releaseAll();
   }
 
   isHeld(action: InputAction): boolean {
@@ -64,6 +70,9 @@ export class InputManager {
     }
     // Leave Cmd+<key> (copy, reload, ...) and unbound keys to the browser.
     if (event.metaKey || !this.boundCodes.has(event.code)) return;
+    // Menus keep their own keys: typing in a text box (all but Esc), and
+    // Enter and Space on a focused button, tab or switch; the arrows on a slider, dropdown or arrow-key menu.
+    if (ownedByFocusedControl(event)) return;
 
     // Stop bound keys from scrolling the page or triggering browser features.
     event.preventDefault();
@@ -81,4 +90,18 @@ export class InputManager {
     this.heldKeys.clear();
     this.keysPressedThisFrame.clear();
   };
+}
+
+/** Keys a focused interface control handles itself, so the game must leave them alone. */
+function ownedByFocusedControl(event: KeyboardEvent): boolean {
+  const target = event.target;
+  if (!(target instanceof HTMLElement) || target === document.body) return false;
+  const textEntry = target.isContentEditable || target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && !['range', 'checkbox', 'radio', 'button'].includes(target.type));
+  if (textEntry) return event.code !== 'Escape';
+  const arrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code);
+  // Sliders and dropdowns use the arrows; so do menus and tab lists that move focus with them (marked data-arrow-keys).
+  if (target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && target.type === 'range')) return arrow || ['Enter', 'NumpadEnter', 'Space'].includes(event.code);
+  if (arrow) return target.closest('[data-arrow-keys]') !== null;
+  const control = target instanceof HTMLButtonElement || target instanceof HTMLInputElement || target.getAttribute('role') === 'tab' || target.getAttribute('role') === 'switch';
+  return control && ['Enter', 'NumpadEnter', 'Space'].includes(event.code);
 }

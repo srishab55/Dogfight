@@ -92,7 +92,9 @@ export class MiniMap {
 
   private draw(frame: MapFrame): void {
     const large = this.mode === 'large';
-    drawMap(this.context, this.background, frame, { large, unit: this.canvas.width / (large ? MINIMAP_CONFIG.largeSize : MINIMAP_CONFIG.smallSize), time: this.time });
+    // A slow radar sweep on the corner map (not with reduced motion).
+    const sweep = large || reducedMotion() ? undefined : this.time * 0.9;
+    drawMap(this.context, this.background, frame, { large, unit: this.canvas.width / (large ? MINIMAP_CONFIG.largeSize : MINIMAP_CONFIG.smallSize), time: this.time, sweep });
   }
 }
 
@@ -105,6 +107,8 @@ export interface MapDrawOptions {
   readonly time: number;
   /** The base picker: which bases can be chosen (others dimmed), and which one is selected. */
   readonly choice?: { readonly selectable: readonly string[]; readonly selected: string | null };
+  /** The radar sweep's angle (rad, clockwise from north), centred on you; omitted: no sweep. */
+  readonly sweep?: number;
 }
 
 /** Map position (canvas pixels) of world (x, z), north up. */
@@ -192,6 +196,28 @@ export function drawMap(ctx: CanvasRenderingContext2D, background: HTMLCanvasEle
       ctx.fillText(label, x, y - r - 9 * unit);
       ctx.globalAlpha = 1;
     }
+  }
+
+  // The radar sweep: a faint wedge turning round you.
+  if (options.sweep !== undefined && frame.player) {
+    const p = mapPoint(frame.player.x, frame.player.z, size);
+    const reach = size * 0.75;
+    const a = options.sweep - Math.PI / 2;
+    const wedge = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, reach);
+    wedge.addColorStop(0, 'rgba(66, 217, 245, 0.18)');
+    wedge.addColorStop(1, 'rgba(66, 217, 245, 0)');
+    ctx.fillStyle = wedge;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.arc(p.x, p.y, reach, a - 0.55, a);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(66, 217, 245, 0.45)';
+    ctx.lineWidth = unit;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + Math.cos(a) * reach, p.y + Math.sin(a) * reach);
+    ctx.stroke();
   }
 
   // You: an arrow pointing where you're heading.
@@ -309,4 +335,12 @@ function hex(color: string): [number, number, number] {
 
 function mix(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/** Reduced motion: the Accessibility setting, else the system preference. */
+export function reducedMotion(): boolean {
+  const setting = document.documentElement.dataset['reducedMotion'];
+  if (setting === 'true') return true;
+  if (setting === 'false') return false;
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }

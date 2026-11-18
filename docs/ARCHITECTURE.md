@@ -78,7 +78,7 @@ The 11 components from the brief map onto folders like this:
 | 6 | Environment and terrain | `client/src/world/`, `shared/src/config/world.ts` | 0 ✅ / 3 |
 | 7 | Multiplayer networking | `client/src/network/`, `server/`, `shared/src/protocol/` | 5 |
 | 8 | AI behaviour | `server/src/ai/` | 7 |
-| 9 | User interface | `client/src/ui/` (HTML/CSS over the canvas) | 0 ✅ / 4 / 8 |
+| 9 | User interface | `client/src/ui/` (HTML/CSS over the canvas), `client/src/styles/` (design system) | 0 ✅ / 4 / 8 |
 | 10 | Audio | `client/src/audio/` (Web Audio synthesis) | 4 |
 | 11 | Persistence and statistics | `server/src/persistence/` (PostgreSQL) | 8 |
 
@@ -211,6 +211,28 @@ values go in `client/src/config/`.
 **Per-frame code allocates nothing:** reuse scratch `Vector3`/`Quaternion`
 objects. Garbage-collection pauses show up as frame hitches.
 
+**Interface (design system):** vanilla TypeScript DOM over the canvas, no
+framework. Every colour, size, font and timing is a CSS custom property in
+`client/src/styles/tokens.css`; components (buttons, menu items, tabs,
+switches, sliders, segmented controls, bars, cards, tags, tooltips, modals,
+notifications) are styled once in `components.css` and built by the helpers
+in `ui/components.ts`; `hud.css` and `screens.css` only lay them out. Colours
+have meanings: cyan for selection and primary instruments, amber for caution,
+red for damage and the enemy, blue for your team. Fonts are self-hosted
+(Rajdhani headings, Inter text, JetBrains Mono figures; OFL). The HUD
+updates its text at 20 Hz and only when it changes, and moves markers and
+bars with transforms. `data-reduced-motion` on the root (the Accessibility
+setting, or the system's) stops every animation.
+
+**Screens:** `Game` owns a small state machine: main menu, hangar (aircraft
+selection, also the respawn screen), pause menu, settings, lobby,
+after-action report, or none (flying). Opening any screen over a flight
+pauses it (physics stops, the mouse is let go, the HUD and map hide, sound
+pauses); Esc goes back. Settings (`core/Settings.ts`) are remembered in local
+storage and applied through small hooks on existing systems (pixel ratio,
+pipeline samples and bloom, shadow quality, master volume, orbit drag speed,
+key bindings, HUD flags).
+
 ## 9. Performance budget
 
 Target: a steady 60 FPS on a MacBook Air (M-series, 8 GB) at native resolution,
@@ -223,7 +245,8 @@ suite simulates tens of minutes of flight in under half a second. Main bundle 1.
 
 Rules: measure before optimising (debug overlay, Chrome Performance panel);
 merge static meshes by material (each aircraft = 5 draw calls); pool bullets,
-bombs and particles (Phase 4); keep shadow casters to aircraft only.
+bombs and particles (Phase 4); the shadow map covers a fixed 160 m square
+around the aircraft (D51).
 
 ## 10. Deployment (Phase 8, to be confirmed then)
 
@@ -285,4 +308,9 @@ bombs and particles (Phase 4); keep shadow casters to aircraft only.
 | D45 | Biplanes and triplanes: one main wing (ailerons, roundels, the span the physics uses) plus plain `extraWings` and `struts` in the airframe data; physics uses the total wing area with Munk's span factor (a higher Oswald efficiency) instead of modelling each wing | A separate lift model per wing | Same flight model for every type; the extra wings add crash points and drawing only |
 | D46 | Paint is client-only (per type, in local storage); the team colour stays on the markings | Free colour choice of everything | Your request, without losing who's on which side (and nothing for the server to check) |
 | D47 | A hangar screen for everything that isn't flying (aircraft, paint, base, start, settings); it pauses the game; flight keys only in flight | A key for each option | Your request: too many keys. One screen is discoverable and leaves the keyboard for flying. Pausing is single-player only (L61) |
+| D48 | The interface redesign stays vanilla DOM + CSS: design tokens as CSS custom properties, one stylesheet of components and small TypeScript builders | React/Vue/Svelte; Babylon GUI | No new runtime dependency or build step; the existing HUD code kept its data flow; CSS gives hover, focus, transitions and reduced motion for free |
+| D49 | Screens are a state machine in `Game` (menu, hangar, pause, settings, lobby, results); any screen pauses a single-player flight; the hangar doubles as the respawn screen | A screen manager class; separate respawn screen | One place decides pausing, camera and HUD visibility; respawning is choosing an aircraft and base, so it is the same screen with the crash report on top |
+| D50 | Settings in local storage, each applied through a narrow hook on an existing system; nothing is shown that the game can't do (antialiasing and bloom hide without the post-process pipeline) | A settings server; decorative options | The brief's rule: every control changes something real. Mouse sensitivity, steering and mute keep their own storage keys from before |
+| D51 | The shadow map covers a fixed 160 m square around the aircraft; "Shadows off" leaves the materials alone and renders an empty map once | Fitting the map to the casters; switching the light's shadows off | Fitting stretched the map over every base building on the map, so the aircraft's shadow had vanished (found while testing the setting). Switching the light off recompiles every material, and the frames in between trip WebGL errors |
+| D52 | The after-action report counts the combat events (`targetHit`/`targetDestroyed` now carry the damage done) and the flight's own state; what the game doesn't model yet (winner, team score, assists, bombing) shows as "—" with its phase | Estimates | No invented numbers |
 | D30 | MSAA 2x in the post-process pipeline | 4x | Indistinguishable on Retina; measured ~1 ms a frame cheaper, keeping 60 FPS with the sea and carriers |

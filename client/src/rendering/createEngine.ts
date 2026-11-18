@@ -26,8 +26,9 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
  * config. Call again on resize, because dragging the window to another monitor
  * can change the ratio.
  */
-export function applyPixelRatio(engine: Engine): void {
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, RENDER_CONFIG.maxDevicePixelRatio);
+/** @param renderScale the Graphics setting: draw the 3D view at this fraction of the screen's resolution. */
+export function applyPixelRatio(engine: Engine, renderScale = 1): void {
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, RENDER_CONFIG.maxDevicePixelRatio) * renderScale;
   // Babylon expresses resolution as a "hardware scaling level": 0.5 renders 2x.
   engine.setHardwareScalingLevel(1 / pixelRatio);
 }

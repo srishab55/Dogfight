@@ -18,8 +18,9 @@ import { createTargets, damageTarget, isTargetAlive, updateTargets, type CombatT
 /** Something that happened this step, for effects, sound and the HUD. */
 export type CombatEvent =
   | { readonly type: 'groundImpact'; readonly x: number; readonly y: number; readonly z: number; readonly owner: number }
-  | { readonly type: 'targetHit'; readonly targetId: number; readonly kind: TargetKind; readonly x: number; readonly y: number; readonly z: number; readonly owner: number }
-  | { readonly type: 'targetDestroyed'; readonly targetId: number; readonly kind: TargetKind; readonly x: number; readonly y: number; readonly z: number; readonly owner: number }
+  /** `damage`: hull points the hit actually removed (after armour), for after-action reports. */
+  | { readonly type: 'targetHit'; readonly targetId: number; readonly kind: TargetKind; readonly x: number; readonly y: number; readonly z: number; readonly owner: number; readonly damage: number }
+  | { readonly type: 'targetDestroyed'; readonly targetId: number; readonly kind: TargetKind; readonly x: number; readonly y: number; readonly z: number; readonly owner: number; readonly damage: number }
   | { readonly type: 'targetRespawned'; readonly targetId: number; readonly kind: TargetKind }
   | { readonly type: 'aircraftHit'; readonly victim: number; readonly x: number; readonly y: number; readonly z: number; readonly owner: number; readonly damage: number }
   | { readonly type: 'aircraftShotDown'; readonly victim: number; readonly x: number; readonly y: number; readonly z: number; readonly owner: number }
@@ -163,8 +164,9 @@ export class CombatWorld implements ImpactListener {
   }
 
   private hitTarget(target: CombatTarget, x: number, y: number, z: number, damage: number, owner: number): void {
+    const before = target.health;
     const destroyed = damageTarget(target, damage);
-    this.pending.push({ type: destroyed ? 'targetDestroyed' : 'targetHit', targetId: target.id, kind: target.kind, x, y, z, owner });
+    this.pending.push({ type: destroyed ? 'targetDestroyed' : 'targetHit', targetId: target.id, kind: target.kind, x, y, z, owner, damage: before - target.health });
     if (destroyed && target.kind === 'carrier') this.loseCarrierGuns(target);
   }
 
@@ -173,7 +175,7 @@ export class CombatWorld implements ImpactListener {
     for (const target of this.targets) {
       if (target.kind !== 'aaGun' || target.carrierId !== carrier.carrierId) continue;
       if (isTargetAlive(target)) {
-        this.pending.push({ type: 'targetDestroyed', targetId: target.id, kind: target.kind, ...target.position, owner: -1 });
+        this.pending.push({ type: 'targetDestroyed', targetId: target.id, kind: target.kind, ...target.position, owner: -1, damage: target.health });
         target.destroyedSeconds = 0;
       }
       target.health = 0;

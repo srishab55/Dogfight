@@ -57,7 +57,7 @@ import { BURN_CONFIG, DEFENCE_VISUAL_CONFIG } from '../config/combatVisuals';
 import { FireAndSmoke } from '../effects/FireAndSmoke';
 import { TargetBalloons } from '../combat/TargetBalloons';
 import { TracerRenderer } from '../combat/TracerRenderer';
-import { CONTROLS_HINT_ROWS, KEY_BINDINGS, MOUSE_FLIGHT_CONFIG, STEERING_CONFIG } from '../config/controls';
+import { MOUSE_FLIGHT_CONFIG, STEERING_CONFIG, type InputAction, type KeyBindings } from '../config/controls';
 import { MouseFlight } from '../input/MouseFlight';
 import { RENDER_CONFIG } from '../config/graphics';
 import { AUTO_LAND_HUD, FLIGHT_PATH_MARKER_MIN_SPEED, LANDING_PRACTICE } from '../config/landing';
@@ -66,12 +66,20 @@ import { InputManager } from '../input/InputManager';
 import { applyPixelRatio, createEngine } from '../rendering/createEngine';
 import { createPostProcessing } from '../rendering/postProcessing';
 import { formatKeyCode } from '../ui/ControlsHint';
-import { Hangar, type HangarEvents, type HangarSelection, type HangarSettings, type StartMode } from '../ui/Hangar';
-import { AIRCRAFT_ROLES, HANGAR_STORAGE_KEY } from '../config/hangar';
+import { Hangar, type HangarAircraft, type HangarEvents, type HangarMode, type HangarSelection, type RespawnReport, type StartMode, type SteeringMode } from '../ui/Hangar';
+import { AIRCRAFT_CLASS_TAGS, AIRCRAFT_ROLES, HANGAR_STORAGE_KEY } from '../config/hangar';
+import { UI_CONFIG } from '../config/ui';
+import { MainMenu, cleanCallsign, type MainMenuEvents } from '../ui/MainMenu';
+import { PauseMenu, type PauseMenuEvents } from '../ui/PauseMenu';
+import { SettingsScreen, type SettingsEvents, type SettingsTab } from '../ui/SettingsScreen';
+import { LobbyScreen } from '../ui/LobbyScreen';
+import { ResultsScreen, formatDuration } from '../ui/ResultsScreen';
+import { SessionStats } from './SessionStats';
+import { effectiveBindings, loadSettings, saveSettings, type GameSettings } from './Settings';
+import type { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { PAINT_SCHEMES } from '../config/aircraftVisuals';
 import { DebugOverlay, type DebugLine } from '../ui/DebugOverlay';
 import { FlightHud, PULL_UP_SECONDS, type ApproachGuide, type BaseLabel, type BaseStatus, type EnemyMarker, type HudFrame, type ScreenPoint } from '../ui/FlightHud';
-import { createGameTitle } from '../ui/GameTitle';
 import { MiniMap, renderMapBackground, type MapFrame } from '../ui/MiniMap';
 import type { BaseChoice } from '../ui/BaseMap';
 import { describeBases, type BaseView } from '../combat/baseViews';
@@ -101,6 +109,9 @@ const RAD_TO_DEG = 180 / Math.PI;
 /** Identifies the local player's rounds in combat events. Phase 5 uses the server's player ids. */
 const PLAYER_ID = 1;
 
+/** The screens over the game. Any of them pauses it (single player). */
+type Screen = 'menu' | 'hangar' | 'pause' | 'settings' | 'lobby' | 'results';
+
 /**
  * Top-level owner of the client. Creates every subsystem, runs each frame in
  * a fixed order, and tears everything down on dispose.
@@ -127,8 +138,6 @@ export class Game {
   private readonly loop: FixedTimestepLoop;
   private readonly hud: FlightHud;
   private readonly debugOverlay: DebugOverlay;
-  /** In flight, the one key to know: Esc for the hangar. */
-  private readonly flightKeyHint: HTMLElement;
   private readonly combat: CombatWorld;
   private readonly playerGuns: GunState;
   private readonly service = createServiceStatus();
@@ -148,13 +157,39 @@ export class Game {
   private readonly beacons: BaseBeacons;
   /** The map (N). */
   private readonly miniMap: MiniMap;
-  /** The hangar (Esc, and before the first flight): aircraft, paint, base, start and settings. The game pauses while it's open. */
+  /** The screens. The hangar is aircraft selection and the respawn screen. */
+  private readonly mainMenu: MainMenu;
   private readonly hangar: Hangar;
+  private readonly pauseMenu: PauseMenu;
+  private readonly settingsScreen: SettingsScreen;
+  private readonly lobby: LobbyScreen;
+  private readonly results: ResultsScreen;
+  /** The screen showing, or null while flying. */
+  private screen: Screen | null = null;
+  private screenOpenedAt = -Infinity;
+  /** Where the hangar's Back and the settings' Done go. */
+  private hangarReturn: 'menu' | 'pause' | 'lobby' = 'menu';
+  private settingsReturn: 'menu' | 'pause' = 'menu';
   /** What's chosen in the hangar (remembered between sessions). */
   private hangarSelection: HangarSelection = readHangarSelection();
-  /** The hangar was opened during a flight, so RESUME can carry on with it. */
+  /** The hangar was opened from the pause menu during a flight: FLY starts a new one, Back returns to it. */
   private hangarResumable = false;
-  private hangarOpenedAt = -Infinity;
+  /** The player's settings (Settings screen), remembered in this browser. */
+  private settings: GameSettings = loadSettings();
+  /** The keys in force: the defaults with the player's changes. */
+  private bindings: KeyBindings = effectiveBindings(this.settings);
+  private readonly pipeline: DefaultRenderingPipeline | null;
+  private callsign = readCallsign();
+  /** This session's figures, for the after-action report. */
+  private stats = new SessionStats(PLAYER_ID, PLAYER_TEAM);
+  /** Seconds in the air and targets destroyed at the start of this sortie, for the respawn screen. */
+  private sortieSeconds = 0;
+  private sortieKillsAtStart = 0;
+  /** The aircraft just lost: when, and what to say on the respawn screen. Cleared by the next flight. */
+  private lostAt: number | null = null;
+  private lostReport: RespawnReport | null = null;
+  /** The respawn screen has parked a fresh aircraft: Resume in the pause menu goes back to it. */
+  private awaitingRespawn = false;
   private targetsDestroyed = 0;
   /** Camera shake from being hit (m), decaying. */
   private impactShake = 0;
@@ -199,7 +234,10 @@ export class Game {
   /** Set during the physics steps, acted on after them: why auto-land should stop this frame. */
   private autoLandEnd: 'landed' | 'takenOver' | 'crashed' | null = null;
 
-  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    private readonly uiRoot: HTMLElement,
+  ) {
     this.engine = createEngine(canvas);
     this.scene = new Scene(this.engine);
     // Nothing uses mouse picking yet; skip the raycast Babylon would otherwise do on every mouse move.
@@ -226,31 +264,45 @@ export class Game {
     this.environment.addShadowCasters(this.baseStructures.shadowCasters);
 
     this.cameras = new CameraManager(this.scene, this.ground);
-    createPostProcessing(this.scene, this.cameras.allCameras());
-    this.input = new InputManager(window, KEY_BINDINGS);
+    this.pipeline = createPostProcessing(this.scene, this.cameras.allCameras());
+    this.input = new InputManager(window, this.bindings);
     this.flightInput = new FlightInputController(this.input);
     this.mouseFlight = new MouseFlight(canvas);
     this.mouseFlight.onChange = this.handleMouseFlightChange;
-    // Esc while flying with the mouse lets go of it (the browser's rule): that opens the hangar too.
-    this.mouseFlight.onUserRelease = () => this.openHangar();
+    // Esc while flying with the mouse lets go of it (the browser's rule): that opens the pause menu too.
+    this.mouseFlight.onUserRelease = () => {
+      if (this.screen === null) this.escapeFromFlight();
+    };
     this.loop = new FixedTimestepLoop(1 / SIMULATION_CONFIG.physicsHz, SIMULATION_CONFIG.maxStepsPerFrame);
 
     this.hud = new FlightHud(uiRoot);
     this.debugOverlay = new DebugOverlay(uiRoot, this.engine, this.scene, import.meta.env.DEV);
-    this.flightKeyHint = Object.assign(document.createElement('div'), { className: 'flight-key-hint', textContent: 'Esc · hangar & controls' });
-    uiRoot.append(this.flightKeyHint);
-    createGameTitle(uiRoot);
     const mapBackground = renderMapBackground(terrain);
     this.miniMap = new MiniMap(uiRoot, mapBackground);
-    this.hangar = new Hangar(uiRoot, mapBackground, this.hangarAircraftList(), PAINT_SCHEMES, this.hangarControls(), this.hangarEvents);
+    this.hangar = new Hangar(uiRoot, mapBackground, this.hangarAircraftList(), PAINT_SCHEMES, this.hangarEvents);
+    this.mainMenu = new MainMenu(uiRoot, this.mainMenuEvents);
+    this.pauseMenu = new PauseMenu(uiRoot, this.pauseEvents);
+    this.settingsScreen = new SettingsScreen(
+      uiRoot,
+      {
+        minMouseSensitivity: MOUSE_FLIGHT_CONFIG.minSensitivity,
+        maxMouseSensitivity: MOUSE_FLIGHT_CONFIG.maxSensitivity,
+        defaultMouseSensitivity: MOUSE_FLIGHT_CONFIG.sensitivityDegPerPixel,
+        defaultSteering: STEERING_CONFIG.defaultMode,
+      },
+      this.settingsEvents,
+    );
+    this.lobby = new LobbyScreen(uiRoot, { playOffline: () => this.openHangar('select', 'lobby'), back: () => this.openMainMenu() });
+    this.results = new ResultsScreen(uiRoot, () => this.continueFromResults());
     this.beacons = new BaseBeacons(this.scene);
-    // Start in the hangar, at the remembered base if it's still yours.
+    this.applySettings();
+    // Start at the main menu, the aircraft parked at the remembered base if it's still yours.
     const savedBase = BASES.find((b) => b.id === this.hangarSelection.baseId) ?? null;
     this.aircraft.setStartBase(savedBase);
     this.forgetLostStartBase();
     this.aircraft.respawnAtBase();
     this.afterTeleport(0);
-    this.openHangar();
+    this.openMainMenu();
   }
 
   start(): void {
@@ -266,9 +318,9 @@ export class Game {
     this.mouseFlight.dispose();
     this.hud.dispose();
     this.debugOverlay.dispose();
-    this.flightKeyHint.remove();
     this.miniMap.dispose();
     this.hangar.dispose();
+    this.settingsScreen.dispose();
     this.beacons.dispose();
     this.cameras.dispose();
     this.tracers.dispose();
@@ -286,8 +338,8 @@ export class Game {
     this.handleActions();
 
     const mouseFlying = this.isMouseFlying();
-    // The hangar pauses the game (single player; Phase 5's shared world won't stop).
-    const alpha = this.hangar.isOpen ? 1 : this.loop.advance(deltaSeconds, (dt) => {
+    // Any screen pauses the game (single player; Phase 5's shared world won't stop).
+    const alpha = this.screen !== null ? 1 : this.loop.advance(deltaSeconds, (dt) => {
       let controls: Readonly<FlightControls>;
       if (this.autoLand && this.autoLandEnd === null && !this.flightInput.flyingByHand()) {
         // Auto-land flies; touching any flight key takes over (handled after the steps).
@@ -306,6 +358,7 @@ export class Game {
     this.handleCombatEvents();
     this.handleServiceEvent();
     this.updateAutoLand();
+    this.updateSortie(deltaSeconds);
     if (this.catapultBriefing && this.aircraft.state.catapult !== 'held') {
       this.catapultBriefing = false;
       this.hud.clearMessage();
@@ -315,12 +368,14 @@ export class Game {
     const { renderPosition, renderOrientation } = this.aircraft;
     if (mouseFlying) this.mouseFlight.aimDirection(this.aimDirection);
     const t = this.aircraft.state.telemetry;
+    // Camera shake (Accessibility setting): buffet, recoil, high g and hits.
+    const shake = this.settings.accessibility.cameraShake;
     this.cameras.update(deltaSeconds, renderPosition, renderOrientation, mouseFlying ? this.aimDirection : null, {
       speed: t.airspeed,
-      buffet: this.aircraft.state.flowSeparation,
-      firing: this.playerGuns.firing,
-      loadFactor: t.loadFactor,
-      impact: this.impactShake,
+      buffet: shake ? this.aircraft.state.flowSeparation : 0,
+      firing: shake && this.playerGuns.firing,
+      loadFactor: shake ? t.loadFactor : 1,
+      impact: shake ? this.impactShake : 0,
     });
     this.impactShake *= Math.exp(-6 * deltaSeconds);
     // The glide slope (and so the PAPI) is defined for the wheels, not the centre of mass.
@@ -363,6 +418,7 @@ export class Game {
       baseLabels: this.baseLabels(baseViews),
       impactPoint: this.projectImpactPoint(),
       targetsDestroyed: this.targetsDestroyed,
+      basesHeld: { held: baseViews.filter((v) => v.owner === PLAYER_TEAM && v.state !== 'gone').length, total: baseViews.length },
       prompt: this.promptLine(),
     });
     this.debugOverlay.update(deltaSeconds, this.debugLines);
@@ -371,7 +427,10 @@ export class Game {
 
   /** Turns this frame's combat events into effects and HUD feedback. */
   private handleCombatEvents(): void {
-    for (const event of this.combat.drainEvents()) this.handleCombatEvent(event);
+    for (const event of this.combat.drainEvents()) {
+      this.stats.record(event);
+      this.handleCombatEvent(event);
+    }
   }
 
   private handleCombatEvent(event: CombatEvent): void {
@@ -390,7 +449,7 @@ export class Game {
       case 'aircraftHit':
         this.effects.spawn('spark', event.x, event.y, event.z);
         if (event.victim === PLAYER_ID) {
-          this.hud.registerDamage(DEFENCE_VISUAL_CONFIG.hitFlashSeconds);
+          if (this.settings.accessibility.damageFlash) this.hud.registerDamage(DEFENCE_VISUAL_CONFIG.hitFlashSeconds);
           this.impactShake = Math.max(this.impactShake, DEFENCE_VISUAL_CONFIG.hitShake);
         }
         return;
@@ -540,6 +599,7 @@ export class Game {
 
     const fired = this.playerGuns.roundsFired - this.lastRoundsFired;
     this.lastRoundsFired = this.playerGuns.roundsFired;
+    if (fired > 0) this.stats.roundsFired += fired;
     if (fired > 0) this.audio.gunfire(fired);
     else if (this.flightInput.controls.fire && this.playerGuns.ammo === 0 && !state.crashed) this.audio.dryFire();
 
@@ -661,7 +721,7 @@ export class Game {
     this.autoLandBase = base;
     this.autoLandEnd = null;
     const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
-    this.hud.showMessage(`AUTO-LAND · ${base.name.toUpperCase()}${enemy ? ' · ENEMY BASE: no rearming there' : ''} · P or any flight key takes over`, enemy ? 'ok' : 'good', 4);
+    this.hud.showMessage(`AUTO-LAND · ${base.name.toUpperCase()}${enemy ? ' · ENEMY BASE: no rearming there' : ''} · ${this.keyName('autoLand')} or any flight key takes over`, enemy ? 'ok' : 'good', 4);
   }
 
   /** After the physics steps: hand control back if auto-land finished, was overridden, or can't go on. */
@@ -720,9 +780,9 @@ export class Game {
               : state.hookEngaged
                 ? 'WIRE CAUGHT'
                 : 'BRAKING';
-      return { active: true, text: `AUTO-LAND · ${this.autoLandBase.name.toUpperCase()} · ${step} · P: take over` };
+      return { active: true, text: `AUTO-LAND · ${this.autoLandBase.name.toUpperCase()} · ${step} · ${this.keyName('autoLand')}: take over` };
     }
-    if (state.onGround) return null;
+    if (state.onGround || !this.settings.gameplay.autoLandOffers) return null;
     const base = autoLandBaseFor(spec, state.position, this.carrierStatuses);
     // An aircraft with no hook (the Heavy Bomber) near a carrier: say why it isn't offered, and offer the nearest airfield.
     const p = state.position;
@@ -732,7 +792,7 @@ export class Game {
     const distance = Math.hypot(base.runway.center.x - p.x, base.runway.center.z - p.z);
     if (distance > AUTO_LAND_HUD.promptDistance && !carrierNearby) return null;
     const enemy = this.combat.ownerOf(base) !== PLAYER_TEAM;
-    return { active: false, text: `P · AUTO-LAND at ${base.name}${enemy ? ' (enemy)' : ''} · ${(distance / 1000).toFixed(1)} km${tooBig}` };
+    return { active: false, text: `${this.keyName('autoLand')} · AUTO-LAND at ${base.name}${enemy ? ' (enemy)' : ''} · ${(distance / 1000).toFixed(1)} km${tooBig}` };
   }
 
   /** Distance and compass bearing from the aircraft to the nearest friendly base. */
@@ -820,6 +880,7 @@ export class Game {
    */
   private enemyMarkers(): EnemyMarker[] {
     const markers: EnemyMarker[] = [];
+    if (!this.settings.gameplay.targetMarkers) return markers;
     const p = this.aircraft.state.position;
     for (const target of this.combat.targets) {
       if (target.team === null || target.team === PLAYER_TEAM || target.health <= 0) continue;
@@ -880,8 +941,8 @@ export class Game {
   private briefSpawn(): void {
     const { state, spec } = this.aircraft;
     this.catapultBriefing = state.catapult === 'held';
-    if (this.catapultBriefing) this.hud.showMessage(`${spec.displayName.toUpperCase()} ON THE CATAPULT · full throttle (↑) to launch`, 'good', 8);
-    else this.hud.showMessage(`${spec.displayName.toUpperCase()} · ${this.aircraft.homeBase.name.toUpperCase()} · throttle up (↑) to take off`, 'good', 4);
+    if (this.catapultBriefing) this.hud.showMessage(`${spec.displayName.toUpperCase()} ON THE CATAPULT · full throttle (${this.keyName('throttleUp')}) to launch`, 'good', 8);
+    else this.hud.showMessage(`${spec.displayName.toUpperCase()} · ${this.aircraft.homeBase.name.toUpperCase()} · throttle up (${this.keyName('throttleUp')}) to take off`, 'good', 4);
   }
 
   /** What the maps show: the bases, and you (heading from your velocity, or your nose when stopped). */
@@ -912,60 +973,264 @@ export class Game {
     });
   }
 
-  /** Flying (or rolling): opening the hangar keeps that flight to RESUME. Stopped or crashed, the hangar's choices take effect at once. */
+  /** Flying (or rolling): the pause menu's "Change aircraft" keeps that flight to go back to. Stopped or crashed, the hangar's choices take effect at once. */
   private isFlightInProgress(): boolean {
     const state = this.aircraft.state;
     if (state.crashed) return false;
     return !(state.onGround && state.catapult !== 'launching' && Math.hypot(state.velocity.x, state.velocity.z) < 3);
   }
 
-  /** Esc (or letting go of the mouse in flight), and before the first flight. Pauses the game. */
-  private openHangar(): void {
-    if (this.hangar.isOpen) return;
-    this.forgetLostStartBase();
-    this.hangarResumable = this.isFlightInProgress();
-    this.hangarOpenedAt = this.clock;
-    const spec = this.aircraft.spec;
-    this.hangarSelection = { ...this.hangarSelection, classId: spec.id, paintId: this.aircraft.paint.schemeFor(spec.id).id, baseId: this.aircraft.homeBase.id };
-    if (this.mouseFlight.active) this.mouseFlight.release();
-    // Clicks and drags now belong to the hangar and its view.
-    this.mouseFlight.captureAllowed = false;
-    this.cameras.setShowcase(true, spec);
-    this.aircraft.visual.setVisible(true);
-    this.audio.setPaused(true);
-    this.hud.setVisible(false);
-    this.miniMap.setSuppressed(true);
-    this.flightKeyHint.hidden = true;
-    const note = this.hangarResumable
-      ? 'Paused. RESUME carries on this flight; FLY starts a new one with these choices.'
-      : this.aircraft.state.crashed
-        ? 'Crashed. Choose, then FLY again.'
-        : null;
-    this.hangar.open(this.hangarSelection, this.hangarSettings(), this.baseChoices(spec.id), this.mapFrame(describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM)), this.hangarResumable, note);
+  // ── Screens ─────────────────────────────────────────────────────────────
+
+  /**
+   * Switches screen (null: back to flying). The first screen over a flight
+   * pauses it: the mouse is let go, the HUD and map hidden, sound paused.
+   * The main menu, hangar, lobby and report show the aircraft in the
+   * showcase camera; the pause menu (and settings from it) the frozen flight.
+   */
+  private enter(next: Screen | null): void {
+    const previous = this.screen;
+    if (previous) this.screenView(previous).close();
+    if (previous === 'hangar') {
+      this.aircraft.setPreview(null);
+      writeHangarSelection(this.hangarSelection);
+    }
+    this.screen = next;
+    this.screenOpenedAt = this.clock;
+    if (next) this.uiRoot.dataset['screen'] = next;
+    else delete this.uiRoot.dataset['screen'];
+    if (next === null) {
+      this.cameras.setShowcase(false);
+      this.aircraft.visual.setVisible(this.cameras.mode !== 'cockpit');
+      this.mouseFlight.captureAllowed = this.cameras.mode !== 'orbit';
+      this.audio.setPaused(false);
+      this.hud.setVisible(true);
+      this.miniMap.setSuppressed(false);
+      this.loop.reset();
+      // Nothing keeps focus while flying, so Space and the arrows fly the aircraft.
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      return;
+    }
+    if (previous === null) {
+      if (this.mouseFlight.active) this.mouseFlight.release();
+      // Clicks and drags now belong to the screen (and the hangar's view).
+      this.mouseFlight.captureAllowed = false;
+      this.audio.setPaused(true);
+      this.hud.setVisible(false);
+      this.miniMap.setSuppressed(true);
+    }
+    const showcase = next === 'menu' || next === 'hangar' || next === 'lobby' || next === 'results' || (next === 'settings' && this.settingsReturn === 'menu');
+    if (showcase) {
+      this.cameras.setShowcase(true, this.aircraft.spec);
+      this.aircraft.visual.setVisible(true);
+    } else {
+      this.cameras.setShowcase(false);
+      this.aircraft.visual.setVisible(this.cameras.mode !== 'cockpit');
+    }
   }
 
-  private closeHangar(): void {
-    this.hangar.close();
-    this.aircraft.setPreview(null);
-    this.cameras.setShowcase(false);
-    this.aircraft.visual.setVisible(this.cameras.mode !== 'cockpit');
-    this.mouseFlight.captureAllowed = this.cameras.mode !== 'orbit';
-    this.audio.setPaused(false);
-    this.hud.setVisible(true);
-    this.miniMap.setSuppressed(false);
-    this.flightKeyHint.hidden = false;
-    this.loop.reset();
-    writeHangarSelection(this.hangarSelection);
+  private screenView(screen: Screen): { close(): void } {
+    return { menu: this.mainMenu, hangar: this.hangar, pause: this.pauseMenu, settings: this.settingsScreen, lobby: this.lobby, results: this.results }[screen];
   }
+
+  private openMainMenu(): void {
+    this.enter('menu');
+    this.mainMenu.open({ callsign: this.callsign, aircraft: this.aircraft.spec.displayName, base: this.aircraft.homeBase.name });
+  }
+
+  private readonly mainMenuEvents: MainMenuEvents = {
+    play: () => this.openHangar('select', 'menu'),
+    multiplayer: () => this.openLobby(),
+    settings: () => this.openSettings('graphics', 'menu'),
+    controls: () => this.openSettings('controls', 'menu'),
+    callsign: (name) => {
+      this.callsign = name;
+      writeCallsign(name);
+    },
+  };
+
+  private openLobby(): void {
+    this.enter('lobby');
+    this.lobby.open({ callsign: this.callsign, aircraft: this.aircraft.spec.displayName });
+  }
+
+  /**
+   * The hangar. "select": choosing before a flight. "change": from the pause
+   * menu. "respawn": after a crash; the wreck is cleared and a fresh aircraft
+   * parked at the chosen base, so the view shows what you'll fly next.
+   */
+  private openHangar(kind: HangarMode['kind'], returnTo: 'menu' | 'pause' | 'lobby'): void {
+    this.forgetLostStartBase();
+    this.noticeLoss();
+    this.hangarResumable = kind === 'change' && this.isFlightInProgress();
+    this.hangarReturn = returnTo;
+    const spec = this.aircraft.spec;
+    this.hangarSelection = { ...this.hangarSelection, classId: spec.id, paintId: this.aircraft.paint.schemeFor(spec.id).id, baseId: this.aircraft.homeBase.id };
+    if (kind === 'respawn') {
+      this.awaitingRespawn = true;
+      this.parkForHangar();
+    }
+    this.enter('hangar');
+    const report: RespawnReport = this.lostReport ?? { title: 'Aircraft lost', cause: '', lines: [] };
+    const mode: HangarMode = kind === 'respawn' ? { kind, report } : kind === 'change' ? { kind, resumable: this.hangarResumable } : { kind };
+    this.hangar.open(mode, this.hangarSelection, this.baseChoices(this.hangarSelection.classId), this.mapFrame(describeBases(this.combat, this.carrierStatuses, PLAYER_TEAM)));
+  }
+
+  private openPause(): void {
+    this.enter('pause');
+    const { spec, homeBase } = this.aircraft;
+    this.pauseMenu.open({
+      aircraft: spec.displayName,
+      base: homeBase.name,
+      status: this.awaitingRespawn ? 'aircraft lost' : this.isFlightInProgress() ? 'in flight' : 'parked',
+      afterCrash: this.awaitingRespawn,
+    });
+  }
+
+  private readonly pauseEvents: PauseMenuEvents = {
+    resume: () => {
+      if (this.awaitingRespawn) this.openHangar('respawn', 'pause');
+      else this.enter(null);
+    },
+    changeAircraft: () => this.openHangar(this.awaitingRespawn ? 'respawn' : 'change', 'pause'),
+    settings: (tab) => this.openSettings(tab, 'pause'),
+    exit: () => this.exitToMainMenu(),
+  };
+
+  private openSettings(tab: SettingsTab, returnTo: 'menu' | 'pause'): void {
+    this.settingsReturn = returnTo;
+    this.enter('settings');
+    this.settingsScreen.open(tab, {
+      settings: this.settings,
+      steering: this.steering,
+      mouseSensitivity: this.mouseFlight.sensitivity,
+      soundOn: !this.audio.isMuted,
+      postProcessing: this.pipeline !== null,
+    });
+  }
+
+  private readonly settingsEvents: SettingsEvents = {
+    change: (settings) => {
+      this.settings = settings;
+      saveSettings(settings);
+      this.applySettings();
+    },
+    steering: (mode: SteeringMode) => {
+      this.steering = mode;
+      writeSteeringMode(mode);
+    },
+    mouseSensitivity: (value) => this.mouseFlight.setSensitivity(value),
+    sound: (on) => this.audio.setMuted(!on),
+    done: () => {
+      if (this.settingsReturn === 'pause') this.openPause();
+      else this.openMainMenu();
+    },
+  };
+
+  /** Exit to main menu: the session ends with the after-action report. The aircraft is parked at its base again. */
+  private exitToMainMenu(): void {
+    this.noticeLoss();
+    this.clearLoss();
+    this.parkForHangar();
+    this.enter('results');
+    this.results.open(this.stats, this.callsign, this.clock);
+  }
+
+  private continueFromResults(): void {
+    this.stats = new SessionStats(PLAYER_ID, PLAYER_TEAM);
+    this.openMainMenu();
+  }
+
+  /** Esc in flight: the pause menu; with the aircraft lost, straight to the respawn screen. */
+  private escapeFromFlight(): void {
+    if (this.aircraft.state.crashed) this.openHangar('respawn', 'pause');
+    else this.openPause();
+  }
+
+  /** Keys while a screen is open (the game is paused). Each screen's buttons also work by Tab and Enter. */
+  private handleScreenKeys(): void {
+    const input = this.input;
+    // The same Esc can arrive twice when it also lets go of the mouse.
+    const esc = input.wasPressed('openHangar') && this.clock - this.screenOpenedAt > UI_CONFIG.escDebounceSeconds;
+    const enter = input.wasPressed('pickerConfirm');
+    switch (this.screen) {
+      case 'menu':
+        if (enter && !this.mainMenu.editing) this.mainMenuEvents.play();
+        return;
+      case 'hangar':
+        this.handleHangarKeys(esc, enter);
+        return;
+      case 'pause':
+        if (esc) this.pauseEvents.resume();
+        return;
+      case 'settings':
+        if (esc && !this.settingsScreen.capturingKey) this.settingsEvents.done();
+        return;
+      case 'lobby':
+        if (esc) this.openMainMenu();
+        else if (enter) this.openHangar('select', 'lobby');
+        return;
+      case 'results':
+        if (esc || enter) this.continueFromResults();
+        return;
+      default:
+    }
+  }
+
+  // ── The sortie ──────────────────────────────────────────────────────────
+
+  /** Flight time, and the respawn screen a moment after the aircraft is lost. */
+  private updateSortie(deltaSeconds: number): void {
+    if (this.screen !== null) return;
+    if (!this.aircraft.state.crashed) {
+      this.stats.flightSeconds += deltaSeconds;
+      this.sortieSeconds += deltaSeconds;
+      return;
+    }
+    this.noticeLoss();
+    if (this.lostAt !== null && this.clock - this.lostAt > UI_CONFIG.respawnScreenDelaySeconds) this.openHangar('respawn', 'pause');
+  }
+
+  /** Once per lost aircraft: count it, and keep what the respawn screen says about it. */
+  private noticeLoss(): void {
+    const { state, spec } = this.aircraft;
+    if (this.lostReport || !state.crashed) return;
+    this.lostAt = this.clock;
+    this.stats.lost(state.crashReason);
+    const shotDown = state.crashReason === 'shot down';
+    this.lostReport = {
+      title: shotDown ? 'Shot down' : 'Crashed',
+      cause: shotDown ? 'Brought down by anti-aircraft fire.' : `Cause: ${state.crashReason ?? 'unknown'}.`,
+      lines: [
+        ['Aircraft', spec.displayName],
+        ['Time in the air', formatDuration(this.sortieSeconds)],
+        ['Destroyed this sortie', String(this.stats.targetsDestroyed - this.sortieKillsAtStart)],
+        ['Rounds left', `${this.playerGuns.ammo} / ${fullAmmo(spec)}`],
+      ],
+    };
+  }
+
+  private clearLoss(): void {
+    this.lostAt = null;
+    this.lostReport = null;
+    this.awaitingRespawn = false;
+  }
+
+  // ── The hangar ──────────────────────────────────────────────────────────
 
   /** FLY: a new flight with the hangar's choices (also Enter on the crash screen). */
   private flyFromHangar(): void {
     const selection = this.hangarSelection;
+    this.noticeLoss();
+    this.clearLoss();
     this.aircraft.setPreview(null);
     this.aircraft.setStartBase(BASES.find((b) => b.id === selection.baseId) ?? null);
     this.forgetLostStartBase();
     this.aircraft.respawnAtBase(selection.classId);
-    if (this.hangar.isOpen) this.closeHangar();
+    this.stats.sortieStarted(this.clock);
+    this.sortieSeconds = 0;
+    this.sortieKillsAtStart = this.stats.targetsDestroyed;
+    if (this.screen !== null) this.enter(null);
     this.startFlight(selection.start);
   }
 
@@ -1002,43 +1267,39 @@ export class Game {
     this.afterTeleport(0);
   }
 
-  private hangarSettings(): HangarSettings {
-    return {
-      steering: this.steering,
-      sensitivity: this.mouseFlight.sensitivity,
-      minSensitivity: MOUSE_FLIGHT_CONFIG.minSensitivity,
-      maxSensitivity: MOUSE_FLIGHT_CONFIG.maxSensitivity,
-      soundOn: !this.audio.isMuted,
-    };
-  }
-
-  /** Every type with its figures, as the hangar shows them. */
-  private hangarAircraftList() {
+  /** Every type with its figures, as the hangar compares them. */
+  private hangarAircraftList(): HangarAircraft[] {
     return AIRCRAFT_CLASS_IDS.map((id, i) => {
       const spec = AIRCRAFT_CLASSES[id];
       const perf = computePerformance(spec);
+      const gun = GUN_SPECS[id];
       const kmh = (v: number) => `${(v * 3.6).toFixed(0)} km/h`;
-      const stats: Array<readonly [string, string]> = [
-        ['Top speed', kmh(perf.topSpeed)],
-        ['Stall speed', kmh(perf.stallSpeed)],
-        ['Climb', `${perf.bestClimbRate.toFixed(0)} m/s`],
-        ['Turn', `${perf.maxTurnRateDeg.toFixed(0)}°/s`],
-        ['Guns', `${spec.combat.gunCount} × ${GUN_SPECS[id].roundsPerGun} rounds`],
-        ['Armour', `${spec.combat.maxHullHealth}`],
-        ['Gear', spec.airframe.fixedGear ? 'fixed' : 'retractable'],
-        ['Carriers', hasTailhook(spec) ? (spec.homeBase === 'carrier' ? 'home: starts on the catapult' : 'can use them') : 'no: too big'],
-      ];
-      return { id, key: String(i + 1), name: spec.displayName, role: AIRCRAFT_ROLES[id], stats };
+      // Damage per second with every gun firing.
+      const firepower = spec.combat.gunCount * gun.roundsPerSecondPerGun * gun.damagePerRound;
+      const bombs = spec.combat.bombCapacity;
+      return {
+        id,
+        key: String(i + 1),
+        name: spec.displayName,
+        classTag: AIRCRAFT_CLASS_TAGS[id],
+        role: AIRCRAFT_ROLES[id],
+        ratings: [
+          { name: 'Speed', value: perf.topSpeed, text: kmh(perf.topSpeed) },
+          { name: 'Climb', value: perf.bestClimbRate, text: `${perf.bestClimbRate.toFixed(0)} m/s` },
+          { name: 'Turn rate', value: perf.maxTurnRateDeg, text: `${perf.maxTurnRateDeg.toFixed(0)}°/s` },
+          { name: 'Armour', value: spec.combat.maxHullHealth, text: `${spec.combat.maxHullHealth} hp` },
+          { name: 'Firepower', value: firepower, text: `${firepower.toFixed(0)} dmg/s` },
+          { name: 'Bombs', value: bombs, text: bombs > 0 ? String(bombs) : 'none' },
+        ],
+        loadout: [
+          ['Guns', `${spec.combat.gunCount} × ${gun.roundsPerGun} rounds`],
+          ['Bombs', bombs > 0 ? `${bombs}, armed later in Phase 4` : 'none'],
+          ['Stall speed', kmh(perf.stallSpeed)],
+          ['Gear', spec.airframe.fixedGear ? 'fixed' : 'retractable'],
+          ['Carriers', hasTailhook(spec) ? (spec.homeBase === 'carrier' ? 'home: starts on the catapult' : 'can land on them') : 'no: too big'],
+        ],
+      };
     });
-  }
-
-  /** The flight keys, for the hangar's controls list. */
-  private hangarControls() {
-    return [
-      ...CONTROLS_HINT_ROWS.map((row) => ({ keys: row.actions.map((action) => KEY_BINDINGS[action].map(formatKeyCode).join('/')), label: row.label })),
-      { keys: ['Mouse'], label: 'Click the view to fly with the mouse; aim with it' },
-      { keys: ['Drag'], label: 'Orbit camera and hangar view: look round (scroll: zoom)' },
-    ];
   }
 
   private readonly hangarEvents: HangarEvents = {
@@ -1068,26 +1329,16 @@ export class Game {
       this.hangarSelection = { ...this.hangarSelection, start };
       this.hangar.setSelection(this.hangarSelection);
     },
-    steering: (mode) => {
-      this.steering = mode;
-      writeSteeringMode(mode);
-      this.hangar.setSteering(mode);
-    },
-    sensitivity: (value) => {
-      this.mouseFlight.setSensitivity(value);
-    },
-    sound: (on) => {
-      this.audio.setMuted(!on);
-      this.hangar.setSound(on);
-    },
     fly: () => this.flyFromHangar(),
-    resume: () => {
-      if (this.hangarResumable) this.closeHangar();
+    back: () => {
+      if (this.hangarReturn === 'pause') this.openPause();
+      else if (this.hangarReturn === 'lobby') this.openLobby();
+      else this.openMainMenu();
     },
   };
 
-  /** Keys while the hangar is open: its shortcuts only (the game is paused). */
-  private handleHangarKeys(): void {
+  /** Keys in the hangar: its shortcuts (aircraft 1-7, ← → base, Enter fly, Esc back). */
+  private handleHangarKeys(esc: boolean, enter: boolean): void {
     const input = this.input;
     const type = CLASS_KEYS.find(([action]) => input.wasPressed(action))?.[1];
     if (type) this.hangarEvents.aircraft(type);
@@ -1096,9 +1347,44 @@ export class Game {
       const base = this.hangar.moveBase(direction);
       if (base) this.hangarEvents.base(base);
     }
-    if (input.wasPressed('pickerConfirm')) this.flyFromHangar();
-    // Esc resumes a paused flight (not straight after opening: the same Esc may arrive twice).
-    else if (input.wasPressed('openHangar') && this.clock - this.hangarOpenedAt > 0.3) this.hangarEvents.resume();
+    if (enter) this.flyFromHangar();
+    else if (esc) this.hangarEvents.back();
+  }
+
+  // ── Settings ────────────────────────────────────────────────────────────
+
+  /** Puts the settings into effect: every one changes something real. */
+  private applySettings(): void {
+    const { graphics, audio, controls, gameplay, accessibility } = this.settings;
+    applyPixelRatio(this.engine, graphics.renderScale);
+    this.engine.resize();
+    if (this.pipeline) {
+      // The pipeline renders off-screen, so its samples are the antialiasing (1 = none).
+      this.pipeline.samples = Math.max(1, graphics.antialiasing);
+      this.pipeline.bloomEnabled = graphics.bloom;
+    }
+    this.environment.setShadowQuality(graphics.shadows);
+    this.audio.setVolume(audio.volume);
+    this.cameras.setOrbitSensitivity(controls.cameraSensitivity);
+    this.bindings = effectiveBindings(this.settings);
+    this.input.setBindings(this.bindings);
+    this.hud.setBindings(this.bindings);
+    this.beacons.visible = gameplay.baseLabels;
+    const root = document.documentElement;
+    if (accessibility.reducedMotion === 'system') delete root.dataset['reducedMotion'];
+    else root.dataset['reducedMotion'] = String(accessibility.reducedMotion === 'on');
+    this.applyHudScale();
+  }
+
+  /** The HUD scale setting, capped so the bottom row of panels still fits the window. */
+  private applyHudScale(): void {
+    const fit = window.innerWidth / UI_CONFIG.hudRowWidth;
+    document.documentElement.style.setProperty('--hud-scale', Math.min(this.settings.accessibility.hudScale, fit).toFixed(3));
+  }
+
+  /** An action's key(s) as the player has them, for messages: "P", "↑". */
+  private keyName(action: InputAction): string {
+    return this.bindings[action].map(formatKeyCode).join('/') || 'unbound';
   }
 
   /** A chosen base that is no longer yours (or is sinking) stops being where you start. */
@@ -1113,7 +1399,7 @@ export class Game {
   private promptLine(): HudFrame['prompt'] {
     const state = this.aircraft.state;
     if (state.crashed || state.shotDown) return null;
-    if (!this.autoLand && state.onGround) return this.isFlightInProgress() ? null : { active: false, text: 'Esc · HANGAR: change aircraft, paint or base' };
+    if (!this.autoLand && state.onGround) return this.isFlightInProgress() ? null : { active: false, text: 'Esc · pause menu: change aircraft, paint or base' };
     return this.autoLandLine();
   }
 
@@ -1174,7 +1460,7 @@ export class Game {
   private baseLabels(views: readonly BaseView[]): BaseLabel[] {
     const labels: BaseLabel[] = [];
     const p = this.aircraft.renderPosition;
-    if (this.aircraft.state.crashed) return labels;
+    if (this.aircraft.state.crashed || !this.settings.gameplay.baseLabels) return labels;
     for (const view of views) {
       if (view.state === 'gone') continue;
       const distance = Math.hypot(view.x - p.x, view.z - p.z);
@@ -1215,12 +1501,12 @@ export class Game {
   private handleActions(): void {
     const input = this.input;
     if (input.wasPressed('toggleDebugOverlay')) this.debugOverlay.toggle();
-    if (this.hangar.isOpen) {
-      this.handleHangarKeys();
+    if (this.screen !== null) {
+      this.handleScreenKeys();
       return;
     }
     if (input.wasPressed('openHangar')) {
-      this.openHangar();
+      this.escapeFromFlight();
       return;
     }
     // Crashed: Enter flies again straight away, with the same choices.
@@ -1242,7 +1528,7 @@ export class Game {
     if (input.wasPressed('flapsUp')) this.flightInput.stepFlaps(-1);
     if (input.wasPressed('toggleDiveBrakes')) {
       if (this.aircraft.spec.id === 'diveBomber') this.hud.showMessage(this.flightInput.toggleAirbrake() ? 'DIVE BRAKES OUT' : 'DIVE BRAKES IN', 'good', 2);
-      else this.hud.showMessage(`The ${this.aircraft.spec.displayName} has no dive brakes to lock open: hold B for air brakes`, 'ok', 3);
+      else this.hud.showMessage(`The ${this.aircraft.spec.displayName} has no dive brakes to lock open: hold ${this.keyName('brake')} for air brakes`, 'ok', 3);
     }
   }
 
@@ -1286,8 +1572,9 @@ export class Game {
   };
 
   private readonly handleResize = (): void => {
-    applyPixelRatio(this.engine);
+    applyPixelRatio(this.engine, this.settings.graphics.renderScale);
     this.engine.resize();
+    this.applyHudScale();
   };
 }
 
@@ -1310,6 +1597,22 @@ function writeHangarSelection(selection: HangarSelection): void {
     localStorage.setItem(HANGAR_STORAGE_KEY, JSON.stringify({ classId: selection.classId, baseId: selection.baseId, start: selection.start }));
   } catch {
     // Blocked storage: the choices just aren't remembered.
+  }
+}
+
+function readCallsign(): string {
+  try {
+    return cleanCallsign(localStorage.getItem(UI_CONFIG.callsign.storageKey) ?? '') || UI_CONFIG.callsign.fallback;
+  } catch {
+    return UI_CONFIG.callsign.fallback;
+  }
+}
+
+function writeCallsign(name: string): void {
+  try {
+    localStorage.setItem(UI_CONFIG.callsign.storageKey, name);
+  } catch {
+    // Blocked storage: the callsign lasts this visit only.
   }
 }
 

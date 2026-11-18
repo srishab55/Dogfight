@@ -1,0 +1,641 @@
+/*
+ * The flight HUD (ui/FlightHud.ts), in zones round the edge of the screen
+ * so the middle stays clear. Each zone scales with the HUD-scale setting from
+ * its own corner, so nothing drifts over the centre at large sizes.
+ */
+
+.flight-hud {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-hud);
+  font-family: var(--font-body);
+  color: var(--color-text);
+}
+
+.hud-zone {
+  position: absolute;
+  transform: scale(var(--hud-scale));
+}
+
+.hud-zone--tl {
+  top: var(--hud-edge);
+  left: var(--hud-edge);
+  width: var(--hud-panel-width);
+  transform-origin: top left;
+}
+
+.hud-zone--bl {
+  bottom: var(--hud-edge);
+  left: var(--hud-edge);
+  width: var(--hud-panel-width);
+  transform-origin: bottom left;
+}
+
+.hud-zone--br {
+  right: var(--hud-edge);
+  bottom: var(--hud-edge);
+  width: var(--hud-panel-width);
+  transform-origin: bottom right;
+}
+
+.hud-zone--bc {
+  bottom: var(--hud-edge);
+  left: 50%;
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: bottom center;
+}
+
+/* Values coloured by state; an empty tone leaves the default. */
+.ui-value[data-tone]:not([data-tone='']),
+.hud-approach [data-tone]:not([data-tone='']) {
+  color: var(--tone);
+}
+
+/* ── Panels (status, airframe, weapons) ── */
+
+.hud-panel .panel__header {
+  padding: 7px 12px 6px;
+}
+
+.hud-panel .panel__body {
+  padding: 8px 12px 10px;
+}
+
+.hud-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 3px 0;
+}
+
+.hud-row__value {
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
+.hud-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Objective: the enemy base you're working on. */
+.hud-objective {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.hud-objective__name {
+  margin-top: 2px;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-heading);
+  text-transform: uppercase;
+}
+
+.hud-objective__state {
+  margin: 1px 0 6px;
+  font-size: var(--text-xs);
+  color: var(--color-text-2);
+}
+
+.hud-objective[data-state='open'] .hud-objective__state {
+  color: var(--color-caution);
+}
+
+.hud-objective[data-state='captured'] .hud-objective__state {
+  color: var(--color-friendly);
+}
+
+/* Airframe: name, hull integrity, status. */
+.hud-aircraft-name {
+  font-size: var(--text-lg);
+}
+
+.hud-hull,
+.hud-ammo,
+.hud-heat {
+  margin-bottom: var(--space-2);
+}
+
+.hud-hull .tag {
+  margin-top: 6px;
+}
+
+.hud-hull__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.hud-hull__readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.hud-hull__value,
+.hud-ammo__value {
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+
+.hud-status-line {
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  color: var(--color-text-2);
+}
+
+.tag--pulse {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.hud-weapon-select {
+  color: var(--color-accent);
+}
+
+.hud-rearm .progress {
+  margin-top: 4px;
+}
+
+.hud-weapon-note:empty {
+  display: none;
+}
+
+.hud-weapon-note {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-caution);
+}
+
+/* ── Instruments strip (bottom centre) ── */
+
+.hud-instruments {
+  padding: 8px 6px 6px;
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.hud-instruments__row {
+  display: flex;
+  align-items: stretch;
+}
+
+.hud-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 92px;
+  padding: 0 14px;
+  border-left: 1px solid var(--color-border);
+}
+
+.hud-readout:first-child {
+  border-left: none;
+}
+
+.hud-readout__line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.hud-readout__value {
+  font-size: var(--text-xl);
+  line-height: 1.15;
+}
+
+.hud-readout--primary .hud-readout__value {
+  font-size: var(--text-2xl);
+  color: var(--color-accent);
+}
+
+.hud-readout .progress {
+  width: 72px;
+  margin-top: 4px;
+}
+
+.hud-heading {
+  width: 184px;
+}
+
+.hud-heading__value {
+  font-size: var(--text-lg);
+  color: var(--color-accent);
+}
+
+/* Heading tape: a strip of ticks sliding under a fixed pointer. */
+.hud-tape {
+  position: relative;
+  width: 168px;
+  height: 18px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+
+.hud-tape__strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-image: repeating-linear-gradient(90deg, rgba(232, 237, 242, 0.4) 0 1px, transparent 1px 10px);
+  background-size: 100% 5px;
+  background-position: 0 bottom;
+  background-repeat: repeat-x;
+  transition: transform var(--duration-fast) linear;
+  will-change: transform;
+}
+
+.hud-tape__mark {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-text-2);
+}
+
+.hud-tape__mark--cardinal {
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.hud-tape__pointer {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  background: var(--color-accent);
+}
+
+.hud-instruments__minor {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: 6px;
+  padding-top: 4px;
+  font-size: var(--text-xs);
+  border-top: 1px solid var(--color-border);
+}
+
+.hud-instruments__minor .ui-label + .ui-value {
+  margin-right: var(--space-4);
+}
+
+/* ── Centre ── */
+
+/* Alerts: one row under the radar, clear of the aircraft and the gunsight. Red pulses for critical, steady amber for caution. */
+.hud-alerts {
+  position: absolute;
+  top: calc(var(--hud-edge) + 222px * var(--hud-scale));
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.hud-alert {
+  padding: 3px 14px;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--tone);
+  background: rgba(16, 24, 32, 0.6);
+  border: 1px solid var(--tone);
+  border-radius: var(--radius-sm);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.hud-alert--steady {
+  font-size: var(--text-sm);
+  letter-spacing: 0.16em;
+  animation: none;
+}
+
+/* Approach calls (LSO on a carrier), under the radar. */
+.hud-approach {
+  position: absolute;
+  top: calc(var(--hud-edge) + 266px * var(--hud-scale));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: 6px 14px;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/* Notifications and the assist prompt, above the instruments. */
+.hud-feed {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--hud-edge) + 112px * var(--hud-scale));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hud-prompt {
+  padding: 5px 12px;
+  font-family: var(--font-heading);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-2);
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.hud-prompt[data-state='active'] {
+  color: var(--color-accent);
+  border-color: var(--color-accent-line);
+}
+
+/* Crashed / shot down. */
+.hud-crash {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 380px;
+  padding: 18px 24px 16px;
+  text-align: center;
+  background: rgba(22, 33, 43, 0.92);
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  animation: rise-in var(--duration-slow) var(--ease-out);
+}
+
+.hud-crash__title {
+  font-size: var(--text-3xl);
+  color: var(--color-danger);
+  letter-spacing: 0.2em;
+}
+
+.hud-crash__reason {
+  margin: 4px 0 14px;
+  color: var(--color-text-2);
+}
+
+.hud-crash__keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-2);
+}
+
+.hud-crash__keys .kbd:not(:first-child) {
+  margin-left: var(--space-3);
+}
+
+/* Hit by flak: the screen edge glows red for a moment. */
+.hud-damage-flash {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 140px 30px rgba(240, 82, 82, 0.5);
+}
+
+/* ── Symbols on the 3D view ── */
+
+.hud-markers {
+  position: absolute;
+  inset: 0;
+}
+
+/* Gunsight: a ring with a centre dot where the gun streams converge. Red briefly on a hit. */
+.hud-gunsight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid var(--color-accent);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--color-accent) 0 2px, transparent 2.5px);
+  opacity: 0.9;
+  will-change: transform;
+}
+
+.hud-gunsight--hit {
+  border-color: var(--color-danger);
+  background: radial-gradient(circle, var(--color-danger) 0 3px, transparent 3.5px);
+  opacity: 1;
+}
+
+/* Mouse-flight aim circle: larger, white and dashed, so it reads differently from the gunsight. */
+.hud-aim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46px;
+  height: 46px;
+  border: 1.5px dashed rgba(232, 237, 242, 0.85);
+  border-radius: 50%;
+  will-change: transform;
+}
+
+/* Flight-path marker: a circle with two wings, the classic velocity-vector symbol. */
+.hud-fpm {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--color-accent);
+  border-radius: 50%;
+  opacity: 0.9;
+  will-change: transform;
+}
+
+.hud-fpm::before,
+.hud-fpm::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  height: 1.5px;
+  width: 14px;
+  background: var(--color-accent);
+  transform: translateY(-50%);
+}
+
+.hud-fpm::before {
+  right: 100%;
+}
+
+.hud-fpm::after {
+  left: 100%;
+}
+
+/* Where your rounds will hit the ground: put it on the target and fire. */
+.hud-impact {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid var(--color-caution);
+  border-radius: 50%;
+}
+
+.hud-impact::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--color-caution);
+}
+
+/* Enemy targets: red corner brackets with what and how far. */
+.hud-enemy {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--color-enemy);
+  border-radius: 1px;
+  clip-path: polygon(0 0, 35% 0, 35% 12%, 65% 12%, 65% 0, 100% 0, 100% 35%, 88% 35%, 88% 65%, 100% 65%, 100% 100%, 65% 100%, 65% 88%, 35% 88%, 35% 100%, 0 100%, 0 65%, 12% 65%, 12% 35%, 0 35%);
+}
+
+.hud-enemy[data-kind='carrier'] {
+  width: 48px;
+  height: 26px;
+}
+
+.hud-enemy__label {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-enemy);
+  white-space: nowrap;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+
+/* A base far off: a diamond in its owner's colour, its name and distance. */
+.hud-base-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 1px 6px 1px 18px;
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: var(--base-color, var(--color-text));
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+
+.hud-base-label::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: var(--base-color, var(--color-text));
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* ── The radar map (ui/MiniMap.ts): top centre ── */
+
+.minimap {
+  position: absolute;
+  top: var(--hud-edge);
+  left: 50%;
+  z-index: var(--z-hud);
+  padding: 4px;
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: top center;
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.minimap canvas {
+  display: block;
+}
+
+.minimap[data-mode='large'] {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px;
+  background: rgba(16, 24, 32, 0.9);
+}
+
+.minimap-legend {
+  display: none;
+  gap: var(--space-4);
+  justify-content: center;
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--color-text-2);
+}
+
+.minimap[data-mode='large'] .minimap-legend {
+  display: flex;
+}
+
+.minimap-key {
+  color: var(--color-text-muted);
+}
+
+/* Dev-only stats, top right (out of the HUD's way). */
+.debug-overlay {
+  position: absolute;
+  top: var(--hud-edge);
+  right: var(--hud-edge);
+  z-index: var(--z-debug);
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font: 11px/1.5 var(--font-mono);
+  color: var(--color-text-2);
+  white-space: pre;
+}
